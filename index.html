@@ -529,6 +529,10 @@ tr:hover td { background: var(--bg-hover); }
     }
 
     const App = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isFormMode = urlParams.get('leadForm') === 'true';
+      const formPipeId = urlParams.get('pipe');
+
       const [users, setUsers] = useState([
          { username: 'ceo', password: '123', role: 'CEO' },
          { username: 'menejer_1', password: '123', role: 'MANAGER' }
@@ -539,12 +543,25 @@ tr:hover td { background: var(--bg-hover); }
       const [activeTab, setActiveTab] = useState('dashboard');
       const [settingsActiveTab, setSettingsActiveTab] = useState('users');
 
-      const [pipelines, setPipelines] = useState(initialPipelines);
-      const [columnsMap, setColumnsMap] = useState(initialColumns);
-      const [leads, setLeads] = useState(initialLeads);
+      const [pipelines, setPipelines] = useState(() => {
+         const saved = localStorage.getItem('mizon_pipelines');
+         return saved ? JSON.parse(saved) : initialPipelines;
+      });
+      const [columnsMap, setColumnsMap] = useState(() => {
+         const saved = localStorage.getItem('mizon_columnsMap');
+         return saved ? JSON.parse(saved) : initialColumns;
+      });
+      const [leads, setLeads] = useState(() => {
+         const saved = localStorage.getItem('mizon_leads');
+         return saved ? JSON.parse(saved) : initialLeads;
+      });
       const [globalCallLimit, setGlobalCallLimit] = useState(5);
 
-      const [activePipe, setActivePipe] = useState(pipelines[0].id);
+      useEffect(() => { localStorage.setItem('mizon_pipelines', JSON.stringify(pipelines)); }, [pipelines]);
+      useEffect(() => { localStorage.setItem('mizon_columnsMap', JSON.stringify(columnsMap)); }, [columnsMap]);
+      useEffect(() => { localStorage.setItem('mizon_leads', JSON.stringify(leads)); }, [leads]);
+
+      const [activePipe, setActivePipe] = useState(pipelines[0]?.id || null);
       const [selectedLeadId, setSelectedLeadId] = useState(null);
 
       // Panel & Chat State
@@ -557,6 +574,40 @@ tr:hover td { background: var(--bg-hover); }
       // Add Lead State
       const [showAddLead, setShowAddLead] = useState(false);
       const [newLeadForm, setNewLeadForm] = useState({name:'', phone:'', region:''});
+
+      if (isFormMode) {
+         return (
+            <div className="login-overlay">
+               <form className="login-box" style={{maxWidth: '400px'}} onSubmit={(e) => {
+                  e.preventDefault();
+                  if(!newLeadForm.name || !newLeadForm.phone) return alert("To'liq kiriting!");
+                  const cols = columnsMap[formPipeId] || [];
+                  const initialStage = cols[0] ? cols[0].id : 'NEW';
+                  setLeads([...leads, {
+                      id: 'EXT_' + Date.now(), pipelineId: formPipeId || pipelines[0]?.id, name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region || "Veb-Sayt Form",
+                      source: 'VEB_SAYT_FORMA', owner: 'Navbatda', status: initialStage, actualCallAttempts: 0, deadline: null, taskDescription: null,
+                      chatLogs: [{type: 'sys', date: new Date().toISOString(), text: `Mijoz tashqi havoladan ro'yxatdan o'tdi.`}]
+                  }]);
+                  alert("Arizangiz muvaffaqiyatli qabul qilindi! Tez orada aloqaga chiqamiz.");
+                  setNewLeadForm({name:'', phone:'', region:''});
+               }}>
+                 <h2 style={{ fontSize: '24px', marginBottom: '8px', fontWeight: 800, textAlign:'center' }}>Ro'yxatdan o'tish</h2>
+                 <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '13px', textAlign:'center' }}>Kompaniyamiz bilan bog'lanish uchun ma'lumotlaringizni qoldiring.</p>
+                 
+                 <span className="label-sm">Ism va Familiya:</span>
+                 <input className="input-base" placeholder="Abdulla Qodiriy..." value={newLeadForm.name} onChange={e=>setNewLeadForm({...newLeadForm, name: e.target.value})} />
+                 
+                 <span className="label-sm">Telefon raqam:</span>
+                 <input className="input-base" placeholder="+998 90 123 45 67" type="tel" value={newLeadForm.phone} onChange={e=>setNewLeadForm({...newLeadForm, phone: e.target.value})} />
+                 
+                 <span className="label-sm">Filial yoki Manzil (ixtiyoriy):</span>
+                 <input className="input-base" placeholder="Toshkent shahri..." value={newLeadForm.region} onChange={e=>setNewLeadForm({...newLeadForm, region: e.target.value})} />
+                 
+                 <button className="btn-primary" style={{ width: '100%', marginTop: '16px', padding: '12px' }} type="submit">Arizani Jo'natish</button>
+               </form>
+            </div>
+         );
+      }
 
       const [, setTick] = useState(0);
       useEffect(() => { const iv = setInterval(()=>setTick(t=>t+1), 60000); return ()=>clearInterval(iv); }, []);
@@ -828,6 +879,7 @@ tr:hover td { background: var(--bg-hover); }
                        <div className={`settings-tab ${settingsActiveTab==='users'?'active':''}`} onClick={()=>setSettingsActiveTab('users')}>👥 Xodimlar (Users)</div>
                        <div className={`settings-tab ${settingsActiveTab==='limits'?'active':''}`} onClick={()=>setSettingsActiveTab('limits')}>⚙️ Umumiy (Global Setup)</div>
                        <div className={`settings-tab ${settingsActiveTab==='pipelines'?'active':''}`} onClick={()=>setSettingsActiveTab('pipelines')}>🏗️ Quvurlar (Pipelines)</div>
+                       <div className={`settings-tab ${settingsActiveTab==='webforms'?'active':''}`} onClick={()=>setSettingsActiveTab('webforms')}>📝 Tashqi Web Shakl (Form)</div>
                     </div>
                     <div className="card" style={{minHeight: '400px'}}>
                        {settingsActiveTab === 'users' && (
@@ -838,6 +890,30 @@ tr:hover td { background: var(--bg-hover); }
                        )}
                        {settingsActiveTab === 'pipelines' && (
                           <div><h3 style={{marginBottom: '16px'}}>Sotuv Quvurlarini Muhandisligi</h3><PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} /></div>
+                       )}
+                       {settingsActiveTab === 'webforms' && (
+                          <div>
+                             <h3 style={{marginBottom: '16px'}}>Shaxsiy Internet Anketalar Yaratish</h3>
+                             <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Pipelineni tanlang va nusxalangan havolani istalgan joyga tarqating. Mijozlar o'zi raqamini yozishi bilan sizni CRM doskangizga kelib tushadi (Lead Generation).</p>
+                             
+                             <span className="label-sm">Qaysi Quvurga Lead tushishini xohlaysiz?</span>
+                             <div style={{display:'flex', gap: '16px', alignItems: 'center'}}>
+                                 <select className="input-base" style={{marginBottom: 0, width: '300px'}} onChange={e => {
+                                     const lnk = window.location.origin + window.location.pathname + '?leadForm=true&pipe=' + e.target.value;
+                                     navigator.clipboard.writeText(lnk);
+                                     alert("Nusxalandi! \n" + lnk);
+                                 }}>
+                                    <option value="">-- Quvurni Tanlang --</option>
+                                    {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                 </select>
+                                 <div style={{color:'var(--text-muted)', fontSize: '13px'}}>&larr; Tanlab bosganingiz zahoti bu havola Nusxalanadi (Copy) bo'ladi.</div>
+                             </div>
+                             
+                             <div style={{marginTop: '24px', padding: '16px', borderRadius: '8px', background:'var(--bg-hover)', border:'1px dashed var(--border-light)'}}>
+                               <strong style={{display:'block', marginBottom:'8px'}}>💡 Maslahat:</strong>
+                               <div style={{fontSize: '13px', color:'var(--text-muted)'}}>Ushbu yaratilgan havolani <b>Instagram BIO</b> profiliga yoki <b>Telegram Kanalga</b> "Ro'yxatdan o'tish" knopkasi orqasida berkitib foydalaning. Menejerlaringiz boshqa qog'oz varaqlab yurishiga xojat qolmaydi.</div>
+                             </div>
+                          </div>
                        )}
                     </div>
                  </div>
