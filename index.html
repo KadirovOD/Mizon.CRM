@@ -561,6 +561,23 @@ tr:hover td { background: var(--bg-hover); }
       const [, setTick] = useState(0);
       useEffect(() => { const iv = setInterval(()=>setTick(t=>t+1), 60000); return ()=>clearInterval(iv); }, []);
 
+      const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+      useEffect(() => {
+         const handleKeyDown = (e) => {
+            if (e.key === 'Enter' && selectedLeadId) {
+               if (e.target.id === 'chatMessageInputBox') return;
+               if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                  setSelectedLeadId(null);
+                  setShowCompleteModal(false);
+                  setHasUnsavedChanges(false);
+               }
+            }
+         };
+         window.addEventListener('keydown', handleKeyDown);
+         return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [selectedLeadId]);
+
       const handleLogin = (e) => {
          e.preventDefault();
          const match = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
@@ -583,23 +600,8 @@ tr:hover td { background: var(--bg-hover); }
       }
 
       const role = authUser.role;
-      
-      const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-      useEffect(() => {
-         const handleKeyDown = (e) => {
-            if (e.key === 'Enter' && selectedLeadId) {
-               if (e.target.id === 'chatMessageInputBox') return;
-               if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-                  setSelectedLeadId(null);
-                  setShowCompleteModal(false);
-                  setHasUnsavedChanges(false);
-               }
-            }
-         };
-         window.addEventListener('keydown', handleKeyDown);
-         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [selectedLeadId]);
+
 
       const activeColumns = columnsMap[activePipe] || [];
       const activeLeads = leads.filter(l => l.pipelineId === activePipe);
