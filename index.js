@@ -43,8 +43,22 @@ async function initDb() {
         telegram_chat_id VARCHAR(100),
         lead_score INTEGER DEFAULT 0,
         budget_range VARCHAR(50),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        chatlogs JSONB DEFAULT '[]'::jsonb,
+        deadline TIMESTAMP,
+        actualcallattempts INTEGER DEFAULT 0,
+        taskdescription TEXT,
+        owner VARCHAR(50) DEFAULT 'CEO',
+        region VARCHAR(255),
+        pipelineid VARCHAR(50) DEFAULT 'p1'
       );
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS chatlogs JSONB DEFAULT '[]'::jsonb;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS deadline TIMESTAMP;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS actualcallattempts INTEGER DEFAULT 0;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskdescription TEXT;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS owner VARCHAR(50) DEFAULT 'CEO';
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS region VARCHAR(255);
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS pipelineid VARCHAR(50) DEFAULT 'p1';
     `);
     const stages = await client.query('SELECT COUNT(*) FROM crm_stage');
     if (parseInt(stages.rows[0].count) === 0) {
@@ -67,6 +81,7 @@ const webhookController = require('./controllers/webhookController');
 
 app.get('/api/leads', leadController.getLeads);
 app.post('/api/leads', leadController.createLead);
+app.put('/api/leads/:id', leadController.updateLeadFull);
 app.put('/api/leads/:id/stage', leadController.updateLeadStage);
 
 app.get('/api/webhook/meta', webhookController.verifyMetaWebhook);
