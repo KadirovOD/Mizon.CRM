@@ -182,8 +182,9 @@ tr:hover td { background: var(--bg-hover); }
       { id: '3', pipelineId: 'p1', name: 'Odiljon Q.', owner: 'menejer_1', phone: 'Yashiringan', region: 'Noma\'lum', source: 'ORGANIC', status: 'NEGOTIATION', actualCallAttempts: 3, deadline: dangerDate.toISOString(), taskDescription: 'Uchrashuv hududida kutib olish kafolati bo\'yicha gaplashish.', chatLogs: [{type:'sys', date: dangerDate.toISOString(), text: 'Muzokaralar uchun uchrashuv yozildi.'}] },
     ];
 
-    const DashboardOverview = ({ leads, role }) => {
+    const DashboardOverview = ({ leads, role, setSelectedLeadId }) => {
       const lostLeads = leads.filter(l => l.status === 'LOST');
+      const wonLeads = leads.filter(l => l.status === 'WON');
       const tasksDanger = leads.filter(l => determineSLAType(l.deadline) === 'danger');
       const activeLeads = leads.filter(l => l.deadline);
 
@@ -197,10 +198,14 @@ tr:hover td { background: var(--bg-hover); }
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
            <h2 style={{ fontSize: '20px', letterSpacing: '-0.5px' }}>{role === 'CEO' ? 'Raxbar Tahlili (CEO Dashboard)' : 'Mening KPIm'}</h2>
            
-           <div className="grid-cols-4">
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
               <div className="card clickable" onClick={()=>openDrillDown('Jami Barcha Leadlar', leads, true)}>
                 <div className="card-title">Jami Leadlar</div>
                 <div className="card-value">{leads.length}</div>
+              </div>
+              <div className="card clickable" onClick={()=>openDrillDown('Muvaffaqiyatli Mijozlar (WON)', wonLeads, false)}>
+                <div className="card-title" style={{color: 'var(--success)'}}>Muvaffaqiyatli yopilgan</div>
+                <div className="card-value" style={{color: 'var(--success)'}}>{wonLeads.length}</div>
               </div>
               <div className="card clickable" onClick={()=>openDrillDown('Yo\'qotilgan Mijozlar (LOST)', lostLeads, false)}>
                 <div className="card-title" style={{color: 'var(--danger)'}}>Yo'qotilganlar (LOST)</div>
@@ -256,9 +261,9 @@ tr:hover td { background: var(--bg-hover); }
                        <tbody>
                          {viewModal.items.length === 0 ? <tr><td colSpan="5" style={{textAlign:'center', padding:'20px'}}>Hech qanday ma'lumot topilmadi.</td></tr> : null}
                          {viewModal.items.map(l => (
-                           <tr key={l.id}>
+                           <tr key={l.id} style={{cursor: 'pointer'}} onClick={() => { setViewModal({...viewModal, state:false}); setSelectedLeadId(l.id); }}>
                              <td>#{l.id}</td>
-                             <td style={{fontWeight:600}}>{l.name}</td>
+                             <td style={{fontWeight:600, color: 'var(--accent)'}}>{l.name}</td>
                              <td><span style={{background:'var(--bg-hover)', border:'1px solid var(--border-light)', padding:'2px 8px', borderRadius:'12px', fontSize:'11px'}}>{l.owner}</span></td>
                              <td>
                                 {l.deadline ? <span style={{color: determineSLAType(l.deadline)==='danger'?'var(--danger)':'inherit'}}>{new Date(l.deadline).toLocaleString()}</span> : <span style={{color:'var(--text-muted)'}}>- Yo'q -</span>}
@@ -447,11 +452,23 @@ tr:hover td { background: var(--bg-hover); }
     }
 
     const IntegrationsModule = () => {
-       const [sysKey, setSysKey] = useState('');
+       const [apiKeys, setApiKeys] = useState([]);
        const [hooks, setHooks] = useState([]);
        const [newHookForm, setNewHookForm] = useState({name:'', token: ''});
 
-       const generateKey = () => setSysKey('mzk_' + Math.random().toString(36).substr(2, 16) + 'HQ8x');
+       const generateKey = () => {
+          const newKey = 'mzk_' + Math.random().toString(36).substr(2, 16) + 'HQ8x';
+          setApiKeys([...apiKeys, { id: Date.now(), token: newKey }]);
+       };
+
+       const copySysKey = (key) => {
+          navigator.clipboard.writeText(key);
+          alert("API Kalit nusxalandi!");
+       };
+       const deleteSysKey = (id) => {
+          setApiKeys(apiKeys.filter(k => k.id !== id));
+       };
+
        const addHook = () => {
           if(!newHookForm.name || !newHookForm.token) return;
           setHooks([...hooks, {...newHookForm, id: Date.now()}]);
@@ -463,15 +480,23 @@ tr:hover td { background: var(--bg-hover); }
             <h2 style={{ fontSize: '20px', letterSpacing: '-0.5px', marginBottom: '24px' }}>Tashqi Dasturlar va Integratsiyalar 🔌</h2>
             
             <div className="card" style={{marginBottom: '24px'}}>
-               <h3 style={{marginBottom: '16px'}}>Shaxsiy Mizon API Kaliti Buxgalteriya/Web uchun)</h3>
-               <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Tizimni sizning saytingiz yoki 1C kabi dasturlar bilan muloqot qilishi uchun yagona himoya kaliti oling.</p>
-               {sysKey ? (
-                  <div style={{padding:'12px', background:'var(--success-bg)', border:'1px solid var(--success)', borderRadius:'6px', display:'flex', justifyContent:'space-between'}}>
-                     <strong style={{color:'var(--success)'}}>{sysKey}</strong>
-                     <span style={{color:'var(--success)', fontSize:'12px'}}>Faol!</span>
+               <h3 style={{marginBottom: '16px'}}>Shaxsiy Mizon API Kalitlar (Buxgalteriya/Web uchun)</h3>
+               <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Tizimni sizning saytingiz yoki 1C kabi dasturlar bilan muloqot qilishi uchun yagona himoya kalitlari oling. Zaruratsiz kalitlarni o'chirib tashlash mumkin.</p>
+               
+               <button className="btn-primary" onClick={generateKey} style={{marginBottom: '16px'}}>+ Yangi.API Xavfsiz Kalit Yaratish</button>
+               
+               {apiKeys.length > 0 && (
+                  <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
+                     {apiKeys.map(k => (
+                        <div key={k.id} style={{padding:'12px', background:'var(--success-bg)', border:'1px solid var(--success)', borderRadius:'6px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                           <strong style={{color:'var(--success)'}}>{k.token}</strong>
+                           <div style={{display:'flex', gap:'8px'}}>
+                              <button className="btn-success" style={{background:'rgba(16,185,129,0.2)', color:'var(--success)', border:'1px solid var(--success)'}} onClick={()=>copySysKey(k.token)}>Nusxa olish</button>
+                              <button className="btn-outline" style={{borderColor: 'var(--danger)', color: 'var(--danger)'}} onClick={()=>deleteSysKey(k.id)}>O'chirish</button>
+                           </div>
+                        </div>
+                     ))}
                   </div>
-               ) : (
-                  <button className="btn-primary" onClick={generateKey}>Mizon.API Xavfsiz Kalit Yaratish</button>
                )}
             </div>
 
@@ -764,7 +789,7 @@ tr:hover td { background: var(--bg-hover); }
                )}
 
                {/* TAB ROUTING */}
-               {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} />}
+               {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} />}
                
                {activeTab === 'integrations' && <IntegrationsModule />}
 
