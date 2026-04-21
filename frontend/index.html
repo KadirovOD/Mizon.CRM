@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mizon CRM</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="logo">
+      <span class="logo-icon"></span>
+      <h1>Mizon CRM</h1>
+    </div>
+    
+    <div class="topbar-actions">
+      <button id="themeToggle" class="btn-icon" title="Toggle Theme">
+        <svg id="moon-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        <svg id="sun-icon" style="display: none;" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-sun"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+      </button>
+      <button class="btn-primary" onclick="openModal()">+ Yangi Lead</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <nav>
+        <a href="#" class="nav-item active">Sotuvlar (Kanban)</a>
+        <a href="#" class="nav-item">Kontaktlar</a>
+        <a href="#" class="nav-item">Hisobotlar</a>
+        <a href="#" class="nav-item">Sozlamalar</a>
+      </nav>
+      <div class="sidebar-info">
+        <div class="user-profile">
+          <div class="avatar">OM</div>
+          <div class="user-details">
+            <span class="user-name">Olimov M.</span>
+            <span class="user-role">Sotuvchi</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Kanban Board -->
+    <main class="kanban-board" id="kanbanBoard">
+      <!-- Stages will be rendered here dynamically -->
+    </main>
+  </div>
+
+  <!-- Add Lead Modal -->
+  <div class="modal-overlay" id="leadModalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Yangi Lead Qo'shish</h2>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <form id="leadForm" class="modal-body">
+        <div class="form-group">
+          <label>Nomi (Masalan: Mebel xaridi)</label>
+          <input type="text" id="leadName" required placeholder="Nomi">
+        </div>
+        <div class="form-group">
+          <label>Mijoz ism-sharifi</label>
+          <input type="text" id="leadContactName" placeholder="Mijoz ismi">
+        </div>
+        <div class="form-group">
+          <label>Telefon raqami</label>
+          <input type="text" id="leadPhone" placeholder="+998 90 123 45 67">
+        </div>
+        <div class="form-group">
+          <label>Manba</label>
+          <select id="leadSource">
+            <option value="manual">Manual kiritildi</option>
+            <option value="phone_call">Qo'ng'iroq</option>
+            <option value="referral">Tanishlar (Referral)</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn-outline" onclick="closeModal()">Bekor qilish</button>
+          <button type="submit" class="btn-primary">Saqlash</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+version: '3.9'
+
+services:
+  mizon-db:
+    image: postgres:15-alpine
+    container_name: mizon_db
+    environment:
+      POSTGRES_DB: mizon_crm_db
+      POSTGRES_USER: mizon_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - mizon_db_data:/var/lib/postgresql/data
+    networks:
+      - mizon_net
+    restart: unless-stopped
+
+  mizon-api:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mizon_api
+    depends_on:
+      - mizon-db
+    environment:
+      DB_HOST: mizon-db
+      DB_PORT: 5432
+      DB_USER: mizon_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: mizon_crm_db
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./frontend:/app/frontend
+    networks:
+      - mizon_net
+    restart: unless-stopped
+    command: npm run dev
+
+networks:
+  mizon_net:
+
+volumes:
+  mizon_db_data:
