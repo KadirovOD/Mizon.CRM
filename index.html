@@ -583,6 +583,24 @@ tr:hover td { background: var(--bg-hover); }
       }
 
       const role = authUser.role;
+      
+      const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+      useEffect(() => {
+         const handleKeyDown = (e) => {
+            if (e.key === 'Enter' && selectedLeadId) {
+               if (e.target.id === 'chatMessageInputBox') return;
+               if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                  setSelectedLeadId(null);
+                  setShowCompleteModal(false);
+                  setHasUnsavedChanges(false);
+               }
+            }
+         };
+         window.addEventListener('keydown', handleKeyDown);
+         return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [selectedLeadId]);
+
       const activeColumns = columnsMap[activePipe] || [];
       const activeLeads = leads.filter(l => l.pipelineId === activePipe);
       const selectedLeadData = leads.find(l => l.id === selectedLeadId);
@@ -608,6 +626,7 @@ tr:hover td { background: var(--bg-hover); }
             chatLogs: [...l.chatLogs, {type:'sys', date: new Date().toISOString(), text:`Vazifa ochildi: "${taskDescInput || 'Izohsiz vazifa'}" -> ${new Date(taskDateInput).toLocaleString()}`}] 
          } : l ));
          setTaskDateInput(''); setTaskDescInput('');
+         setHasUnsavedChanges(true);
       };
 
       const handleTaskComplete = (id) => {
@@ -617,9 +636,11 @@ tr:hover td { background: var(--bg-hover); }
          } : l));
          setShowCompleteModal(false);
          setTaskCompleteNote('');
+         setHasUnsavedChanges(true);
       }
 
       const handleLogCall = (id) => {
+         setHasUnsavedChanges(true);
          setLeads(prev => prev.map(l => {
            if(l.id === id) {
               const a = l.actualCallAttempts + 1;
@@ -637,6 +658,7 @@ tr:hover td { background: var(--bg-hover); }
       };
 
       const handleStatusChange = (leadId, newStatus) => {
+         setHasUnsavedChanges(true);
          setLeads(prev => prev.map(l => l.id === leadId ? { 
             ...l, status: newStatus, actualCallAttempts: 0,
             chatLogs: [...l.chatLogs, {type:'sys', date: new Date().toISOString(), text:`Kanban orqali bosqich uzgardi -> ${newStatus}. Urinishlar limit nollashtirildi.`}] 
@@ -645,6 +667,7 @@ tr:hover td { background: var(--bg-hover); }
 
       const handleSendChatMsg = (id) => {
          if(!chatMessageInput.trim()) return;
+         setHasUnsavedChanges(true);
          setLeads(prev => prev.map(l => l.id === id ? {
             ...l, chatLogs: [...l.chatLogs, {type:'msg', dir:'out', date: new Date().toISOString(), text: chatMessageInput}]
          } : l));
@@ -687,7 +710,11 @@ tr:hover td { background: var(--bg-hover); }
                  <div className="lead-panel-overlay">
                     <div className="lead-panel-header">
                        <div><div style={{fontSize: '12px', color: 'var(--text-muted)'}}>KARTA ID: {selectedLeadData.id} • MAS'UL: <b>{selectedLeadData.owner}</b></div><div style={{fontSize: '20px', fontWeight: 600}}>{selectedLeadData.name}</div></div>
-                       <button className="btn-outline" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false);}}>Yopish/Orqaga ✖</button>
+                       {hasUnsavedChanges ? (
+                          <button className="btn-success" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);}}>💾 O'zgarishlarni Saqlash va Yopish (Enter)</button>
+                       ) : (
+                          <button className="btn-outline" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false);}}>✖ Yopish/Orqaga (Enter)</button>
+                       )}
                     </div>
                     <div className="lead-panel-body">
                        <div className="lead-profile-col">
@@ -759,7 +786,7 @@ tr:hover td { background: var(--bg-hover); }
                              })}
                           </div>
                           <div className="chat-input-area">
-                             <input className="input-base" style={{marginBottom: 0}} placeholder="Chatga maxsus izoh, qayd yoki sharh yozib qoldirish..." value={chatMessageInput} onChange={e=>setChatMessageInput(e.target.value)} onKeyDown={e=>{if(e.key === 'Enter') handleSendChatMsg(selectedLeadData.id)}} />
+                             <input id="chatMessageInputBox" className="input-base" style={{marginBottom: 0}} placeholder="Chatga maxsus izoh, qayd yoki sharh yozib qoldirish..." value={chatMessageInput} onChange={e=>setChatMessageInput(e.target.value)} onKeyDown={e=>{if(e.key === 'Enter') handleSendChatMsg(selectedLeadData.id)}} />
                              <button className="btn-primary" onClick={()=>handleSendChatMsg(selectedLeadData.id)}>Yuborish</button>
                           </div>
                       </div>
