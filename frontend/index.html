@@ -568,7 +568,7 @@ tr:hover td { background: var(--bg-hover); }
                    actualCallAttempts: l.actualcallattempts || 0,
                    deadline: l.deadline || null,
                    taskDescription: l.taskdescription || null,
-                   chatLogs: typeof l.chatlogs === 'string' ? JSON.parse(l.chatlogs) : (l.chatlogs || [{type: 'sys', date: l.created_at, text: 'Tizimga qo\\'shildi'}])
+                   chatLogs: typeof l.chatlogs === 'string' ? JSON.parse(l.chatlogs) : (l.chatlogs || [{type: 'sys', date: l.created_at, text: "Tizimga qo'shildi"}])
                })));
             }
          }).catch(err => {
