@@ -1,0 +1,946 @@
+TEXNIK TOPSHIRIQ
+Odoo CRM ni Mizon uchun
+moslashtirishga
+Faqat mijozlar bilan ishlash moduli
+
+
+Loyiha:
+Mizon CRM (Odoo asosida)
+Manba:
+Odoo 17 Community Edition (ochiq manba)
+Platforma:
+Antigravity (Docker + Python)
+Versiya:
+v1.0 — Aprel 2026
+Qamrov:
+Faqat CRM moduli (mijozlar bilan ishlash)
+
+1. LOYIHA MAQSADI VA QAMROVI
+
+1.1 Nima qilmoqchimiz?
+Odoo 17 Community Edition — bu Python asosida yozilgan, dunyo bo'ylab millionlab kompaniya ishlatadigan ochiq manba biznes platformasi. Uning CRM moduli (odoo/addons/crm/) mijozlar bilan ishlash uchun juda kuchli funksionallikka ega.
+
+Ushbu TZ maqsadi: Odoo'ning tayyor CRM kodini olib, Mizon kompaniyasining ish jarayonlariga moslashtirish. Bu noldan yozishdan 3-4 marta tezroq va arzonroq.
+
+MUHIM: Nima olib, nima tashlaymiz?
+Odoo'dan FAQAT CRM moduli olinadi: crm/, contacts/, mail/ addons. Barcha boshqa modullar (hisobdorlik, inventar, ishlab chiqarish, HR, veb-sayt va boshqalar) o'chiriladi. Bu tizimni 10 barobar yengillashtiradi va foydalanuvchilar uchun sodda qiladi.
+
+1.2 Odoo CRM modulining tarkibi (manba koddan)
+Odoo GitHub'dagi odoo/odoo repozitoriyasida CRM moduli quyidagi asosiy fayllardan iborat:
+
+Fayl/Papka
+Maqsad
+Mizon uchun ahamiyat
+addons/crm/models/crm_lead.py
+Lead/Opportunity asosiy model
+ASOSIY — to'liq saqlanadi
+addons/crm/models/crm_stage.py
+Savdo bosqichlari modeli
+SAQLANADI — bosqichlar o'zgartiriladi
+addons/crm/models/crm_team.py
+Savdo jamoasi modeli
+SAQLANADI — Mizon jamoasiga moslanadi
+addons/crm/views/
+XML view fayllari (UI)
+O'ZGARTIRILADI — brend va UX
+addons/crm/wizard/
+Ko'p bosqichli operatsiyalar
+QISMAN saqlanadi
+addons/mail/
+Xabar va chatter tizimi
+SAQLANADI — muloqot tarixi
+addons/contacts/
+Kontaktlar va res.partner
+SAQLANADI — mijoz bazasi
+addons/base/
+Yadrо framework
+O'ZGARTIRILMAYDI
+
+1.3 Qamrovdan tashqari qoladigan narsalar
+	•	Hisobdorlik (account) moduli — Odoo'dan o'chiriladi.
+	•	Inventar (stock) moduli — o'chiriladi.
+	•	HR va ish haqi modullari — o'chiriladi.
+	•	E-commerce va veb-sayt builder — o'chiriladi.
+	•	Manufacturing (ishlab chiqarish) — o'chiriladi.
+	•	Project management — o'chiriladi (vazifalar CRM ichida qoladi).
+
+
+2. ODOO ARXITEKTURASI — DASTURCHI UCHUN
+
+2.1 Odoo qanday ishlaydi?
+Odoo Python'ning ORM (Object-Relational Mapping) tizimiga asoslanadi. Har bir biznes ob'ekti (Lead, Kontakt, Bosqich) — bu Python klassi bo'lib, avtomatik ravishda PostgreSQL jadvaliga aylanadi.
+
+# Odoo CRM ning asosiy modeli — odoo/addons/crm/models/crm_lead.py
+class CrmLead(models.Model):
+    _name = 'crm.lead'          # PostgreSQL jadval nomi: crm_lead
+    _description = 'Lead/Opportunity'
+    _inherit = ['mail.thread', 'mail.activity.mixin']  # Chatter va faoliyat
+ 
+    # Asosiy maydonlar
+    name        = fields.Char('Sarlavha', required=True)
+    partner_id  = fields.Many2one('res.partner', 'Mijoz')
+    stage_id    = fields.Many2one('crm.stage', 'Bosqich')
+    team_id     = fields.Many2one('crm.team', 'Savdo jamoasi')
+    user_id     = fields.Many2one('res.users', 'Mas'ul')
+    expected_revenue = fields.Monetary('Kutilayotgan daromad')
+    probability = fields.Float('Ehtimol, %')
+    phone       = fields.Char('Telefon')
+    email_from  = fields.Char('Email')
+
+2.2 Odoo modullar tizimi
+Odoo'da har bir modul — bu alohida Python paketi. Mizon uchun yangi funksionallik "custom addon" sifatida qo'shiladi. Bu asosiy Odoo kodini o'zgartirmaslik degani — keyingi yangilanishlar muammo bo'lmaydi.
+
+# Mizon custom moduli tuzilishi:
+mizon_crm/
+  __init__.py
+  __manifest__.py        # Modul ta'rifi
+  models/
+    __init__.py
+    mizon_lead.py        # CrmLead modelini kengaytirish
+    mizon_channel.py     # Telegram/Meta kanal modeli
+  views/
+    mizon_lead_views.xml  # Mizon brendi bilan yangi UI
+    mizon_menu.xml        # Menu strukturasi
+  data/
+    mizon_stages.xml      # Mizon savdo bosqichlari
+    mizon_teams.xml       # Mizon jamoalari
+  security/
+    ir.model.access.csv  # Ruxsatlar
+  static/
+    src/
+      scss/mizon.scss    # Mizon brend ranglari
+
+2.3 Inheritance (Meros olish) — asosiy konsepsiya
+Odoo'da uch xil meros olish usuli mavjud. Mizon uchun asosan birinchi ikki usul ishlatiladi:
+
+Usul
+Python sintaksis
+Qachon ishlatiladi
+Kengaytirish (Extension)
+_inherit = 'crm.lead'
+Mavjud modelga yangi maydonlar qo'shish
+Irsiyat (Inheritance)
+_inherit = ['crm.lead']
+_name = 'mizon.lead'
+Yangi model yaratish, eskisidan meros
+Delegatsiya
+_inherits = {'crm.lead': 'lead_id'}
+Har xil jadvalda, lekin birlashtirilgan
+
+
+3. MOSLASHUV ISHLARI — BATAFSIL TEXNIK TAVSIF
+
+3.1 1-BOSQICH: Odoo CRM ni sozlash va tozalash
+3.1.1 Kerakli modullar ro'yxati (faqat shular o'rnatiladi)
+
+Modul nomi
+Repozitoriy
+Zarurmi?
+base
+odoo/odoo
+HA — majburiy yadro
+web
+odoo/odoo
+HA — web interfeys
+mail
+odoo/odoo
+HA — muloqot tizimi
+contacts
+odoo/odoo
+HA — kontaktlar
+crm
+odoo/odoo
+HA — asosiy CRM
+calendar
+odoo/odoo
+HA — vazifa va uchrashuvlar
+phone_validation
+odoo/odoo
+HA — tel format tekshirish
+utm
+odoo/odoo
+HA — reklama manbasi kuzatuv
+digest
+odoo/odoo
+IXTIYORIY — kunlik hisobot email
+mizon_crm
+Yangi yoziladi
+HA — Mizon moslashuvi
+
+3.1.2 O'rnatilmaydigan modullar (aniq belgilash kerak)
+docker-compose.yml va odoo.conf da quyidagi modullar DISABLED ro'yxatiga qo'shilishi kerak:
+	•	account, account_accountant, account_payment — hisobdorlik
+	•	stock, mrp, purchase, sale_management — inventar va sotib olish
+	•	hr, hr_payroll, hr_expense — xodimlar boshqaruvi
+	•	website, website_sale, ecommerce — veb-sayt
+	•	project (alohida modul) — loyiha boshqaruvi
+	•	helpdesk, field_service — xizmat ko'rsatish
+
+3.2 2-BOSQICH: Mizon custom moduli yaratish
+3.2.1 __manifest__.py — modul ta'rifi
+
+# mizon_crm/__manifest__.py
+{
+    'name': 'Mizon CRM',
+    'version': '17.0.1.0.0',
+    'category': 'CRM',
+    'summary': 'Mizon kompaniyasi uchun moslashtirilgan CRM',
+    'depends': ['crm', 'mail', 'contacts', 'calendar', 'utm', 'phone_validation'],
+    'data': [
+        'security/ir.model.access.csv',
+        'data/mizon_stages.xml',
+        'data/mizon_teams.xml',
+        'data/mizon_tags.xml',
+        'views/mizon_lead_views.xml',
+        'views/mizon_contact_views.xml',
+        'views/mizon_dashboard_views.xml',
+        'views/mizon_menu.xml',
+    ],
+    'assets': {
+        'web.assets_backend': [
+            'mizon_crm/static/src/scss/mizon_theme.scss',
+            'mizon_crm/static/src/js/mizon_kanban.js',
+        ],
+    },
+    'installable': True,
+    'auto_install': False,
+}
+
+3.2.2 Lead modelini kengaytirish
+Odoo'ning standart crm.lead modeliga Mizon uchun qo'shimcha maydonlar qo'shiladi:
+
+# mizon_crm/models/mizon_lead.py
+from odoo import models, fields, api
+ 
+class MizonLead(models.Model):
+    _inherit = 'crm.lead'   # crm_lead jadvalini kengaytiradi
+ 
+    # ── MANBA KANALI ──────────────────────────────────────────
+    mizon_source = fields.Selection([
+        ('meta_fb_ads',   'Facebook Lead Ads'),
+        ('meta_fb_msg',   'Facebook Messenger'),
+        ('meta_ig_dm',    'Instagram DM'),
+        ('telegram_bot',  'Telegram Bot'),
+        ('telegram_ch',   'Telegram Kanal'),
+        ('phone_call',    'Telefon qo'ng'irog'i'),
+        ('referral',      'Tavsiya (Referral)'),
+        ('website',       'Veb-sayt'),
+        ('manual',        'Qo'lda kiritilgan'),
+    ], string='Mizon manbasi', default='manual',
+       tracking=True)  # tracking=True => o'zgarish loglanadi
+ 
+    # ── IJTIMOIY TARMOQ MA'LUMOTLARI ─────────────────────────
+    telegram_username  = fields.Char('Telegram username', help='@username formatida')
+    telegram_chat_id   = fields.Char('Telegram Chat ID', help='Bot suhbat ID')
+    instagram_username = fields.Char('Instagram username')
+    facebook_psid      = fields.Char('Facebook PSID', help='Page-Scoped User ID')
+    meta_ad_id         = fields.Char('Meta Ad ID', help='Qaysi reklama orqali kelgan')
+    meta_campaign_id   = fields.Char('Meta Campaign ID')
+    meta_form_id       = fields.Char('Meta Lead Form ID')
+ 
+    # ── BIZNES MA'LUMOTLARI ──────────────────────────────────
+    company_type_mizon = fields.Selection([
+        ('individual', 'Jismoniy shaxs'),
+        ('small_biz',  'Kichik biznes (1-10 xodim)'),
+        ('medium_biz', 'O'rta biznes (11-100 xodim)'),
+        ('large_biz',  'Yirik korxona (100+ xodim)'),
+    ], string='Kompaniya turi')
+ 
+    product_interest   = fields.Many2many(
+        'mizon.product.category',
+        string='Qiziqish bildirgan mahsulot/xizmat'
+    )
+    budget_range = fields.Selection([
+        ('under_1m',  '1 000 000 so'mgacha'),
+        ('1m_5m',     '1-5 million so'm'),
+        ('5m_20m',    '5-20 million so'm'),
+        ('over_20m',  '20 million so'mdan yuqori'),
+    ], string='Taxminiy byudjet')
+ 
+    # ── LEAD SIFAT BALL ──────────────────────────────────────
+    lead_score = fields.Integer(
+        'Lead balli', default=0, readonly=True,
+        help='Avtomatik hisoblanadi: 0-100'
+    )
+ 
+    # ── DUPLIKAT TEKSHIRISH ──────────────────────────────────
+    is_duplicate    = fields.Boolean('Duplikat?', default=False, readonly=True)
+    duplicate_lead_id = fields.Many2one('crm.lead', 'Asl lead (duplikat bo'lsa)')
+ 
+    # ── AVTOMATIK LEAD SCORE HISOBLASH ───────────────────────
+    @api.onchange('mizon_source', 'phone', 'email_from', 'partner_id')
+    def _compute_lead_score(self):
+        for rec in self:
+            score = 0
+            # Manba bo'yicha ball
+            source_scores = {
+                'meta_fb_ads': 30, 'meta_fb_msg': 25,
+                'meta_ig_dm': 25,  'telegram_bot': 20,
+                'telegram_ch': 20, 'phone_call': 35,
+                'referral': 40,    'website': 15,
+                'manual': 10,
+            }
+            score += source_scores.get(rec.mizon_source, 0)
+            if rec.phone:       score += 10
+            if rec.email_from:  score += 10
+            if rec.partner_id:  score += 15
+            rec.lead_score = min(score, 100)
+ 
+    # ── DUPLIKAT TEKSHIRISH ───────────────────────────────────
+    @api.model
+    def check_duplicate(self, phone=None, email=None):
+        domain = []
+        if phone:
+            domain.append(('phone', '=', phone))
+        if email:
+            domain.append(('email_from', '=', email))
+        if not domain:
+            return False
+        existing = self.search(['|'] + domain, limit=1)
+        return existing.id if existing else False
+
+3.2.3 Savdo bosqichlari — Mizon uchun sozlash
+crm_stage jadvalidagi standart bosqichlar o'chiriladi va Mizon bosqichlari data fayli orqali qo'shiladi:
+
+<!-- mizon_crm/data/mizon_stages.xml -->
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">  <!-- noupdate: yangilanishda qayta yozilmaydi -->
+ 
+    <record id="stage_new" model="crm.stage">
+      <field name="name">Yangi Lead</field>
+      <field name="sequence">1</field>
+      <field name="probability">10</field>
+      <field name="is_won">False</field>
+      <field name="fold">False</field>
+      <!-- Kanban rangini CSS class orqali belgilash -->
+      <field name="legend_normal">Yangi, ko'rilmagan</field>
+    </record>
+ 
+    <record id="stage_contacted" model="crm.stage">
+      <field name="name">Aloqa qilindi</field>
+      <field name="sequence">2</field>
+      <field name="probability">25</field>
+    </record>
+ 
+    <record id="stage_qualified" model="crm.stage">
+      <field name="name">Ehtiyoj aniqlandi</field>
+      <field name="sequence">3</field>
+      <field name="probability">40</field>
+    </record>
+ 
+    <record id="stage_proposal" model="crm.stage">
+      <field name="name">Taklif yuborildi</field>
+      <field name="sequence">4</field>
+      <field name="probability">60</field>
+    </record>
+ 
+    <record id="stage_negotiation" model="crm.stage">
+      <field name="name">Muzokaralar</field>
+      <field name="sequence">5</field>
+      <field name="probability">75</field>
+    </record>
+ 
+    <record id="stage_won" model="crm.stage">
+      <field name="name">Yutildi</field>
+      <field name="sequence">6</field>
+      <field name="probability">100</field>
+      <field name="is_won">True</field>
+    </record>
+ 
+  </data>
+</odoo>
+
+
+4. INTERFEYS MOSLASHUVI (VIEWS)
+
+4.1 Odoo View tizimi qanday ishlaydi?
+Odoo UI XML formatida tavsiflanadi. Har bir sahifa — bu view fayl. Mavjud view'ni o'zgartirish uchun inherit_id ishlatiladi — bu asosiy Odoo fayllarini o'zgartirmasdan ustiga qo'shimcha qilish imkonini beradi.
+
+4.2 Lead forma ko'rinishi — Mizon maydonlari qo'shish
+<!-- mizon_crm/views/mizon_lead_views.xml -->
+<odoo>
+  <!-- Mavjud crm.lead forma viewini kengaytirish -->
+  <record id="mizon_crm_lead_form" model="ir.ui.view">
+    <field name="name">mizon.crm.lead.form</field>
+    <field name="model">crm.lead</field>
+    <field name="inherit_id" ref="crm.crm_lead_all_leads"/>
+    <field name="arch" type="xml">
+ 
+      <!-- Standart "Phone" maydoni yoniga Telegram qo'shish -->
+      <xpath expr="//field[@name='phone']" position="after">
+        <field name="telegram_username" placeholder="@username"/>
+        <field name="instagram_username" placeholder="@instagram"/>
+      </xpath>
+ 
+      <!-- Yangi "Mizon ma'lumotlari" bo'limi qo'shish -->
+      <xpath expr="//sheet" position="inside">
+        <notebook>
+          <page string="Mizon ma'lumotlari">
+            <group string="Kanal va manba">
+              <field name="mizon_source"/>
+              <field name="meta_campaign_id"/>
+              <field name="meta_ad_id"/>
+            </group>
+            <group string="Ijtimoiy tarmoqlar">
+              <field name="telegram_chat_id"/>
+              <field name="facebook_psid"/>
+            </group>
+            <group string="Biznes ma'lumotlari">
+              <field name="company_type_mizon"/>
+              <field name="budget_range"/>
+              <field name="product_interest" widget="many2many_tags"/>
+            </group>
+            <group string="Sifat ko'rsatkichi">
+              <field name="lead_score" widget="gauge"/>
+              <field name="is_duplicate" readonly="1"/>
+              <field name="duplicate_lead_id" readonly="1"
+                     attrs="{'invisible': [('is_duplicate', '=', False)]}"/>
+            </group>
+          </page>
+        </notebook>
+      </xpath>
+ 
+    </field>
+  </record>
+ 
+  <!-- Kanban (Pipeline) ko'rinishini kengaytirish -->
+  <record id="mizon_crm_kanban" model="ir.ui.view">
+    <field name="name">mizon.crm.kanban</field>
+    <field name="model">crm.lead</field>
+    <field name="inherit_id" ref="crm.crm_lead_all_leads_tree_view"/>
+    <field name="arch" type="xml">
+      <xpath expr="//kanban" position="attributes">
+        <attribute name="class">mizon_kanban</attribute>
+      </xpath>
+    </field>
+  </record>
+ 
+</odoo>
+
+4.3 Mizon brend tema
+/* mizon_crm/static/src/scss/mizon_theme.scss */
+ 
+/* Mizon asosiy ranglari */
+:root {
+  --mizon-primary:    #1A2E4A;
+  --mizon-accent:     #2563EB;
+  --mizon-success:    #16A34A;
+  --mizon-warning:    #D97706;
+  --mizon-danger:     #DC2626;
+  --mizon-bg:         #F8FAFC;
+}
+ 
+/* Topbar rangi */
+.o_main_navbar {
+  background-color: var(--mizon-primary) !important;
+  .o_menu_brand { color: white !important; }
+}
+ 
+/* Kanban kartochkasi */
+.o_kanban_record.mizon_kanban {
+  border-left: 4px solid var(--mizon-accent);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+ 
+  &:hover { box-shadow: 0 4px 16px rgba(37,99,235,0.15); }
+}
+ 
+/* Lead score gauge rangi */
+.o_field_gauge .o_gauge_value { color: var(--mizon-accent); }
+ 
+/* Manba badge ranglari */
+.badge.source_meta_fb_ads    { background: #1877F2; }
+.badge.source_telegram_bot   { background: #0088cc; }
+.badge.source_phone_call     { background: #16A34A; }
+.badge.source_referral       { background: #9333EA; }
+
+
+5. TASHQI INTEGRATSIYALAR — ODOO ICHIDA
+
+5.1 Meta (Facebook/Instagram) integratsiyasi
+5.1.1 Odoo'ning controller tizimi
+Odoo'da tashqi so'rovlarni qabul qilish uchun http.Controller ishlatiladi. Bu Django'dagi view'ga o'xshash:
+
+# mizon_crm/controllers/meta_webhook.py
+import json, hmac, hashlib
+from odoo import http
+from odoo.http import request
+ 
+class MetaWebhookController(http.Controller):
+ 
+    # ── WEBHOOK VERIFICATION (Meta talab qiladi) ──────────────
+    @http.route('/mizon/webhook/meta', type='http',
+                auth='none', methods=['GET'], csrf=False)
+    def meta_verify(self, **kwargs):
+        mode      = kwargs.get('hub.mode')
+        token     = kwargs.get('hub.verify_token')
+        challenge = kwargs.get('hub.challenge')
+ 
+        # Sozlamalardagi token bilan taqqoslash
+        config_token = request.env['ir.config_parameter'].sudo()\
+            .get_param('mizon_crm.meta_verify_token')
+ 
+        if mode == 'subscribe' and token == config_token:
+            return request.make_response(challenge)
+        return request.make_response('Forbidden', status=403)
+ 
+    # ── WEBHOOK QABUL QILISH ──────────────────────────────────
+    @http.route('/mizon/webhook/meta', type='http',
+                auth='none', methods=['POST'], csrf=False)
+    def meta_receive(self, **kwargs):
+        payload = request.httprequest.data
+        sig_header = request.httprequest.headers.get('X-Hub-Signature-256', '')
+ 
+        # Imzoni tekshirish
+        app_secret = request.env['ir.config_parameter'].sudo()\
+            .get_param('mizon_crm.meta_app_secret')
+        expected = 'sha256=' + hmac.new(
+            app_secret.encode(), payload, hashlib.sha256
+        ).hexdigest()
+ 
+        if not hmac.compare_digest(sig_header, expected):
+            return request.make_response('Invalid signature', status=403)
+ 
+        data = json.loads(payload)
+        # Lead Ads eventlarini qayta ishlash
+        for entry in data.get('entry', []):
+            for change in entry.get('changes', []):
+                if change.get('field') == 'leadgen':
+                    self._process_lead_ads(change['value'])
+ 
+        return request.make_response('OK')
+ 
+    def _process_lead_ads(self, lead_data):
+        Lead = request.env['crm.lead'].sudo()
+        vals = {
+            'name': f"Meta Lead: {lead_data.get('form_id', '')}",
+            'mizon_source': 'meta_fb_ads',
+            'meta_form_id': lead_data.get('form_id'),
+            'meta_ad_id': lead_data.get('ad_id'),
+            'meta_campaign_id': lead_data.get('campaign_id'),
+        }
+        # Field values (forma maydonlari)
+        for field in lead_data.get('field_data', []):
+            if field['name'] == 'phone_number':
+                vals['phone'] = field['values'][0]
+            elif field['name'] == 'email':
+                vals['email_from'] = field['values'][0]
+            elif field['name'] == 'full_name':
+                vals['contact_name'] = field['values'][0]
+                vals['name'] = f"Meta Lead: {field['values'][0]}"
+ 
+        lead = Lead.create(vals)
+        lead._compute_lead_score()  # Ballni hisoblash
+
+5.2 Telegram Bot integratsiyasi
+5.2.1 Telegram Webhook Controller
+# mizon_crm/controllers/telegram_webhook.py
+import json
+from odoo import http
+from odoo.http import request
+ 
+class TelegramWebhookController(http.Controller):
+ 
+    @http.route('/mizon/webhook/telegram', type='json',
+                auth='none', methods=['POST'], csrf=False)
+    def telegram_receive(self, **kwargs):
+        data = json.loads(request.httprequest.data)
+ 
+        # Xabar yoki Contact share
+        message = data.get('message', {})
+        chat_id = str(message.get('chat', {}).get('id', ''))
+        text    = message.get('text', '')
+        contact = message.get('contact')  # Telefon raqamini ulashganda
+ 
+        # /start buyrug'i — menejerga ulash
+        if text == '/start':
+            self._link_manager(chat_id, message)
+ 
+        # Kontakt ulashildi — lead yaratish
+        elif contact:
+            self._create_lead_from_contact(chat_id, contact)
+ 
+        # Oddiy xabar — mavjud leadga biriktirish
+        else:
+            self._log_message(chat_id, text, message)
+ 
+        return {'ok': True}
+ 
+    def _create_lead_from_contact(self, chat_id, contact):
+        Lead = request.env['crm.lead'].sudo()
+        # Duplikat tekshirish
+        existing = Lead.check_duplicate(phone=contact.get('phone_number'))
+        if existing:
+            # Mavjud leadga telegram chat_id qo'shish
+            Lead.browse(existing).write({'telegram_chat_id': chat_id})
+            return
+ 
+        Lead.create({
+            'name': f"Telegram: {contact.get('first_name', '')} {contact.get('last_name', '')}",
+            'contact_name': f"{contact.get('first_name', '')} {contact.get('last_name', '')}",
+            'phone': contact.get('phone_number'),
+            'telegram_chat_id': chat_id,
+            'mizon_source': 'telegram_bot',
+        })
+ 
+    def _log_message(self, chat_id, text, message):
+        # Chat ID bo'yicha lead topish va chatter'ga yozish
+        Lead = request.env['crm.lead'].sudo()
+        lead = Lead.search([('telegram_chat_id', '=', chat_id)], limit=1)
+        if lead:
+            lead.message_post(
+                body=f"Telegram xabari: {text}",
+                message_type='comment',
+                subtype_xmlid='mail.mt_note'
+            )
+
+5.3 Telegram bot orqali xabar yuborish (Outbound)
+# mizon_crm/models/mizon_telegram.py
+import requests
+from odoo import models, fields, api
+from odoo.exceptions import UserError
+ 
+class MizonTelegramService(models.AbstractModel):
+    _name = 'mizon.telegram.service'
+    _description = 'Telegram xabar yuborish servisi'
+ 
+    @api.model
+    def send_message(self, chat_id, text, parse_mode='HTML'):
+        bot_token = self.env['ir.config_parameter'].sudo()\
+            .get_param('mizon_crm.telegram_bot_token')
+        if not bot_token:
+            raise UserError('Telegram Bot token sozlanmagan!')
+ 
+        url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+        resp = requests.post(url, json={
+            'chat_id': chat_id,
+            'text': text,
+            'parse_mode': parse_mode,
+        }, timeout=10)
+ 
+        if not resp.ok:
+            raise UserError(f'Telegram xato: {resp.text}')
+        return resp.json()
+ 
+# crm.lead modeliga yuborish tugmasi qo'shish
+class CrmLeadTelegram(models.Model):
+    _inherit = 'crm.lead'
+ 
+    def action_send_telegram(self):
+        # Wizard ochish
+        return {
+            'type': 'ir.actions.act_window',
+            'res_model': 'mizon.telegram.compose',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_lead_id': self.id,
+                        'default_chat_id': self.telegram_chat_id},
+        }
+
+
+6. TIZIM SOZLAMALARI VA KONFIGURATSIYA
+
+6.1 Odoo sozlamalar sahifasi (Mizon panel)
+Barcha API kalitlar va sozlamalar Odoo'ning ir.config_parameter jadvalida saqlanadi. Bularni boshqarish uchun Settings > Technical > Parameters > System Parameters ishlatiladi. Mizon uchun maxsus sozlamalar sahifasi yaratiladi:
+
+# mizon_crm/models/res_config_settings.py
+from odoo import models, fields
+ 
+class MizonConfigSettings(models.TransientModel):
+    _inherit = 'res.config.settings'
+ 
+    # Meta sozlamalari
+    meta_app_id      = fields.Char(config_parameter='mizon_crm.meta_app_id')
+    meta_app_secret  = fields.Char(config_parameter='mizon_crm.meta_app_secret',
+                                    string='Meta App Secret (maxfiy)')
+    meta_verify_token = fields.Char(config_parameter='mizon_crm.meta_verify_token')
+    meta_page_token  = fields.Char(config_parameter='mizon_crm.meta_page_token')
+ 
+    # Telegram sozlamalari
+    telegram_bot_token = fields.Char(config_parameter='mizon_crm.telegram_bot_token',
+                                      string='Telegram Bot Token (maxfiy)')
+    telegram_admin_chat = fields.Char(config_parameter='mizon_crm.telegram_admin_chat',
+                                       string='Admin Telegram Chat ID')
+
+6.2 Docker Compose konfiguratsiyasi
+# docker-compose.yml — Antigravity uchun
+version: '3.9'
+ 
+services:
+  mizon-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB:       mizon_crm_db
+      POSTGRES_USER:     mizon_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}   # .env dan o'qiydi
+    volumes:
+      - mizon_db_data:/var/lib/postgresql/data
+    networks: [mizon_net]
+    restart: unless-stopped
+ 
+  mizon-odoo:
+    image: odoo:17.0
+    depends_on: [mizon-db]
+    environment:
+      HOST:     mizon-db
+      USER:     mizon_user
+      PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./addons/mizon_crm:/mnt/extra-addons/mizon_crm   # Custom modul
+      - mizon_odoo_data:/var/lib/odoo
+      - ./config/odoo.conf:/etc/odoo/odoo.conf
+    ports:
+      - "8069:8069"
+    networks: [mizon_net]
+    restart: unless-stopped
+    command: odoo --dev=all   # Dev rejim (production'da olib tashlang)
+ 
+networks:
+  mizon_net:
+volumes:
+  mizon_db_data:
+  mizon_odoo_data:
+
+# config/odoo.conf
+[options]
+db_host = mizon-db
+db_port = 5432
+db_name = mizon_crm_db
+db_user = mizon_user
+db_password = PLACEHOLDER
+ 
+# Faqat kerakli modullar papkasi
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
+ 
+# ERP modullari o'chiriladi
+server_wide_modules = base,web
+ 
+# Xavfsizlik
+list_db = False          # DB ro'yxatini ko'rsatma
+admin_passwd = HASHED    # Master parol (bcrypt hash)
+ 
+workers = 4              # Parallel worker'lar
+max_cron_threads = 2     # Fon vazifalar
+limit_memory_hard = 2684354560   # 2.5 GB
+limit_time_cpu = 600
+limit_time_real = 1200
+
+
+7. MA'LUMOTLAR BAZASI MODELI (ERD)
+
+7.1 Asosiy jadvallar va ular orasidagi bog'liqlik
+Odoo CRM'ning PostgreSQL jadvallari va Mizon qo'shimchalari:
+
+PostgreSQL jadval
+Odoo modeli
+Mizon qo'shimchalari
+crm_lead
+crm.lead
+mizon_source, telegram_chat_id, facebook_psid, lead_score, meta_ad_id, meta_campaign_id, budget_range, is_duplicate
+crm_stage
+crm.stage
+Ma'lumotlar yangilanadi (bosqich nomlari)
+crm_team
+crm.team
+Mizon savdo jamoalari qo'shiladi
+res_partner
+res.partner
+Kontaktlar — mavjud model ishlatiladi
+mail_message
+mail.message
+Barcha muloqot tarixi — o'zgartirilmaydi
+mail_activity
+mail.activity
+Vazifalar — o'zgartirilmaydi
+calendar_event
+calendar.event
+Uchrashuvlar — o'zgartirilmaydi
+crm_lead_tag
+crm.tag
+Mizon teglari qo'shiladi
+
+7.2 Mizon-specifik yangi jadvallar
+Yangi jadval
+Odoo modeli
+Maqsad
+mizon_product_category
+mizon.product.category
+Mizon mahsulot/xizmat kategoriyalari
+mizon_telegram_compose
+mizon.telegram.compose
+Telegram xabar yuborish wizard
+mizon_meta_campaign
+mizon.meta.campaign
+Meta kampaniya ma'lumotlari cache
+
+
+8. XAVFSIZLIK VA RUXSATLAR
+
+8.1 Odoo ruxsatlar tizimi
+Odoo'da har bir model uchun CRUD ruxsatlari ir.model.access.csv orqali belgilanadi. Mizon rollari:
+
+# mizon_crm/security/ir.model.access.csv
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+ 
+# CRM Lead ruxsatlari
+mizon_lead_manager,crm.lead.manager,model_crm_lead,mizon_crm.group_mizon_manager,1,1,1,1
+mizon_lead_salesperson,crm.lead.salesperson,model_crm_lead,base.group_user,1,1,1,0
+ 
+# Kontakt ruxsatlari
+mizon_partner_manager,res.partner.manager,base.model_res_partner,mizon_crm.group_mizon_manager,1,1,1,1
+mizon_partner_salesperson,res.partner.salesperson,base.model_res_partner,base.group_user,1,1,0,0
+
+Mizon Rol
+Odoo Group
+CRM ruxsat
+Hisobot
+Super Admin
+base.group_system
+To'liq CRUD
+Hammasi
+Bosh menejer
+mizon_crm.group_mizon_manager
+To'liq CRUD
+Barcha menejerlar
+Savdo menejer
+base.group_user
+O'z leadlari CRUD
+Faqat o'zi
+Marketing
+mizon_crm.group_mizon_marketing
+Faqat o'qish
+Leads manbasi
+
+
+9. ISHLAR REJASI VA MUDDATLAR
+
+Sprint
+Vazifalar
+Muddat
+Natija
+Sprint 0
+Odoo 17 CE o'rnatish, Docker sozlash, kerakli modullarni aktivlashtirish, keraksizlarni o'chirish
+3 kun
+Ishlayotgan toza Odoo CRM instance
+Sprint 1
+mizon_crm moduli skeleti, __manifest__.py, asosiy model inheritance, savdo bosqichlari ma'lumotlari, ruxsatlar CSV
+5 kun
+Mizon bosqichlari bilan ishlaydigan CRM
+Sprint 2
+Mizon lead modeli (barcha qo'shimcha maydonlar), lead score logikasi, duplikat tekshirish, forma viewlarini kengaytirish
+5 kun
+To'liq lead kartochkasi
+Sprint 3
+Meta webhook controller, imzo tekshirish, Lead Ads integratsiyasi, Messenger webhook
+5 kun
+Meta'dan avtomatik leadlar
+Sprint 4
+Telegram bot webhook, /start va kontakt buyruqlari, outbound xabar yuborish, menejer-bot ulash
+4 kun
+Telegram bot ishlaydi
+Sprint 5
+Mizon SCSS tema, kanban moslashuvi, menyu tartibi, mobil responsivlik
+3 kun
+Mizon brendida interfeys
+Sprint 6
+Sozlamalar sahifasi (API kalitlar), test yozish, bug fix, hujjatlash
+4 kun
+Production-ready
+Sprint 7
+Antigravity'ga deploy, SSL, DNS, backup sozlash, foydalanuvchi o'rgatish
+3 kun
+Ishga tushirilgan tizim
+
+Jami taxminiy muddat: 32 ish kuni (taxminan 6-7 hafta, 1 dasturchi bilan)
+
+Noldan yozishga nisbatan afzallik
+Odoo CRM kodini bazaga olib moslashtirish noldan yozishdan taxminan 3-4 barobar tezroq. Sababi: ma'lumotlar bazasi ORM, autentifikatsiya, ruxsatlar tizimi, mail/chatter, hisobotlar asosi — bularning barchasi tayyor. Faqat Mizon-specifik mantiq yoziladi.
+
+
+10. TEST STRATEGIYASI
+
+10.1 Odoo test tizimi
+Odoo'da testlar odoo.tests.common.TransactionCase asosida yoziladi. Har bir test alohida tranzaksiyada ishlaydi va avtomatik rollback qilinadi:
+
+# mizon_crm/tests/test_mizon_lead.py
+from odoo.tests.common import TransactionCase
+ 
+class TestMizonLead(TransactionCase):
+ 
+    def setUp(self):
+        super().setUp()
+        self.Lead = self.env['crm.lead']
+        self.stage_new = self.env.ref('mizon_crm.stage_new')
+ 
+    def test_lead_score_from_meta(self):
+        """Meta Lead Ads manbasi uchun ball 30 bo'lishi kerak"""
+        lead = self.Lead.create({
+            'name': 'Test Lead',
+            'mizon_source': 'meta_fb_ads',
+        })
+        lead._compute_lead_score()
+        self.assertEqual(lead.lead_score, 30)
+ 
+    def test_lead_score_with_phone(self):
+        """Telefon qo'shilsa ball 10 ga oshishi kerak"""
+        lead = self.Lead.create({
+            'name': 'Test Lead',
+            'mizon_source': 'referral',   # 40 ball
+            'phone': '+998901234567',     # +10 ball
+        })
+        lead._compute_lead_score()
+        self.assertEqual(lead.lead_score, 50)
+ 
+    def test_duplicate_detection(self):
+        """Bir xil telefonda duplikat aniqlanishi kerak"""
+        self.Lead.create({'name': 'Lead 1', 'phone': '+998901234567'})
+        dup_id = self.Lead.check_duplicate(phone='+998901234567')
+        self.assertTrue(dup_id, 'Duplikat aniqlanmadi!')
+
+10.2 Test turlari va coverage maqsadi
+Test turi
+Vosita
+Coverage maqsadi
+Kim yozadi
+Unit testlar
+odoo.tests.TransactionCase
+Model metodlari — 80%+
+Backend dasturchi
+Integratsiya test
+odoo.tests.HttpCase
+Webhook qabul qilish
+Backend dasturchi
+UI testlar
+Playwright / Selenium
+Asosiy foydalanuvchi yo'llari
+QA muhandis
+API testlar
+Postman Collection
+Barcha webhook endpointlar
+Backend dasturchi
+Yuklanma testi
+Locust / k6
+50 simultant foydalanuvchi
+DevOps
+
+
+11. QABUL QILISH MEZONLARI
+
+11.1 Funksional tekshiruvlar
+	•	Facebook Lead Ads formasidan yuborilgan lead 60 soniya ichida Odoo CRM'da "Yangi Lead" bosqichida ko'rinishi.
+	•	Telegram bot'ga /start bosilganda menejerning Telegram ID'si CRM hisobi bilan bog'lanishi.
+	•	CRM'dagi kontaktga telegram_chat_id mavjud bo'lsa, lead kartochkasidan to'g'ridan-to'g'ri Telegram xabar yuborish ishlashi.
+	•	Bir xil telefon raqamli ikkinchi lead kiritilganda tizim "Duplikat!" ogohlantirishini ko'rsatishi.
+	•	Savdo menejer faqat o'ziga biriktirilgan leadlarni ko'rishi, bosh menejer hammani ko'rishi.
+	•	Odoo Kanban board'ida drag-and-drop orqali bosqich o'zgartirish ishlashi va o'zgarish chatter'ga loglanishi.
+	•	Meta webhook X-Hub-Signature-256 imzosi noto'g'ri bo'lsa 403 qaytarishi.
+
+11.2 Texnik tekshiruvlar
+	•	Barcha custom model testlari o'tishi (python -m pytest yoki odoo -d mizon_crm_db --test-enable).
+	•	Odoo upgrade moduli xatosiz o'tishi (mizon_crm moduli yangilanishida ma'lumotlar saqlanishi).
+	•	Docker konteyner restart bo'lganda ma'lumotlar yo'qolmasligi (volume mount tekshiruvi).
+	•	odoo.conf da list_db = False va admin_passwd hashed ekanligini tekshirish.
+	•	HTTPS ulangan, HTTP so'rovlar redirect qilinishi.
+
+Mizon CRM — Odoo Moslashuv TZ v1.0 | Aprel 2026 | Maxfiy hujjat

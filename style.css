@@ -1,0 +1,442 @@
+/* CSS Reset and Variables */
+:root {
+  /* Light Theme */
+  --mizon-primary: #2563EB;
+  --mizon-primary-hover: #1D4ED8;
+  --mizon-bg: #F8FAFC;
+  --mizon-surface: #FFFFFF;
+  --mizon-text-main: #0F172A;
+  --mizon-text-muted: #64748B;
+  --mizon-border: #E2E8F0;
+  
+  --kanban-bg: #F1F5F9;
+  
+  /* Status Colors */
+  --status-new: #3B82F6;
+  --status-contact: #F59E0B;
+  --status-nego: #8B5CF6;
+  --status-won: #10B981;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] {
+  /* Dark Theme */
+  --mizon-primary: #3B82F6;
+  --mizon-primary-hover: #60A5FA;
+  --mizon-bg: #0F172A;
+  --mizon-surface: #1E293B;
+  --mizon-text-main: #F1F5F9;
+  --mizon-text-muted: #94A3B8;
+  --mizon-border: #334155;
+  
+  --kanban-bg: #0F172A;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--mizon-bg);
+  color: var(--mizon-text-main);
+  transition: background-color 0.3s, color 0.3s;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--mizon-border);
+  border-radius: 10px;
+}
+
+/* Topbar */
+.topbar {
+  height: 64px;
+  background: var(--mizon-surface);
+  border-bottom: 1px solid var(--mizon-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  z-index: 10;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--mizon-primary), #8B5CF6);
+  border-radius: 8px;
+}
+.logo h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: var(--mizon-text-muted);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.btn-icon:hover {
+  background: var(--mizon-border);
+  color: var(--mizon-text-main);
+}
+
+.btn-primary {
+  background: var(--mizon-primary);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+.btn-primary:hover {
+  background: var(--mizon-primary-hover);
+}
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--mizon-text-main);
+  border: 1px solid var(--mizon-border);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-outline:hover {
+  background: var(--mizon-border);
+}
+
+/* Layout */
+.layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background: var(--mizon-surface);
+  border-right: 1px solid var(--mizon-border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.sidebar nav {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-item {
+  text-decoration: none;
+  color: var(--mizon-text-muted);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.nav-item:hover {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--mizon-primary);
+}
+.nav-item.active {
+  background: rgba(37, 99, 235, 0.15);
+  color: var(--mizon-primary);
+  font-weight: 600;
+}
+
+.sidebar-info {
+  padding: 16px;
+  border-top: 1px solid var(--mizon-border);
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.avatar {
+  background: var(--mizon-primary);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+.user-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.user-role {
+  font-size: 0.75rem;
+  color: var(--mizon-text-muted);
+}
+
+/* Kanban Board */
+.kanban-board {
+  flex: 1;
+  background: var(--kanban-bg);
+  padding: 24px;
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.kanban-column {
+  width: 320px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.column-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--mizon-text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lead-count {
+  background: var(--mizon-border);
+  color: var(--mizon-text-muted);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.column-body {
+  background: transparent;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 40px;
+  overflow-y: auto;
+  border-radius: 8px;
+  min-height: 150px;
+}
+
+.column-body.drag-over {
+  background: rgba(37, 99, 235, 0.05);
+  border: 1px dashed var(--mizon-primary);
+}
+
+/* Kanban Card */
+.kanban-card {
+  background: var(--mizon-surface);
+  border: 1px solid var(--mizon-border);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: grab;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border-left: 4px solid var(--status-new);
+}
+
+.kanban-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+.card-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+
+.card-details {
+  font-size: 0.8rem;
+  color: var(--mizon-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.badge-source {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--mizon-primary);
+}
+
+.badge-score {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--status-won);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.modal-overlay.active {
+  display: flex;
+  opacity: 1;
+}
+
+.modal {
+  background: var(--mizon-surface);
+  width: 100%;
+  max-width: 500px;
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--mizon-border);
+  transform: translateY(20px);
+  transition: transform 0.3s;
+}
+
+.modal-overlay.active .modal {
+  transform: translateY(0);
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--mizon-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--mizon-text-muted);
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--mizon-text-muted);
+}
+
+.form-group input, .form-group select {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--mizon-border);
+  background: var(--mizon-bg);
+  color: var(--mizon-text-main);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus, .form-group select:focus {
+  border-color: var(--mizon-primary);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
