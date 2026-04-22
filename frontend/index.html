@@ -1095,9 +1095,10 @@ tr:hover td { background: var(--bg-hover); }
                              {colLeads.map(lead => {
                                const sla = determineSLAType(lead.deadline);
                                let customClass = '';
+                               const hasTask = lead.deadline || lead.taskDescription;
                                if(sla === 'danger') customClass = 'status-danger';
                                else if(sla === 'warning') customClass = 'status-warning';
-                               else if(!lead.deadline && !['NEW', 'LOST', 'WON'].includes(lead.status)) customClass = 'needs-attention';
+                               else if(!hasTask && !['NEW', 'LOST', 'WON'].includes(lead.status)) customClass = 'needs-attention';
 
                                return (
                                  <div 
@@ -1118,9 +1119,13 @@ tr:hover td { background: var(--bg-hover); }
                                        📞 {lead.actualCallAttempts} urinish • 👤 <b>{lead.owner}</b>
                                     </div>
                                     
-                                    {lead.taskDescription ? (
+                                    {(lead.taskDescription || lead.deadline) ? (
                                        <div style={{ fontSize: '11px', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                                          💬 {lead.taskDescription.substring(0,30)}...
+                                          {lead.taskDescription ? (
+                                             <span>💬 {lead.taskDescription.substring(0,30)}...</span>
+                                          ) : (
+                                             <span style={{color:'var(--text-muted)'}}>⏱️ Muddat belgilangan (vazifa matni yo'q)</span>
+                                          )}
                                        </div>
                                     ) : (
                                        !['NEW', 'LOST', 'WON'].includes(lead.status) && (
@@ -1185,24 +1190,45 @@ tr:hover td { background: var(--bg-hover); }
                              </div>
 
                              <div style={{borderTop:'1px solid var(--border-light)', paddingTop:'24px'}}>
-                                <span className="label-sm">Havola yaratish — Qaysi Quvurga Lead tushsin?</span>
-                                <div style={{display:'flex', gap: '16px', alignItems: 'center', marginTop:'8px'}}>
-                                    <select className="input-base" style={{marginBottom: 0, width: '300px'}} onChange={e => {
-                                        if(!e.target.value) return;
-                                        const lnk = window.location.origin + window.location.pathname + '?leadForm=true&pipe=' + e.target.value;
-                                        navigator.clipboard.writeText(lnk);
-                                        alert("Nusxalandi! \n" + lnk);
-                                    }}>
-                                       <option value="">-- Quvurni Tanlang --</option>
-                                       {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </select>
-                                    <div style={{color:'var(--text-muted)', fontSize: '13px'}}>&larr; Tanlang va havola nusxalanadi.</div>
+                                <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
+                                   <div style={{width:'36px', height:'36px', background:'linear-gradient(135deg, var(--accent), #8b5cf6)', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px'}}>🔗</div>
+                                   <div>
+                                      <div style={{fontWeight:600, fontSize:'14px', color:'var(--text-main)'}}>Havola Yaratish</div>
+                                      <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Tashqi formaning URL havolasini oling</div>
+                                   </div>
+                                </div>
+                                
+                                <div style={{display:'flex', gap:'12px', alignItems:'stretch'}}>
+                                   <select id="formPipeSelect" className="input-base" style={{marginBottom:0, flex:1}} defaultValue="">
+                                      <option value="" disabled>Quvurni tanlang...</option>
+                                      {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                   </select>
+                                   <button className="btn-primary" style={{whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:'6px'}} onClick={() => {
+                                      const sel = document.getElementById('formPipeSelect');
+                                      if(!sel.value) return alert('Avval quvurni tanlang!');
+                                      const lnk = window.location.origin + window.location.pathname + '?leadForm=true&pipe=' + sel.value;
+                                      navigator.clipboard.writeText(lnk).then(() => {
+                                         sel.nextElementSibling?.nextElementSibling?.remove();
+                                         const linkBox = document.getElementById('generatedLinkBox');
+                                         if(linkBox) { linkBox.value = lnk; linkBox.parentElement.style.display = 'flex'; }
+                                      });
+                                   }}>📋 Havolani Nusxalash</button>
+                                </div>
+                                
+                                <div id="generatedLinkWrap" style={{display:'none', marginTop:'12px', gap:'8px', alignItems:'center'}}>
+                                   <input id="generatedLinkBox" className="input-base" readOnly style={{marginBottom:0, flex:1, fontSize:'12px', fontFamily:'monospace', background:'var(--bg-base)', color:'var(--success)'}} />
+                                   <span style={{fontSize:'11px', color:'var(--success)', fontWeight:600, whiteSpace:'nowrap'}}>✅ Nusxalandi!</span>
                                 </div>
                              </div>
                              
-                             <div style={{marginTop: '24px', padding: '16px', borderRadius: '8px', background:'var(--bg-hover)', border:'1px dashed var(--border-light)'}}>
-                               <strong style={{display:'block', marginBottom:'8px'}}>💡 Maslahat:</strong>
-                               <div style={{fontSize: '13px', color:'var(--text-muted)'}}>Yuqoridagi savollarni o'zgartirsangiz, havolani yangidan nusxalashning hojati yo'q — formadagi savollar avtomatik yangilanadi. Havolani <b>Instagram BIO</b> yoki <b>Telegram Kanalga</b> qo'ying.</div>
+                             <div style={{marginTop: '24px', padding: '20px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08))', border: '1px solid rgba(59,130,246,0.2)'}}>
+                               <div style={{display:'flex', gap:'10px', alignItems:'flex-start'}}>
+                                  <span style={{fontSize:'24px'}}>💡</span>
+                                  <div>
+                                     <strong style={{display:'block', marginBottom:'6px', color:'var(--text-main)'}}>Maslahat</strong>
+                                     <div style={{fontSize: '13px', color:'var(--text-secondary)', lineHeight:'1.6'}}>Yuqoridagi savollarni o'zgartirsangiz, havola o'zgarmaydi — formadagi savollar <b>avtomatik yangilanadi</b>. Bu havolani <b>Instagram BIO</b>, <b>Telegram kanal</b> yoki <b>Facebook sahifangizga</b> qo'yishingiz mumkin.</div>
+                                  </div>
+                               </div>
                              </div>
                           </div>
                        )}
