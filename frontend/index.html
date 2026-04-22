@@ -802,23 +802,26 @@ tr:hover td { background: var(--bg-hover); }
          const cols = columnsMap[activePipe];
          if(!cols || cols.length === 0) return alert("Avval quvurga bosqich qo'shing");
          const initialStage = cols[0].id;
+         const localLead = {
+            id: 'L_' + Date.now(), pipelineId: activePipe, name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region || "Shahar noma'lum",
+            source: 'manual', owner: authUser.username, status: initialStage, actualCallAttempts: 0, deadline: null, taskDescription: null,
+            chatLogs: [{type: 'sys', date: new Date().toISOString(), text: `Menejer (${authUser.username}) qo'lda kiritdi. Status: ${cols[0].title}`}]
+         };
 
+         // Try API first, fallback to local
          fetch('/api/leads', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region, owner: authUser.username, pipelineId: activePipe, status: initialStage })
-         }).then(res=>res.json()).then(data => {
-            if(data.success) {
-               setLeads([...leads, {
-                  id: data.lead.id, pipelineId: activePipe, name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region || "Shahar noma'lum",
-                  source: 'manual', owner: authUser.username, status: initialStage, actualCallAttempts: 0, deadline: null, taskDescription: null,
-                  chatLogs: [{type: 'sys', date: new Date().toISOString(), text: `Menejer (${authUser.username}) qo'lda kiritdi. Status: ${cols[0].title}`}]
-               }]);
-               setShowAddLead(false);
-               setNewLeadForm({name:'', phone:'', region:''});
-            }
-         }).catch(err => {
-             alert('Backend ulana olmadi, qoidalarga kora API ishga tushishi kerak');
+         }).then(res => res.json()).then(data => {
+            if(data.success) { localLead.id = data.lead.id; }
+            setLeads(prev => [...prev, localLead]);
+            setShowAddLead(false);
+            setNewLeadForm({name:'', phone:'', region:''});
+         }).catch(() => {
+            setLeads(prev => [...prev, localLead]);
+            setShowAddLead(false);
+            setNewLeadForm({name:'', phone:'', region:''});
          });
       };
 

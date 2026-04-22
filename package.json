@@ -1,7 +1,12 @@
 {
   "name": "mizon-crm",
-  "version": "1.0.0",
-  "description": "Mizon CRM Vercel Deploy",
+  "version": "7.0.0",
+  "description": "Mizon CRM — Lead Management, Kanban Board, Webhook Integrations",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "node api/index.js"
+  },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
