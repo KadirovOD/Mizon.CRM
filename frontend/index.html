@@ -675,33 +675,56 @@ tr:hover td { background: var(--bg-hover); }
       const [showAddLead, setShowAddLead] = useState(false);
       const [newLeadForm, setNewLeadForm] = useState({name:'', phone:'', region:''});
 
+      // Custom Form Fields (CEO creates these)
+      const [formFields, setFormFields] = useState(() => {
+         const saved = localStorage.getItem('mizon_formFields');
+         return saved ? JSON.parse(saved) : [
+            { id: 'f1', label: 'Ism va Familiya', key: 'name', type: 'text', required: true, placeholder: 'Abdulla Qodiriy...' },
+            { id: 'f2', label: 'Telefon raqam', key: 'phone', type: 'tel', required: true, placeholder: '+998 90 123 45 67' },
+            { id: 'f3', label: 'Manzil', key: 'region', type: 'text', required: false, placeholder: 'Toshkent shahri...' },
+         ];
+      });
+      useEffect(() => { localStorage.setItem('mizon_formFields', JSON.stringify(formFields)); }, [formFields]);
+
+      // Editable lead fields state
+      const [editingLead, setEditingLead] = useState(false);
+
       if (isFormMode) {
+         const [extFormData, setExtFormData] = useState({});
          return (
             <div className="login-overlay">
-               <form className="login-box" style={{maxWidth: '400px'}} onSubmit={(e) => {
+               <form className="login-box" style={{maxWidth: '440px'}} onSubmit={(e) => {
                   e.preventDefault();
-                  if(!newLeadForm.name || !newLeadForm.phone) return alert("To'liq kiriting!");
+                  const nameField = formFields.find(f => f.key === 'name');
+                  const phoneField = formFields.find(f => f.key === 'phone');
+                  if(nameField && nameField.required && !extFormData.name) return alert("Ismingizni kiriting!");
+                  if(phoneField && phoneField.required && !extFormData.phone) return alert("Telefon raqamni kiriting!");
                   const cols = columnsMap[formPipeId] || [];
                   const initialStage = cols[0] ? cols[0].id : 'NEW';
+                  const extraInfo = formFields.filter(f => !['name','phone','region'].includes(f.key)).map(f => `${f.label}: ${extFormData[f.key] || '-'}`).join(' | ');
                   setLeads([...leads, {
-                      id: 'EXT_' + Date.now(), pipelineId: formPipeId || pipelines[0]?.id, name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region || "Veb-Sayt Form",
-                      source: 'VEB_SAYT_FORMA', owner: 'Navbatda', status: initialStage, actualCallAttempts: 0, deadline: null, taskDescription: null,
-                      chatLogs: [{type: 'sys', date: new Date().toISOString(), text: `Mijoz tashqi havoladan ro'yxatdan o'tdi.`}]
+                      id: 'EXT_' + Date.now(), pipelineId: formPipeId || pipelines[0]?.id, 
+                      name: extFormData.name || 'Noma\'lum', phone: extFormData.phone || '', region: extFormData.region || 'Veb-Sayt Form',
+                      source: 'website', owner: 'Navbatda', status: initialStage, actualCallAttempts: 0, deadline: null, taskDescription: null,
+                      chatLogs: [
+                        {type: 'sys', date: new Date().toISOString(), text: "Mijoz tashqi havoladan ro'yxatdan o'tdi."},
+                        ...(extraInfo ? [{type: 'sys', date: new Date().toISOString(), text: "Forma ma'lumotlari: " + extraInfo}] : [])
+                      ]
                   }]);
                   alert("Arizangiz muvaffaqiyatli qabul qilindi! Tez orada aloqaga chiqamiz.");
-                  setNewLeadForm({name:'', phone:'', region:''});
+                  setExtFormData({});
                }}>
                  <h2 style={{ fontSize: '24px', marginBottom: '8px', fontWeight: 800, textAlign:'center' }}>Ro'yxatdan o'tish</h2>
                  <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '13px', textAlign:'center' }}>Kompaniyamiz bilan bog'lanish uchun ma'lumotlaringizni qoldiring.</p>
                  
-                 <span className="label-sm">Ism va Familiya:</span>
-                 <input className="input-base" placeholder="Abdulla Qodiriy..." value={newLeadForm.name} onChange={e=>setNewLeadForm({...newLeadForm, name: e.target.value})} />
-                 
-                 <span className="label-sm">Telefon raqam:</span>
-                 <input className="input-base" placeholder="+998 90 123 45 67" type="tel" value={newLeadForm.phone} onChange={e=>setNewLeadForm({...newLeadForm, phone: e.target.value})} />
-                 
-                 <span className="label-sm">Filial yoki Manzil (ixtiyoriy):</span>
-                 <input className="input-base" placeholder="Toshkent shahri..." value={newLeadForm.region} onChange={e=>setNewLeadForm({...newLeadForm, region: e.target.value})} />
+                 {formFields.map(f => (
+                    <div key={f.id}>
+                       <span className="label-sm">{f.label}{f.required ? ' *' : ''}</span>
+                       <input className="input-base" type={f.type || 'text'} placeholder={f.placeholder || ''} 
+                          value={extFormData[f.key] || ''} 
+                          onChange={e => setExtFormData({...extFormData, [f.key]: e.target.value})} />
+                    </div>
+                 ))}
                  
                  <button className="btn-primary" style={{ width: '100%', marginTop: '16px', padding: '12px' }} type="submit">Arizani Jo'natish</button>
                </form>
@@ -917,12 +940,40 @@ tr:hover td { background: var(--bg-hover); }
                     </div>
                     <div className="lead-panel-body">
                        <div className="lead-profile-col">
-                          <span className="label-sm">Mijoz axborotlari</span>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Telefon:</span><span>{selectedLeadData.phone}</span></div>
-                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Manzil:</span><span>{selectedLeadData.region}</span></div>
-                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Kanal:</span><span>{selectedLeadData.source}</span></div>
+                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
+                             <span className="label-sm" style={{marginBottom:0}}>Mijoz axborotlari</span>
+                             <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={() => setEditingLead(!editingLead)}>{editingLead ? '✅ Saqlash' : '✏️ Tahrirlash'}</button>
                           </div>
+                          {editingLead ? (
+                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
+                                <span className="label-sm">Ism:</span>
+                                <input className="input-base" value={selectedLeadData.name} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, name: e.target.value} : l)); }} />
+                                <span className="label-sm">Telefon:</span>
+                                <input className="input-base" value={selectedLeadData.phone} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, phone: e.target.value} : l)); }} />
+                                <span className="label-sm">Manzil:</span>
+                                <input className="input-base" value={selectedLeadData.region} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, region: e.target.value} : l)); }} />
+                                <span className="label-sm">Manba (kanal):</span>
+                                <select className="input-base" value={selectedLeadData.source} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, source: e.target.value} : l)); }}>
+                                   <option value="meta_fb_ads">Facebook Lead Ads</option>
+                                   <option value="telegram_bot">Telegram Bot</option>
+                                   <option value="phone_call">Telefon</option>
+                                   <option value="referral">Tavsiya (Referral)</option>
+                                   <option value="website">Veb-sayt</option>
+                                   <option value="manual">Qo'lda kiritilgan</option>
+                                </select>
+                                <span className="label-sm">Mas'ul xodim:</span>
+                                <select className="input-base" value={selectedLeadData.owner} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, owner: e.target.value} : l)); }}>
+                                   {users.map(u => <option key={u.username} value={u.username}>{u.username} ({u.role})</option>)}
+                                </select>
+                             </div>
+                          ) : (
+                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Telefon:</span><span>{selectedLeadData.phone}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Manzil:</span><span>{selectedLeadData.region}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Kanal:</span><span className={`source-badge badge-${selectedLeadData.source}`}>{selectedLeadData.source}</span></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}><span style={{color: 'var(--text-muted)'}}>Mas'ul:</span><span style={{fontWeight:600}}>{selectedLeadData.owner}</span></div>
+                             </div>
+                          )}
 
                           <span className="label-sm">SLA qat'iy nazorati va Vazifa Oqimi</span>
                           
@@ -995,18 +1046,19 @@ tr:hover td { background: var(--bg-hover); }
 
                {/* ADD MANUAL LEAD MODAL */}
                {showAddLead && (
-                 <div className="login-overlay">
-                    <div className="login-box" style={{width: '440px'}}>
+                 <div className="login-overlay" onClick={(e) => { if(e.target === e.currentTarget) setShowAddLead(false); }}>
+                    <div className="login-box" style={{width: '440px'}} onKeyDown={(e) => { if(e.key === 'Enter' && newLeadForm.name && newLeadForm.phone) { e.preventDefault(); handleAddManualLead(); } }}>
                        <h2 style={{marginBottom: '24px', letterSpacing: '-0.5px'}}>+ Yangi Lead Yaratish</h2>
                        <div style={{display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left'}}>
                           <span className="label-sm">Mijozning ism-familiyasi*</span>
-                          <input className="input-base" placeholder="Masalan: Sardor Odilov" value={newLeadForm.name} onChange={e=>setNewLeadForm({...newLeadForm, name: e.target.value})} />
+                          <input className="input-base" autoFocus placeholder="Masalan: Sardor Odilov" value={newLeadForm.name} onChange={e=>setNewLeadForm({...newLeadForm, name: e.target.value})} />
                           <span className="label-sm">Telefon raqami*</span>
                           <input className="input-base" placeholder="+998 XX XXX XX XX" value={newLeadForm.phone} onChange={e=>setNewLeadForm({...newLeadForm, phone: e.target.value})} />
                           <span className="label-sm">Manzili yoki shahar</span>
                           <input className="input-base" placeholder="Toshkent, Yunusobod..." value={newLeadForm.region} onChange={e=>setNewLeadForm({...newLeadForm, region: e.target.value})} />
                        </div>
-                       <div style={{display: 'flex', gap: '12px', marginTop: '24px'}}>
+                       <p style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'12px'}}>💡 Ism va raqam to'ldirilgandan so'ng <b>Enter</b> bosing yoki tugmani bosing.</p>
+                       <div style={{display: 'flex', gap: '12px', marginTop: '16px'}}>
                          <button className="btn-primary" style={{flex: 1}} onClick={handleAddManualLead}>Tasdiqlash va Qo'shish</button>
                          <button className="btn-outline" onClick={()=>setShowAddLead(false)}>Bekor qilish</button>
                        </div>
@@ -1108,25 +1160,49 @@ tr:hover td { background: var(--bg-hover); }
                        )}
                        {settingsActiveTab === 'webforms' && (
                           <div>
-                             <h3 style={{marginBottom: '16px'}}>Shaxsiy Internet Anketalar Yaratish</h3>
-                             <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Pipelineni tanlang va nusxalangan havolani istalgan joyga tarqating. Mijozlar o'zi raqamini yozishi bilan sizni CRM doskangizga kelib tushadi (Lead Generation).</p>
+                             <h3 style={{marginBottom: '16px'}}>Forma Konstruktori (Form Builder)</h3>
+                             <p style={{fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px'}}>Quyida tashqi formada foydalanuvchilarga qanday savollar berilishini o'zingiz belgilang. Maydonlarni qo'shish, o'chirish va tartibini o'zgartirish mumkin.</p>
                              
-                             <span className="label-sm">Qaysi Quvurga Lead tushishini xohlaysiz?</span>
-                             <div style={{display:'flex', gap: '16px', alignItems: 'center'}}>
-                                 <select className="input-base" style={{marginBottom: 0, width: '300px'}} onChange={e => {
-                                     const lnk = window.location.origin + window.location.pathname + '?leadForm=true&pipe=' + e.target.value;
-                                     navigator.clipboard.writeText(lnk);
-                                     alert("Nusxalandi! \n" + lnk);
-                                 }}>
-                                    <option value="">-- Quvurni Tanlang --</option>
-                                    {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                 </select>
-                                 <div style={{color:'var(--text-muted)', fontSize: '13px'}}>&larr; Tanlab bosganingiz zahoti bu havola Nusxalanadi (Copy) bo'ladi.</div>
+                             <div style={{display:'flex', flexDirection:'column', gap:'8px', marginBottom:'24px'}}>
+                                {formFields.map((f, idx) => (
+                                   <div key={f.id} style={{display:'flex', gap:'8px', alignItems:'center', padding:'12px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'6px'}}>
+                                      <span style={{color:'var(--text-muted)', fontSize:'12px', width:'24px'}}>{idx+1}.</span>
+                                      <input className="input-base" style={{marginBottom:0, flex:2}} placeholder="Savol nomi (label)" value={f.label} onChange={e => setFormFields(formFields.map(x => x.id === f.id ? {...x, label: e.target.value} : x))} />
+                                      <input className="input-base" style={{marginBottom:0, flex:1}} placeholder="Kalit (key)" value={f.key} onChange={e => setFormFields(formFields.map(x => x.id === f.id ? {...x, key: e.target.value} : x))} />
+                                      <select className="input-base" style={{marginBottom:0, width:'100px'}} value={f.type} onChange={e => setFormFields(formFields.map(x => x.id === f.id ? {...x, type: e.target.value} : x))}>
+                                         <option value="text">Matn</option>
+                                         <option value="tel">Telefon</option>
+                                         <option value="email">Email</option>
+                                         <option value="number">Raqam</option>
+                                      </select>
+                                      <label style={{fontSize:'11px', color:'var(--text-muted)', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer'}}>
+                                         <input type="checkbox" checked={f.required} onChange={e => setFormFields(formFields.map(x => x.id === f.id ? {...x, required: e.target.checked} : x))} /> Majburiy
+                                      </label>
+                                      <button className="btn-danger" style={{padding:'4px 8px'}} onClick={() => setFormFields(formFields.filter(x => x.id !== f.id))}>&times;</button>
+                                   </div>
+                                ))}
+                                <button className="btn-outline" onClick={() => setFormFields([...formFields, { id: 'f_' + Date.now(), label: '', key: 'custom_' + Date.now(), type: 'text', required: false, placeholder: '' }])}>+ Yangi savol (maydon) qo'shish</button>
+                             </div>
+
+                             <div style={{borderTop:'1px solid var(--border-light)', paddingTop:'24px'}}>
+                                <span className="label-sm">Havola yaratish — Qaysi Quvurga Lead tushsin?</span>
+                                <div style={{display:'flex', gap: '16px', alignItems: 'center', marginTop:'8px'}}>
+                                    <select className="input-base" style={{marginBottom: 0, width: '300px'}} onChange={e => {
+                                        if(!e.target.value) return;
+                                        const lnk = window.location.origin + window.location.pathname + '?leadForm=true&pipe=' + e.target.value;
+                                        navigator.clipboard.writeText(lnk);
+                                        alert("Nusxalandi! \n" + lnk);
+                                    }}>
+                                       <option value="">-- Quvurni Tanlang --</option>
+                                       {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                    <div style={{color:'var(--text-muted)', fontSize: '13px'}}>&larr; Tanlang va havola nusxalanadi.</div>
+                                </div>
                              </div>
                              
                              <div style={{marginTop: '24px', padding: '16px', borderRadius: '8px', background:'var(--bg-hover)', border:'1px dashed var(--border-light)'}}>
                                <strong style={{display:'block', marginBottom:'8px'}}>💡 Maslahat:</strong>
-                               <div style={{fontSize: '13px', color:'var(--text-muted)'}}>Ushbu yaratilgan havolani <b>Instagram BIO</b> profiliga yoki <b>Telegram Kanalga</b> "Ro'yxatdan o'tish" knopkasi orqasida berkitib foydalaning. Menejerlaringiz boshqa qog'oz varaqlab yurishiga xojat qolmaydi.</div>
+                               <div style={{fontSize: '13px', color:'var(--text-muted)'}}>Yuqoridagi savollarni o'zgartirsangiz, havolani yangidan nusxalashning hojati yo'q — formadagi savollar avtomatik yangilanadi. Havolani <b>Instagram BIO</b> yoki <b>Telegram Kanalga</b> qo'ying.</div>
                              </div>
                           </div>
                        )}
