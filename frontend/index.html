@@ -779,7 +779,7 @@ tr:hover td { background: var(--bg-hover); }
 
       const activeColumns = columnsMap[activePipe] || [];
       const activeLeads = leads.filter(l => l.pipelineId === activePipe);
-      const selectedLeadData = leads.find(l => l.id === selectedLeadId);
+      const selectedLeadData = leads.find(l => l.id == selectedLeadId);
 
       const syncLeadToAPI = (lead) => {
          if(String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
@@ -829,7 +829,7 @@ tr:hover td { background: var(--bg-hover); }
          if(!taskDateInput) return alert("Sana va vaqt kiritilishi shart!");
          let targetLead = null;
          setLeads(prev => prev.map(l => {
-            if(l.id === id) {
+            if(l.id == id) {
                 targetLead = { ...l, deadline: taskDateInput, taskDescription: taskDescInput || 'Izohsiz vazifa', chatLogs: [...l.chatLogs, {type:'sys', date: new Date().toISOString(), text:`Vazifa ochildi: "${taskDescInput || 'Izohsiz vazifa'}" -> ${new Date(taskDateInput).toLocaleString()}`}] };
                 return targetLead;
             } return l;
@@ -842,7 +842,7 @@ tr:hover td { background: var(--bg-hover); }
       const handleTaskComplete = (id) => {
          let targetLead = null;
          setLeads(prev => prev.map(l => {
-            if(l.id === id) {
+            if(l.id == id) {
                 targetLead = { ...l, deadline: null, taskDescription: null, chatLogs: [...l.chatLogs, {type:'sys', date: new Date().toISOString(), text:`✅ Vazifa yakunlandi! Natija/Izoh: "${taskCompleteNote || 'Izohsiz bajardi'}"`}] };
                 return targetLead;
             } return l;
@@ -857,7 +857,7 @@ tr:hover td { background: var(--bg-hover); }
          setHasUnsavedChanges(true);
          let targetLead = null;
          setLeads(prev => prev.map(l => {
-           if(l.id === id) {
+           if(l.id == id) {
               const a = l.actualCallAttempts + 1;
               if (a >= globalCallLimit) {
                  targetLead = { ...l, actualCallAttempts: a, status: 'LOST', chatLogs: [...l.chatLogs, {type:'sys', date: new Date().toISOString(), text:`⛔ DIQQAT: Limit tugadi (${globalCallLimit} ta urinish). Lead asossiz tarzda Muvaffaqiyatsiz (LOST) deb hisoblandi.`}] };
@@ -874,7 +874,7 @@ tr:hover td { background: var(--bg-hover); }
          setHasUnsavedChanges(true);
          let targetLead = null;
          setLeads(prev => prev.map(l => {
-            if(l.id === leadId) {
+            if(l.id == leadId) {
                 targetLead = { ...l, status: newStatus, actualCallAttempts: 0, chatLogs: [...l.chatLogs, {type:'sys', date: new Date().toISOString(), text:`Kanban orqali bosqich uzgardi -> ${newStatus}. Urinishlar limit nollashtirildi.`}] };
                 return targetLead;
             } return l;
@@ -887,7 +887,7 @@ tr:hover td { background: var(--bg-hover); }
          setHasUnsavedChanges(true);
          let targetLead = null;
          setLeads(prev => prev.map(l => {
-            if(l.id === id) {
+            if(String(l.id) === String(id)) {
                 targetLead = { ...l, chatLogs: [...l.chatLogs, {type:'msg', dir:'out', date: new Date().toISOString(), text: chatMessageInput}] };
                 return targetLead;
             } return l;
@@ -896,7 +896,7 @@ tr:hover td { background: var(--bg-hover); }
          if (targetLead) setTimeout(() => syncLeadToAPI(targetLead), 100);
       }
 
-      const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', leadId); };
+      const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); };
       const handleDrop = (e, targetStatus) => { e.preventDefault(); const leadId = e.dataTransfer.getData('leadId'); if(leadId) handleStatusChange(leadId, targetStatus); };
 
       return (
@@ -950,13 +950,13 @@ tr:hover td { background: var(--bg-hover); }
                           {editingLead ? (
                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
                                 <span className="label-sm">Ism:</span>
-                                <input className="input-base" value={selectedLeadData.name} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, name: e.target.value} : l)); }} />
+                                <input className="input-base" value={selectedLeadData.name} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id == selectedLeadId ? {...l, name: e.target.value} : l)); }} />
                                 <span className="label-sm">Telefon:</span>
-                                <input className="input-base" value={selectedLeadData.phone} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, phone: e.target.value} : l)); }} />
+                                <input className="input-base" value={selectedLeadData.phone} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id == selectedLeadId ? {...l, phone: e.target.value} : l)); }} />
                                 <span className="label-sm">Manzil:</span>
-                                <input className="input-base" value={selectedLeadData.region} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, region: e.target.value} : l)); }} />
+                                <input className="input-base" value={selectedLeadData.region} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id == selectedLeadId ? {...l, region: e.target.value} : l)); }} />
                                 <span className="label-sm">Manba (kanal):</span>
-                                <select className="input-base" value={selectedLeadData.source} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, source: e.target.value} : l)); }}>
+                                <select className="input-base" value={selectedLeadData.source} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id == selectedLeadId ? {...l, source: e.target.value} : l)); }}>
                                    <option value="meta_fb_ads">Facebook Lead Ads</option>
                                    <option value="telegram_bot">Telegram Bot</option>
                                    <option value="phone_call">Telefon</option>
@@ -965,7 +965,7 @@ tr:hover td { background: var(--bg-hover); }
                                    <option value="manual">Qo'lda kiritilgan</option>
                                 </select>
                                 <span className="label-sm">Mas'ul xodim:</span>
-                                <select className="input-base" value={selectedLeadData.owner} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id === selectedLeadId ? {...l, owner: e.target.value} : l)); }}>
+                                <select className="input-base" value={selectedLeadData.owner} onChange={e => { setHasUnsavedChanges(true); setLeads(prev => prev.map(l => l.id == selectedLeadId ? {...l, owner: e.target.value} : l)); }}>
                                    {users.map(u => <option key={u.username} value={u.username}>{u.username} ({u.role})</option>)}
                                 </select>
                              </div>
