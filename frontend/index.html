@@ -630,6 +630,10 @@ tr:hover td { background: var(--bg-hover); }
          return initialLeads;
       });
 
+      // Stage ID mapping: DB uses numbers (1,2,3...), frontend uses strings (NEW, CONTACTED...)
+      const stageIdToFrontend = { 1: 'NEW', 2: 'CONTACTED', 3: 'QUALIFIED', 4: 'PROPOSAL', 5: 'NEGOTIATION', 6: 'WON', 7: 'LOST' };
+      const frontendToStageId = { 'NEW': 1, 'CONTACTED': 2, 'QUALIFIED': 3, 'PROPOSAL': 4, 'NEGOTIATION': 5, 'WON': 6, 'LOST': 7, 'MEETING': 2, 'CONTRACT': 3 };
+
       useEffect(() => {
          fetch('/api/leads').then(res => {
             if(!res.ok) throw new Error('API mavjud emas');
@@ -644,7 +648,7 @@ tr:hover td { background: var(--bg-hover); }
                    phone: l.phone,
                    region: l.region || 'Toshkent',
                    source: l.mizon_source || 'manual',
-                   status: l.stage_id ? l.stage_id.toString() : 'NEW',
+                   status: stageIdToFrontend[l.stage_id] || 'NEW',
                    actualCallAttempts: l.actualcallattempts || 0,
                    deadline: l.deadline || null,
                    taskDescription: l.taskdescription || null,
@@ -787,14 +791,18 @@ tr:hover td { background: var(--bg-hover); }
             method: 'PUT',
              headers: {'Content-Type': 'application/json'},
              body: JSON.stringify({
-                 status: lead.status, 
+                 status: frontendToStageId[lead.status] || lead.status, 
+                 name: lead.name,
+                 phone: lead.phone,
+                 region: lead.region,
+                 source: lead.source,
                  actualCallAttempts: lead.actualCallAttempts,
                  deadline: lead.deadline,
                  taskDescription: lead.taskDescription,
                  chatLogs: lead.chatLogs,
                  owner: lead.owner
              })
-         }).catch(err => console.log('Sinxronlashda xato (Vercel topilmadi)', err));
+         }).catch(err => console.log('Sinxronlashda xato', err));
       };
 
       const handleAddManualLead = () => {
@@ -812,7 +820,7 @@ tr:hover td { background: var(--bg-hover); }
          fetch('/api/leads', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region, owner: authUser.username, pipelineId: activePipe, status: initialStage })
+            body: JSON.stringify({ name: newLeadForm.name, phone: newLeadForm.phone, region: newLeadForm.region, owner: authUser.username, pipelineId: activePipe, status: frontendToStageId[initialStage] || 1 })
          }).then(res => res.json()).then(data => {
             if(data.success) { localLead.id = data.lead.id; }
             setLeads(prev => [...prev, localLead]);
