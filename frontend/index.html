@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
   <meta charset="UTF-8">
-  <title>Mizon CRM - V7 Drilldown & API Integrations</title>
+  <title>Mizon CRM - Sotuv Varonkasi</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
 /* ===== DARK THEME (default) ===== */
@@ -191,6 +191,50 @@ tr:hover td { background: var(--bg-hover); }
   <script type="text/babel">
     const { useState, useEffect } = React;
 
+    // ===== MINIMAL SVG ICON COMPONENT =====
+    const Ico = ({ n, s = 15, c = {} }) => {
+      const paths = {
+        logout:    { d: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9' },
+        sun:       { d: 'M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41', d2: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10z' },
+        moon:      { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' },
+        users:     { d: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75' },
+        user:      { d: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
+        settings:  { d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z' },
+        layers:    { d: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
+        file:      { d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8' },
+        plug:      { d: 'M12 22V12M12 12a5 5 0 0 0 5-5V3H7v4a5 5 0 0 0 5 5zM8.5 2v2M15.5 2v2' },
+        link:      { d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' },
+        bulb:      { d: 'M9 18h6M10 22h4M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z' },
+        phone:     { d: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.15 11.82 19.79 19.79 0 0 1 1.07 3.18 2 2 0 0 1 3.06 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.9.7 2.81a2 2 0 0 1-.45 2.11L7.09 8.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.34 1.85.573 2.81.7A2 2 0 0 1 21 16z' },
+        save:      { d: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8' },
+        pencil:    { d: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
+        check:     { d: 'M20 6L9 17l-5-5' },
+        x:         { d: 'M18 6L6 18M6 6l12 12' },
+        alert:     { d: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01' },
+        clock:     { d: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 6v6l4 2' },
+        alarm:     { d: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10zM12 8v4M12 16h.01' },
+        pin:       { d: 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 10m-3 0a3 3 0 1 0 6 0 3 3 0 0 0-6 0' },
+        star:      { d: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' },
+        trending:  { d: 'M23 6l-9.5 9.5-5-5L1 18M17 6h6v6' },
+        download:  { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3' },
+        upload:    { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12' },
+        message:   { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+        plus:      { d: 'M12 5v14M5 12h14' },
+        chart:     { d: 'M18 20V10M12 20V4M6 20v-6' },
+        funnel:    { d: 'M22 3H2l8 9.46V19l4 2v-8.54L22 3z' },
+        zap:       { d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+        door:      { d: 'M13 4H3v16h10V4zM17 8l4 4-4 4M21 12H9' },
+      };
+      const ico = paths[n];
+      if (!ico) return null;
+      return (
+        <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display:'inline-block', verticalAlign:'middle', flexShrink:0, ...c }}>
+          <path d={ico.d} />
+          {ico.d2 && <path d={ico.d2} />}
+        </svg>
+      );
+    };
+
     const calculateSLAHours = (deadlineStr) => {
       if(!deadlineStr) return null;
       const tDate = new Date(deadlineStr).getTime();
@@ -287,8 +331,8 @@ tr:hover td { background: var(--bg-hover); }
                 <div className="card-title">Sotuvchi xodimlar (KPI)</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginTop: '16px' }}>
                     <div style={{ padding: '16px', background: 'var(--bg-base)', borderRadius: '6px', border: '1px solid var(--border-light)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong style={{fontSize: '16px'}}>👑 menejer_1</strong><span style={{color: 'var(--text-muted)'}}>Faoliyat ko'rsatkichlari</span></div>
-                      <div style={{ marginTop: '12px', fontSize: '13px' }}>Tizimda ishladi: 6 soat 10 min <br/>📞 Qongiroqlar: 4 soat <br/>🚀 Yangi bitimlar: 15 ta</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><strong style={{fontSize: '16px'}}><Ico n="star" s={14}/> menejer_1</strong><span style={{color: 'var(--text-muted)'}}>Faoliyat ko'rsatkichlari</span></div>
+                      <div style={{ marginTop: '12px', fontSize: '13px' }}><span style={{display:"flex",alignItems:"center",gap:"5px"}}><Ico n="clock" s={12}/>Tizimda ishladi: 6 soat 10 min</span><span style={{display:"flex",alignItems:"center",gap:"5px"}}><Ico n="phone" s={12}/>Qo'ng'iroqlar: 4 soat</span><span style={{display:"flex",alignItems:"center",gap:"5px"}}><Ico n="trending" s={12}/>Yangi bitimlar: 15 ta</span></div>
                     </div>
                 </div>
               </div>
@@ -299,13 +343,13 @@ tr:hover td { background: var(--bg-hover); }
                  <div className="large-modal-box">
                     <div style={{display:'flex', justifyContent:'space-between', marginBottom:'24px', alignItems:'center'}}>
                        <h2 style={{fontSize: '20px'}}>{viewModal.title} ro'yxati</h2>
-                       <button className="btn-outline" onClick={()=>setViewModal({...viewModal, state:false})}>Yopish</button>
+                       <button className="btn-outline" style={{display:"flex",alignItems:"center",gap:"6px"}} onClick={()=>setViewModal({...viewModal, state:false})}><Ico n="x" s={13}/> Yopish</button>
                     </div>
 
                     {viewModal.withImportExport && (
                        <div style={{display:'flex', gap:'12px', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid var(--border-light)'}}>
-                          <button className="btn-outline">⬇️ Jadval Import (Excel)</button>
-                          <button className="btn-outline">⬆️ Mavjud Leads Export</button>
+                          <button className="btn-outline"><Ico n="download" s={13}/> Jadval Import (Excel)</button>
+                          <button className="btn-outline"><Ico n="upload" s={13}/> Mavjud Leads Export</button>
                        </div>
                     )}
 
@@ -538,7 +582,7 @@ tr:hover td { background: var(--bg-hover); }
 
        return (
          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '20px', letterSpacing: '-0.5px', marginBottom: '24px' }}>Tashqi Dasturlar va Integratsiyalar 🔌</h2>
+            <h2 style={{ fontSize: '20px', letterSpacing: '-0.5px', marginBottom: '24px' }}>Tashqi Dasturlar va Integratsiyalar <Ico n="plug" s={18}/></h2>
             
             <div className="card" style={{marginBottom: '24px'}}>
                <h3 style={{marginBottom: '16px'}}>Shaxsiy Mizon API Kalitlar (Buxgalteriya/Web uchun)</h3>
@@ -598,7 +642,13 @@ tr:hover td { background: var(--bg-hover); }
          { username: 'ceo', password: '123', role: 'CEO' },
          { username: 'menejer_1', password: '123', role: 'MANAGER' }
       ]);
-      const [authUser, setAuthUser] = useState(null); 
+      // Sessiyani localStorage'dan tiklash (refresh'dan keyin qayta kirmaslik uchun)
+      const [authUser, setAuthUser] = useState(() => {
+         try {
+           const saved = localStorage.getItem('mizon_session');
+           return saved ? JSON.parse(saved) : null;
+         } catch(e) { return null; }
+      });
 
       const [darkMode, setDarkMode] = useState(() => {
          const saved = localStorage.getItem('mizon_theme');
@@ -759,8 +809,11 @@ tr:hover td { background: var(--bg-hover); }
       const handleLogin = (e) => {
          e.preventDefault();
          const match = users.find(u => u.username === loginForm.username && u.password === loginForm.password);
-         if(match) { setAuthUser(match); setActiveTab('dashboard'); }
-         else { alert("Login yoki parol nato'g'ri!"); }
+         if(match) {
+           setAuthUser(match);
+           localStorage.setItem('mizon_session', JSON.stringify(match));
+           setActiveTab('dashboard');
+         } else { alert("Login yoki parol nato'g'ri!"); }
       };
 
       if (!authUser) {
@@ -912,27 +965,27 @@ tr:hover td { background: var(--bg-hover); }
           <aside className="sidebar">
             <div className="brand">MIZON. <span style={{fontSize: '11px', background:'var(--border-light)', padding: '4px 8px', borderRadius: '12px'}}>{role}</span></div>
             
-            <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => {setActiveTab('dashboard'); setSelectedLeadId(null);}}>Tahlil (Dashboard)</div>
-            <div className={`nav-item ${activeTab === 'leads' ? 'active' : ''}`} onClick={() => {setActiveTab('leads'); setSelectedLeadId(null);}}>Leadlar (Pipe)</div>
+            <div className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => {setActiveTab('dashboard'); setSelectedLeadId(null);}} style={{display:"flex",alignItems:"center",gap:"8px"}}><Ico n="chart" s={14}/> Tahlil (Dashboard)</div>
+            <div className={`nav-item ${activeTab === 'leads' ? 'active' : ''}`} onClick={() => {setActiveTab('leads'); setSelectedLeadId(null);}} style={{display:"flex",alignItems:"center",gap:"8px"}}><Ico n="funnel" s={14}/> Sotuv Varonkasi</div>
             
             {role === 'CEO' && (
               <div className={`nav-item ${activeTab === 'integrations' ? 'active' : ''}`} onClick={() => {setActiveTab('integrations'); setSelectedLeadId(null);}}>Integratsiyalar <span style={{fontSize:'8px', background:'var(--danger)', color:'#fff', padding:'2px 4px', borderRadius:'4px'}}>YANGI</span></div>
             )}
             {role === 'CEO' && (
-              <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => {setActiveTab('settings'); setSelectedLeadId(null);}}>Sozlamalar paneli</div>
+              <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => {setActiveTab('settings'); setSelectedLeadId(null);}} style={{display:"flex",alignItems:"center",gap:"8px"}}><Ico n="settings" s={14}/> Sozlamalar paneli</div>
             )}
 
             <div style={{marginTop: 'auto', borderTop: '1px solid var(--border-light)', paddingTop: '16px'}}>
               <div style={{color: 'var(--text-muted)', fontSize: '11px', marginBottom: '8px', paddingLeft: '12px'}}>Mas'ul xodim: {authUser.username}</div>
-              <div className="nav-item" onClick={() => { setAuthUser(null); }}>🚪 Tizimdan chiqish</div>
+              <div className="nav-item" style={{display:'flex',alignItems:'center',gap:'8px'}} onClick={() => { setAuthUser(null); localStorage.removeItem('mizon_session'); }}><Ico n="door" s={14}/> Tizimdan chiqish</div>
             </div>
           </aside>
           
           <main className="main-wrapper">
             <header className="topbar">
-               <div style={{color: 'var(--text-muted)', fontSize:'12px'}}>V7 Ultimate Edition - Barcha funksiyalar faol.</div>
+               <div style={{color: 'var(--text-muted)', fontSize:'12px'}}></div>
                <button className="theme-toggle" onClick={() => setDarkMode(!darkMode)} title={darkMode ? 'Kunduzgi rejim' : 'Tungi rejim'}>
-                  {darkMode ? '☀️' : '🌙'}
+                   {darkMode ? <Ico n="sun" s={18}/> : <Ico n="moon" s={18}/>}
                </button>
             </header>
 
@@ -944,16 +997,16 @@ tr:hover td { background: var(--bg-hover); }
                     <div className="lead-panel-header">
                        <div><div style={{fontSize: '12px', color: 'var(--text-muted)'}}>KARTA ID: {selectedLeadData.id} • MAS'UL: <b>{selectedLeadData.owner}</b></div><div style={{fontSize: '20px', fontWeight: 600}}>{selectedLeadData.name}</div></div>
                        {hasUnsavedChanges ? (
-                          <button className="btn-success" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);}}>💾 O'zgarishlarni Saqlash va Yopish (Enter)</button>
+                          <button className="btn-success" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);}}><Ico n="save" s={14}/> O'zgarishlarni Saqlash</button>
                        ) : (
-                          <button className="btn-outline" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false);}}>✖ Yopish/Orqaga (Enter)</button>
+                          <button className="btn-outline" onClick={() => {setSelectedLeadId(null); setShowCompleteModal(false);}}><Ico n="x" s={14}/> Yopish</button>
                        )}
                     </div>
                     <div className="lead-panel-body">
                        <div className="lead-profile-col">
                           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px'}}>
                              <span className="label-sm" style={{marginBottom:0}}>Mijoz axborotlari</span>
-                             <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={() => setEditingLead(!editingLead)}>{editingLead ? '✅ Saqlash' : '✏️ Tahrirlash'}</button>
+                             <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={() => setEditingLead(!editingLead)}>{editingLead ? <><Ico n="check" s={12}/> Saqlash</> : <><Ico n="pencil" s={12}/> Tahrirlash</>}</button>
                           </div>
                           {editingLead ? (
                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
@@ -995,12 +1048,12 @@ tr:hover td { background: var(--bg-hover); }
                              }}>
                                <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.7)', marginBottom:'4px'}}>Vazifa Muddat Taymeri:</div>
                                <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom:'12px'}}>
-                                  ⏱️ {new Date(selectedLeadData.deadline).toLocaleString()}
+                                  <Ico n="clock" s={14}/> {new Date(selectedLeadData.deadline).toLocaleString()}
                                </div>
                                
                                {!showCompleteModal ? (
                                   <button className="btn-success" style={{width: '100%', marginTop: '12px'}} onClick={()=>setShowCompleteModal(true)}>
-                                    ✅ Vazifani tugatish va matn yozish
+                                    <Ico n="check" s={14}/> Vazifani tugatish
                                   </button>
                                ) : (
                                   <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(0,0,0,0.5)', borderRadius: '6px' }}>
@@ -1015,7 +1068,7 @@ tr:hover td { background: var(--bg-hover); }
                              </div>
                           ) : (
                              <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '24px', background: 'var(--bg-hover)', border: '1px solid var(--border-light)' }}>
-                               <div style={{ fontSize: '13px', color: 'var(--danger)', fontWeight: 600, marginBottom: '12px' }}>⚠️ Hozirda vazifa biriktirilmagan!</div>
+                               <div style={{ fontSize: '13px', color: 'var(--danger)', fontWeight: 600, marginBottom: '12px' }}><Ico n="alert" s={14}/> Hozirda vazifa biriktirilmagan!</div>
                                <input className="input-base" type="text" placeholder="Vazifa haqida izoh kiritish (matn)..." value={taskDescInput} onChange={e=>setTaskDescInput(e.target.value)} />
                                <input type="datetime-local" className="input-base" value={taskDateInput} onChange={e=>setTaskDateInput(e.target.value)} />
                                <button className="btn-primary" style={{width: '100%'}} onClick={()=>{handleTaskCreate(selectedLeadData.id)}}>Vazifani o'rnatish</button>
@@ -1024,7 +1077,7 @@ tr:hover td { background: var(--bg-hover); }
 
                           <span className="label-sm">Muloqot harakati</span>
                           <button className="btn-outline" style={{width: '100%', marginBottom: '24px', position:'relative', zIndex:5}} onClick={()=>handleLogCall(selectedLeadData.id)}>
-                            📞 Qo'ng'iroq Start ({selectedLeadData.actualCallAttempts} / {globalCallLimit})
+                            <Ico n="phone" s={14}/> Qo'ng'iroq Start ({selectedLeadData.actualCallAttempts} / {globalCallLimit})
                           </button>
 
                           <span className="label-sm">Holatni / Bosqichni Qo'lda o'zgartirish</span>
@@ -1034,9 +1087,41 @@ tr:hover td { background: var(--bg-hover); }
                        </div>
 
                        <div className="lead-chat-col">
+                          {/* Kim ishlayapti — faol foydalanuvchi ko'rsatkichi */}
+                          <div style={{
+                            padding: '8px 24px',
+                            background: 'rgba(59,130,246,0.08)',
+                            borderBottom: '1px solid rgba(59,130,246,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '12px'
+                          }}>
+                            <span style={{
+                              width: '8px', height: '8px',
+                              borderRadius: '50%',
+                              background: '#22c55e',
+                              display: 'inline-block',
+                              boxShadow: '0 0 6px #22c55e'
+                            }}></span>
+                            <span style={{color: 'var(--text-secondary)'}}>
+                              <b style={{color: 'var(--accent)'}}>{authUser.username}</b> hozir bu oynada ishlayapti
+                            </span>
+                            {selectedLeadData.owner !== authUser.username && (
+                              <span style={{
+                                marginLeft: 'auto',
+                                background: 'rgba(245,158,11,0.15)',
+                                border: '1px solid rgba(245,158,11,0.4)',
+                                color: '#f59e0b',
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                fontSize: '11px'
+                              }}><Ico n="alert" s={10}/> Mas'ul: {selectedLeadData.owner}</span>
+                            )}
+                          </div>
                           {selectedLeadData.deadline && selectedLeadData.taskDescription && (
                              <div className="lead-pinned-task">
-                                <strong>📌 Faol Vazifa:</strong>
+                                <strong><Ico n="pin" s={13}/> Faol Vazifa:</strong>
                                 <span>{selectedLeadData.taskDescription}</span>
                              </div>
                           )}
@@ -1068,7 +1153,7 @@ tr:hover td { background: var(--bg-hover); }
                           <span className="label-sm">Manzili yoki shahar</span>
                           <input className="input-base" placeholder="Toshkent, Yunusobod..." value={newLeadForm.region} onChange={e=>setNewLeadForm({...newLeadForm, region: e.target.value})} />
                        </div>
-                       <p style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'12px'}}>💡 Ism va raqam to'ldirilgandan so'ng <b>Enter</b> bosing yoki tugmani bosing.</p>
+                       <p style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'12px'}}><Ico n="bulb" s={12}/> Ism va raqam to'ldirilgandan so'ng <b>Enter</b> bosing yoki tugmani bosing.</p>
                        <div style={{display: 'flex', gap: '12px', marginTop: '16px'}}>
                          <button className="btn-primary" style={{flex: 1}} onClick={handleAddManualLead}>Tasdiqlash va Qo'shish</button>
                          <button className="btn-outline" onClick={()=>setShowAddLead(false)}>Bekor qilish</button>
@@ -1085,7 +1170,7 @@ tr:hover td { background: var(--bg-hover); }
                {activeTab === 'leads' && (
                  <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                    <div className="pipeline-header">
-                     <h2 style={{ fontSize: '20px', letterSpacing: '-0.5px' }}>Savdo Quvur doskasi (Kanban)</h2>
+                     <h2 style={{ fontSize: '20px', letterSpacing: '-0.5px' }}>Sotuv Varonkasi (Kanban)</h2>
                      <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                        <select className="pipeline-selector" value={activePipe} onChange={e => setActivePipe(e.target.value)}>
                           {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -1122,26 +1207,26 @@ tr:hover td { background: var(--bg-hover); }
                                  >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
                                       <span className={`source-badge badge-${lead.source}`}>{lead.source.replace('meta_', '')}</span>
-                                      {sla === 'danger' && <span style={{fontSize: '10px', background: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold'}}>⏰ KECHIKDI</span>}
-                                      {sla === 'warning' && <span style={{fontSize: '10px', background: 'rgba(234, 179, 8, 0.2)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold'}}>⏳ TEZ ORADA</span>}
+                                      {sla === 'danger' && <span style={{fontSize: '10px', background: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold'}}><Ico n="alarm" s={10}/> KECHIKDI</span>}
+                                      {sla === 'warning' && <span style={{fontSize: '10px', background: 'rgba(234, 179, 8, 0.2)', color: 'var(--warning)', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold'}}><Ico n="clock" s={10}/> TEZ ORADA</span>}
                                     </div>
                                     <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-main)', marginBottom: '4px' }}>{lead.name}</div>
                                     <div className="text-muted" style={{ fontSize: '12px', marginBottom: '8px' }}>
-                                       📞 {lead.actualCallAttempts} urinish • 👤 <b>{lead.owner}</b>
+                                       <Ico n="phone" s={11}/> {lead.actualCallAttempts} urinish • <Ico n="user" s={11}/> <b>{lead.owner}</b>
                                     </div>
                                     
                                     {(lead.taskDescription || lead.deadline) ? (
                                        <div style={{ fontSize: '11px', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
                                           {lead.taskDescription ? (
-                                             <span>💬 {lead.taskDescription.substring(0,30)}...</span>
+                                             <span><Ico n="message" s={11}/> {lead.taskDescription.substring(0,30)}...</span>
                                           ) : (
-                                             <span style={{color:'var(--text-muted)'}}>⏱️ Muddat belgilangan (vazifa matni yo'q)</span>
+                                             <span style={{color:'var(--text-muted)'}}><Ico n="clock" s={11}/> Muddat belgilangan (vazifa matni yo'q)</span>
                                           )}
                                        </div>
                                     ) : (
                                        !['NEW', 'LOST', 'WON'].includes(lead.status) && (
                                           <div style={{ fontSize: '11px', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', padding: '6px', borderRadius: '4px', border: '1px solid var(--danger)', fontWeight: 600 }}>
-                                             ⚠️ DIQQAT: VAZIFA BELGILANMAGAN!
+                                             <Ico n="alert" s={11}/> DIQQAT: VAZIFA BELGILANMAGAN!
                                           </div>
                                        )
                                     )}
@@ -1159,10 +1244,10 @@ tr:hover td { background: var(--bg-hover); }
                {activeTab === 'settings' && role === 'CEO' && (
                  <div style={{ maxWidth: '800px', margin: '0 auto' }}>
                     <div className="settings-tab-bar">
-                       <div className={`settings-tab ${settingsActiveTab==='users'?'active':''}`} onClick={()=>setSettingsActiveTab('users')}>👥 Xodimlar (Users)</div>
-                       <div className={`settings-tab ${settingsActiveTab==='limits'?'active':''}`} onClick={()=>setSettingsActiveTab('limits')}>⚙️ Umumiy (Global Setup)</div>
-                       <div className={`settings-tab ${settingsActiveTab==='pipelines'?'active':''}`} onClick={()=>setSettingsActiveTab('pipelines')}>🏗️ Quvurlar (Pipelines)</div>
-                       <div className={`settings-tab ${settingsActiveTab==='webforms'?'active':''}`} onClick={()=>setSettingsActiveTab('webforms')}>📝 Tashqi Web Shakl (Form)</div>
+                       <div className={`settings-tab ${settingsActiveTab==='users'?'active':''}`} onClick={()=>setSettingsActiveTab('users')}><Ico n="users" s={14}/> Xodimlar</div>
+                       <div className={`settings-tab ${settingsActiveTab==='limits'?'active':''}`} onClick={()=>setSettingsActiveTab('limits')}><Ico n="settings" s={14}/> Sozlamalar</div>
+                       <div className={`settings-tab ${settingsActiveTab==='pipelines'?'active':''}`} onClick={()=>setSettingsActiveTab('pipelines')}><Ico n="layers" s={14}/> Varonkalar</div>
+                       <div className={`settings-tab ${settingsActiveTab==='webforms'?'active':''}`} onClick={()=>setSettingsActiveTab('webforms')}><Ico n="file" s={14}/> Veb Shakl</div>
                     </div>
                     <div className="card" style={{minHeight: '400px'}}>
                        {settingsActiveTab === 'users' && (
@@ -1172,7 +1257,7 @@ tr:hover td { background: var(--bg-hover); }
                           <div><h3 style={{marginBottom: '16px'}}>Kompaniyaning Global Ko'rsatkichlari</h3><GlobalLimitsConfig globalCallLimit={globalCallLimit} setGlobalCallLimit={setGlobalCallLimit} /></div>
                        )}
                        {settingsActiveTab === 'pipelines' && (
-                          <div><h3 style={{marginBottom: '16px'}}>Sotuv Quvurlarini Muhandisligi</h3><PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} /></div>
+                          <div><h3 style={{marginBottom: '16px'}}>Sotuv Varonkalarini Sozlash</h3><PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} /></div>
                        )}
                        {settingsActiveTab === 'webforms' && (
                           <div>
@@ -1202,7 +1287,7 @@ tr:hover td { background: var(--bg-hover); }
 
                              <div style={{borderTop:'1px solid var(--border-light)', paddingTop:'24px'}}>
                                 <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px'}}>
-                                   <div style={{width:'36px', height:'36px', background:'linear-gradient(135deg, var(--accent), #8b5cf6)', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px'}}>🔗</div>
+                                   <div style={{width:'36px', height:'36px', background:'linear-gradient(135deg, var(--accent), #8b5cf6)', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff'}}><Ico n="link" s={18} c={{stroke:'#fff'}}/></div>
                                    <div>
                                       <div style={{fontWeight:600, fontSize:'14px', color:'var(--text-main)'}}>Havola Yaratish</div>
                                       <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Tashqi formaning URL havolasini oling</div>
@@ -1223,18 +1308,18 @@ tr:hover td { background: var(--bg-hover); }
                                          const linkBox = document.getElementById('generatedLinkBox');
                                          if(linkBox) { linkBox.value = lnk; linkBox.parentElement.style.display = 'flex'; }
                                       });
-                                   }}>📋 Havolani Nusxalash</button>
+                                   }}><Ico n="link" s={13}/> Havolani Nusxalash</button>
                                 </div>
                                 
                                 <div id="generatedLinkWrap" style={{display:'none', marginTop:'12px', gap:'8px', alignItems:'center'}}>
                                    <input id="generatedLinkBox" className="input-base" readOnly style={{marginBottom:0, flex:1, fontSize:'12px', fontFamily:'monospace', background:'var(--bg-base)', color:'var(--success)'}} />
-                                   <span style={{fontSize:'11px', color:'var(--success)', fontWeight:600, whiteSpace:'nowrap'}}>✅ Nusxalandi!</span>
+                                   <span style={{fontSize:'11px', color:'var(--success)', fontWeight:600, whiteSpace:'nowrap'}}><Ico n="check" s={13}/> Nusxalandi!</span>
                                 </div>
                              </div>
                              
                              <div style={{marginTop: '24px', padding: '20px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08))', border: '1px solid rgba(59,130,246,0.2)'}}>
                                <div style={{display:'flex', gap:'10px', alignItems:'flex-start'}}>
-                                  <span style={{fontSize:'24px'}}>💡</span>
+                                  <span style={{fontSize:'24px'}}><Ico n="bulb" s={24}/></span>
                                   <div>
                                      <strong style={{display:'block', marginBottom:'6px', color:'var(--text-main)'}}>Maslahat</strong>
                                      <div style={{fontSize: '13px', color:'var(--text-secondary)', lineHeight:'1.6'}}>Yuqoridagi savollarni o'zgartirsangiz, havola o'zgarmaydi — formadagi savollar <b>avtomatik yangilanadi</b>. Bu havolani <b>Instagram BIO</b>, <b>Telegram kanal</b> yoki <b>Facebook sahifangizga</b> qo'yishingiz mumkin.</div>
