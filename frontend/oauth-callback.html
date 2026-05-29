@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Facebook Avtorizatsiyasi</title>
+</head>
+<body>
+    <p>Avtorizatsiya yakunlanmoqda. Oyna avtomatik tarzda yopiladi...</p>
+    <script>
+        // Parse the access token from the URL hash
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get('access_token');
+        
+        if (accessToken) {
+            // Save to localStorage for the main window to pick up
+            localStorage.setItem('fb_oauth_token', accessToken);
+        } else {
+            console.error("Token topilmadi. URL:", window.location.href);
+        }
+        
+        // Close the popup
+        window.close();
+    </script>
+</body>
+</html>
