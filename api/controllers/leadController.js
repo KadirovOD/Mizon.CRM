@@ -18,6 +18,21 @@ exports.getLeads = async (req, res) => {
   }
 };
 
+// GET /api/leads/:id/chatlogs — fetch only chatlogs for polling
+exports.getLeadChatlogs = async (req, res) => {
+  if (!req.db) return res.json({ chatlogs: [] });
+  try {
+    const { rows } = await req.db.query(
+      'SELECT id, chatlogs, actualcallattempts FROM crm_lead WHERE id = $1', [req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    const logs = typeof rows[0].chatlogs === 'string' ? JSON.parse(rows[0].chatlogs) : (rows[0].chatlogs || []);
+    res.json({ chatlogs: logs, actualCallAttempts: rows[0].actualcallattempts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // GET /api/stages — fetch all stages
 exports.getStages = async (req, res) => {
   if (!req.db) return res.json({ success: true, stages: [] });

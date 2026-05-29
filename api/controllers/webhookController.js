@@ -32,42 +32,77 @@ exports.handleMetaWebhook = async (req, res) => {
           const leadgenId = leadData.leadgen_id;
           const formId = leadData.form_id;
           const pageId = leadData.page_id;
-          
-          // Fetch actual lead data from Meta Graph API
+
+          if (!req.db) continue;
+
+          // Duplicate guard: skip if this Facebook lead was already saved
+          const dup = await req.db.query('SELECT id FROM crm_lead WHERE facebook_lead_id = $1 LIMIT 1', [String(leadgenId)]);
+          if (dup.rows.length > 0) {
+            console.log(`↩️  Facebook lead ${leadgenId} allaqachon mavjud, o'tkazib yuborildi.`);
+            continue;
+          }
+
+          // Fetch actual lead data from Meta Graph API using dynamic mapping
           let leadName = `Meta Lead #${leadgenId}`;
           let leadPhone = null;
           let leadEmail = null;
-          
-          if (process.env.META_PAGE_ACCESS_TOKEN && leadgenId) {
+          let leadRegion = null;
+          let leadTaskDesc = null;
+          let adName = null;
+          let formName = null;
+
+          const configRes = await req.db.query('SELECT access_token, field_mapping FROM crm_integration_config WHERE form_id = $1 LIMIT 1', [String(formId)]);
+
+          const config = configRes.rows[0] || {};
+          const accessToken = config.access_token || process.env.META_PAGE_ACCESS_TOKEN;
+          const mapping = config.field_mapping || {};
+          if (configRes.rows.length === 0) {
+            console.warn(`Form ID ${formId} uchun mapping config topilmadi. Asosiy fallback ishlatiladi.`);
+          }
+
+          if (accessToken && leadgenId) {
             try {
-              const leadDetails = await fetchMetaLeadData(leadgenId, process.env.META_PAGE_ACCESS_TOKEN);
+              const leadDetails = await fetchMetaLeadData(leadgenId, accessToken);
               if (leadDetails) {
+                adName = leadDetails.ad_name || null;
+                formName = leadDetails.form_name || null;
                 for (const field of leadDetails.field_data || []) {
-                  if (field.name === 'full_name') leadName = field.values[0];
-                  if (field.name === 'phone_number') leadPhone = field.values[0];
-                  if (field.name === 'email') leadEmail = field.values[0];
+                  const mizonField = mapping[field.name]; // mapping logic
+
+                  if (mizonField === 'name') leadName = field.values[0];
+                  if (mizonField === 'phone') leadPhone = field.values[0];
+                  if (mizonField === 'email') leadEmail = field.values[0];
+                  if (mizonField === 'region') leadRegion = field.values[0];
+                  if (mizonField === 'taskDescription') leadTaskDesc = field.values[0];
+
+                  // Default fallback if no specific mapping was defined
+                  if (!mizonField) {
+                    if (field.name.includes('name') && leadName.startsWith('Meta Lead')) leadName = field.values[0];
+                    if (field.name.includes('phone') && !leadPhone) leadPhone = field.values[0];
+                  }
                 }
               }
             } catch (fetchErr) {
               console.error('Meta Lead fetch error:', fetchErr.message);
             }
           }
-          
-          if (req.db) {
-            await req.db.query(
-              `INSERT INTO crm_lead (name, contact_name, phone, email, mizon_source, lead_score, stage_id, chatlogs) 
-               VALUES ($1, $2, $3, $4, $5, $6, 1, $7)`,
-              [
-                leadName, leadName, leadPhone, leadEmail, 'meta_fb_ads', 30,
-                JSON.stringify([{
-                  type: 'sys', 
-                  date: new Date().toISOString(), 
-                  text: `Meta Lead Ads orqali keldi. Form: ${formId}, Page: ${pageId}`
-                }])
-              ]
-            );
-            console.log(`📌 New Meta Lead: ${leadName}`);
-          }
+
+          // Save dynamically mapped lead
+          await req.db.query(
+            `INSERT INTO crm_lead (name, contact_name, phone, email, region, taskdescription, mizon_source, lead_score, stage_id, facebook_lead_id, ad_name, form_name, chatlogs)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $10, $11, $12)
+             ON CONFLICT (facebook_lead_id) DO NOTHING`,
+            [
+              leadName, leadName, leadPhone, leadEmail, leadRegion, leadTaskDesc, 'facebook', 30,
+              String(leadgenId), adName, formName,
+              JSON.stringify([{
+                type: 'sys',
+                date: new Date().toISOString(),
+                text: `Facebook Lead Ads orqali keldi. Reklama: ${adName || '-'}, Form: ${formName || formId}, Page: ${pageId}`
+              }])
+            ]
+          );
+          console.log(`📌 New Facebook Lead: ${leadName} (ad: ${adName || '-'}, form: ${formName || formId})`);
         }
       }
     }
@@ -81,13 +116,19 @@ exports.handleMetaWebhook = async (req, res) => {
 // Helper: Fetch lead details from Meta Graph API
 function fetchMetaLeadData(leadgenId, accessToken) {
   return new Promise((resolve, reject) => {
-    const url = `https://graph.facebook.com/v19.0/${leadgenId}?access_token=${accessToken}`;
+    const fields = 'field_data,ad_name,form_name,created_time';
+    const url = `https://graph.facebook.com/v19.0/${leadgenId}?fields=${fields}&access_token=${encodeURIComponent(accessToken)}`;
     https.get(url, (resp) => {
       let data = '';
       resp.on('data', chunk => data += chunk);
       resp.on('end', () => {
-        try { resolve(JSON.parse(data)); } 
-        catch (e) { reject(e); }
+        let parsed;
+        try { parsed = JSON.parse(data); }
+        catch (e) { return reject(new Error(`Graph API javobini o'qib bo'lmadi: ${e.message}`)); }
+        if (parsed.error) {
+          return reject(new Error(`Graph API xatosi: ${parsed.error.message || JSON.stringify(parsed.error)}`));
+        }
+        resolve(parsed);
       });
     }).on('error', reject);
   });

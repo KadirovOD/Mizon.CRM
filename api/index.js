@@ -68,6 +68,9 @@ async function initDb() {
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS owner VARCHAR(50) DEFAULT 'ceo';
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS region VARCHAR(255);
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS pipelineid VARCHAR(50) DEFAULT 'p1';
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS facebook_lead_id VARCHAR(100) UNIQUE;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS ad_name VARCHAR(255);
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS form_name VARCHAR(255);
     `);
     const stages = await client.query('SELECT COUNT(*) FROM crm_stage');
     if (parseInt(stages.rows[0].count) === 0) {
@@ -77,6 +80,42 @@ async function initDb() {
         ('Taklif yuborildi', 4), ('Muzokaralar', 5), ('Yutildi', 6), ('Muvaffaqiyatsiz', 7)
       `);
     }
+
+    // Odoo-style integration configuration table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_integration_config (
+        id SERIAL PRIMARY KEY,
+        platform VARCHAR(50) NOT NULL,
+        page_id VARCHAR(100),
+        form_id VARCHAR(100),
+        access_token TEXT,
+        field_mapping JSONB DEFAULT '{}'::jsonb
+      );
+    `);
+
+    // External API keys storage
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_api_keys (
+        id SERIAL PRIMARY KEY,
+        service VARCHAR(100) NOT NULL,
+        label VARCHAR(255) NOT NULL,
+        key_value TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Moi Zvonki VoIP config
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS crm_voip_config (
+        id SERIAL PRIMARY KEY,
+        account_id VARCHAR(100) NOT NULL,
+        api_token TEXT NOT NULL,
+        caller_id VARCHAR(50) DEFAULT '',
+        domain VARCHAR(100) DEFAULT 'app.moizvonki.ru',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     console.log('✅ Database initialized successfully.');
   } catch (error) {
     console.error('❌ Error initializing database:', error.message);
@@ -89,6 +128,7 @@ initDb();
 // ========== ROUTES ==========
 const leadController = require('./controllers/leadController');
 const webhookController = require('./controllers/webhookController');
+const voipController = require('./controllers/voipController');
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -105,6 +145,7 @@ app.get('/api/leads', leadController.getLeads);
 app.post('/api/leads', leadController.createLead);
 app.put('/api/leads/:id', leadController.updateLeadFull);
 app.delete('/api/leads/:id', leadController.deleteLead);
+app.get('/api/leads/:id/chatlogs', leadController.getLeadChatlogs);
 
 // Stages
 app.get('/api/stages', leadController.getStages);
@@ -113,9 +154,69 @@ app.get('/api/stages', leadController.getStages);
 app.get('/api/webhook/meta', webhookController.verifyMetaWebhook);
 app.post('/api/webhook/meta', webhookController.handleMetaWebhook);
 app.post('/api/webhook/telegram', webhookController.handleTelegramWebhook);
+app.post('/api/webhook/moizvonki', voipController.handleWebhook);
+
+// VoIP (Moi Zvonki)
+app.get('/api/voip/config', voipController.getConfig);
+app.post('/api/voip/config', voipController.saveConfig);
+app.post('/api/call', voipController.initiateCall);
+
+// Integrations Config
+app.post('/api/integrations', async (req, res) => {
+  if (!req.db) return res.status(500).json({error: 'DB disabled'});
+  const { platform, page_id, form_id, access_token, field_mapping } = req.body;
+  try {
+    await req.db.query(
+      `INSERT INTO crm_integration_config (platform, page_id, form_id, access_token, field_mapping)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [platform, page_id, form_id, access_token, JSON.stringify(field_mapping)]
+    );
+    res.json({success: true});
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
 
 // Stats (Dashboard API)
 app.get('/api/stats', leadController.getStats);
+
+// External API Keys CRUD
+app.get('/api/api-keys', async (req, res) => {
+  if (!req.db) return res.json([]);
+  try {
+    const result = await req.db.query(
+      'SELECT id, service, label, created_at FROM crm_api_keys ORDER BY created_at DESC'
+    );
+    res.json(result.rows);
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
+
+app.post('/api/api-keys', async (req, res) => {
+  if (!req.db) return res.status(500).json({error: 'DB disabled'});
+  const { service, label, key_value } = req.body;
+  if (!service || !label || !key_value) return res.status(400).json({error: 'service, label, key_value majburiy'});
+  try {
+    const result = await req.db.query(
+      'INSERT INTO crm_api_keys (service, label, key_value) VALUES ($1, $2, $3) RETURNING id, service, label, created_at',
+      [service, label, key_value]
+    );
+    res.json(result.rows[0]);
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
+
+app.delete('/api/api-keys/:id', async (req, res) => {
+  if (!req.db) return res.status(500).json({error: 'DB disabled'});
+  try {
+    await req.db.query('DELETE FROM crm_api_keys WHERE id = $1', [req.params.id]);
+    res.json({success: true});
+  } catch(e) {
+    res.status(500).json({error: e.message});
+  }
+});
 
 // Frontend SPA fallback (for local dev)
 app.get('*', (req, res) => {
