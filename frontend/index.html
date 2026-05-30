@@ -165,9 +165,10 @@ body{background:var(--bg-base);color:var(--text-main);font-family:var(--font-bod
 .badge-website{background:#ea580c;}
 
 /* ===== LEAD PANEL ===== */
-.lead-panel-overlay{position:fixed;right:0;top:0;height:100vh;width:860px;max-width:100%;background:var(--bg-base);border-left:1px solid var(--outline-variant);box-shadow:-10px 0 50px rgba(0,0,0,0.6);z-index:100;display:flex;flex-direction:column;}
-.lead-panel-header{padding:16px 24px;border-bottom:1px solid var(--outline-variant);display:flex;justify-content:space-between;align-items:center;background:var(--bg-surface);flex-shrink:0;}
-.lead-panel-body{flex:1;display:grid;grid-template-columns:340px 1fr;overflow:hidden;min-height:0;}
+.lead-panel-overlay{position:fixed;inset:0;width:100%;height:100vh;background:var(--bg-base);z-index:100;display:flex;flex-direction:column;animation:slideInPanel 0.2s ease;}
+@keyframes slideInPanel{from{opacity:0;transform:scale(0.99)}to{opacity:1;transform:scale(1)}}
+.lead-panel-header{padding:14px 28px;border-bottom:1px solid var(--outline-variant);display:flex;justify-content:space-between;align-items:center;background:var(--bg-surface);flex-shrink:0;}
+.lead-panel-body{flex:1;display:grid;grid-template-columns:420px 1fr;overflow:hidden;min-height:0;}
 .lead-profile-col{border-right:1px solid var(--outline-variant);padding:18px 20px;overflow-y:auto;background:var(--bg-surface);}
 .lead-chat-col{display:flex;flex-direction:column;overflow:hidden;background:var(--chat-bg);}
 
@@ -323,16 +324,6 @@ tr:hover td{background:var(--surface-variant);}
       { id: '5', pipelineId: 'p1', name: 'Akmal Tursunov', owner: 'ceo', phone: '+998 90 987 6543', region: 'Toshkent', source: 'website', status: 'PROPOSAL', actualCallAttempts: 4, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: 'Veb-sayt formasi orqali keldi'}] },
       { id: '6', pipelineId: 'p1', name: 'Dilshod Rahimov', owner: 'ceo', phone: '+998 91 333 4455', region: 'Farg\'ona', source: 'manual', status: 'CONTACTED', actualCallAttempts: 0, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: "Qo'lda kiritildi"}] },
       { id: '7', pipelineId: 'p2', name: 'LLC TechnoPlus', owner: 'ceo', phone: '+998 71 555 6677', region: 'Toshkent', source: 'referral', status: 'NEW', actualCallAttempts: 0, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: 'B2B Hamkorlik uchun tavsiya'}] },
-    ];
-
-    // ===== INITIAL STUDENTS DATA =====
-    const initialStudents = [
-      { id:'st1', name:'Abdullayev Jasur', phone:'+998 90 111 2233', group:"Guruh A", paymentStatus:'paid', enrollDate:'2024-09-01', notes:'' },
-      { id:'st2', name:'Karimova Malika', phone:'+998 91 444 5566', group:"Guruh B", paymentStatus:'pending', enrollDate:'2024-09-15', notes:"To'lov kutilmoqda" },
-      { id:'st3', name:'Toshmatov Sardor', phone:'+998 93 777 8899', group:"Guruh A", paymentStatus:'debt', enrollDate:'2024-10-01', notes:"2 oy qarzdor" },
-      { id:'st4', name:'Umarova Dilorom', phone:'+998 97 222 3344', group:"Guruh C", paymentStatus:'paid', enrollDate:'2024-10-10', notes:'' },
-      { id:'st5', name:'Haydarov Bobur', phone:'+998 90 555 6677', group:"Guruh B", paymentStatus:'paid', enrollDate:'2024-11-01', notes:'' },
-      { id:'st6', name:'Nazarova Zulfiya', phone:'+998 91 888 9900', group:"Guruh C", paymentStatus:'pending', enrollDate:'2024-11-15', notes:'' },
     ];
 
     // ===== HELPERS =====
@@ -691,204 +682,104 @@ tr:hover td{background:var(--surface-variant);}
       );
     };
 
-    // ===== O'QUVCHILAR (STUDENTS) MODULE =====
-    const StudentsModule = () => {
-      const [students, setStudents] = React.useState(() => {
-        const s = localStorage.getItem('mizon_students');
-        return s ? JSON.parse(s) : initialStudents;
-      });
-      const [filterGroup, setFilterGroup] = React.useState('all');
-      const [filterPay, setFilterPay] = React.useState('all');
-      const [search, setSearch] = React.useState('');
-      const [showAdd, setShowAdd] = React.useState(false);
-      const [form, setForm] = React.useState({ name:'', phone:'', group:'', paymentStatus:'pending', enrollDate:'', notes:'' });
+    // ===== CALL CENTER MODULE (fully functional) =====
+    const CallCenterModule = ({ leads, setLeads, globalCallLimit }) => {
+      const [filterOp, setFilterOp] = useState('all');
+      const [filterSt, setFilterSt] = useState('all');
+      const [showAdd, setShowAdd] = useState(false);
+      const [selLead, setSelLead] = useState('');
+      const [callNote, setCallNote] = useState('');
 
-      React.useEffect(() => { localStorage.setItem('mizon_students', JSON.stringify(students)); }, [students]);
-
-      const groups = [...new Set(students.map(s => s.group).filter(Boolean))];
-      const filtered = students.filter(s => {
-        if(filterGroup !== 'all' && s.group !== filterGroup) return false;
-        if(filterPay !== 'all' && s.paymentStatus !== filterPay) return false;
-        if(search && !s.name.toLowerCase().includes(search.toLowerCase()) && !s.phone.includes(search)) return false;
-        return true;
-      });
-
-      const stats = {
-        total: students.length,
-        paid: students.filter(s => s.paymentStatus === 'paid').length,
-        pending: students.filter(s => s.paymentStatus === 'pending').length,
-        debt: students.filter(s => s.paymentStatus === 'debt').length,
-      };
-
-      const addStudent = () => {
-        if(!form.name || !form.phone) return alert("Ism va telefon raqam kiriting!");
-        setStudents(prev => [...prev, { ...form, id:'st_'+Date.now() }]);
-        setForm({ name:'', phone:'', group:'', paymentStatus:'pending', enrollDate:'', notes:'' });
-        setShowAdd(false);
-      };
-
-      const togglePay = (id) => {
-        setStudents(prev => prev.map(s => {
-          if(s.id !== id) return s;
-          const cycle = { paid:'pending', pending:'debt', debt:'paid' };
-          return { ...s, paymentStatus: cycle[s.paymentStatus] || 'pending' };
-        }));
-      };
-
-      const payLabels = { paid:"To'langan", pending:"Kutilmoqda", debt:"Qarzdor" };
-      const payClass  = { paid:'pay-paid', pending:'pay-pending', debt:'pay-debt' };
-
-      return (
-        <div>
-          <div className="mod-header">
-            <div>
-              <div className="mod-title">O'quvchilar</div>
-              <div className="mod-sub">Talabalar ro'yxati, guruhlar va to'lov holati</div>
-            </div>
-            <button className="btn-primary" onClick={() => setShowAdd(true)}><Ico n="plus" s={14}/> O'quvchi qo'shish</button>
-          </div>
-
-          <div className="stat-mini-grid">
-            {[
-              {label:"Jami o'quvchilar", val:stats.total, color:'var(--text-main)'},
-              {label:"To'langan", val:stats.paid, color:'#01a750'},
-              {label:"Kutilmoqda", val:stats.pending, color:'#f59e0b'},
-              {label:"Qarzdor", val:stats.debt, color:'#ef4444'},
-            ].map((m, i) => (
-              <div key={i} className="stat-mini">
-                <div className="stat-mini-label">{m.label}</div>
-                <div className="stat-mini-value" style={{color:m.color}}>{m.val}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="filter-row">
-            <div className="topbar-search" style={{flex:1, maxWidth:'280px'}}>
-              <span className="topbar-search-icon material-symbols-outlined" style={{fontSize:'17px'}}>search</span>
-              <input placeholder="Ism yoki telefon..." value={search} onChange={e=>setSearch(e.target.value)} />
-            </div>
-            <select className="pipeline-selector" value={filterGroup} onChange={e=>setFilterGroup(e.target.value)}>
-              <option value="all">Barcha guruhlar</option>
-              {groups.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-            <select className="pipeline-selector" value={filterPay} onChange={e=>setFilterPay(e.target.value)}>
-              <option value="all">Barcha to'lov</option>
-              <option value="paid">To'langan</option>
-              <option value="pending">Kutilmoqda</option>
-              <option value="debt">Qarzdor</option>
-            </select>
-          </div>
-
-          <div className="card" style={{padding:0, overflow:'hidden'}}>
-            <table>
-              <thead>
-                <tr><th>#</th><th>Ism-familiya</th><th>Telefon</th><th>Guruh</th><th>To'lov holati</th><th>Qabul sanasi</th><th>Amallar</th></tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 && (
-                  <tr><td colSpan="7" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>O'quvchi topilmadi</td></tr>
-                )}
-                {filtered.map((s, i) => (
-                  <tr key={s.id}>
-                    <td style={{color:'var(--text-muted)', fontSize:'11px'}}>{i+1}</td>
-                    <td>
-                      <div style={{display:'flex', alignItems:'center', gap:'9px'}}>
-                        <div className="avatar" style={{width:'30px', height:'30px', fontSize:'11px'}}>{getInitials(s.name)}</div>
-                        <div>
-                          <div style={{fontWeight:600}}>{s.name}</div>
-                          {s.notes && <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{s.notes}</div>}
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{color:'var(--text-muted)', fontSize:'12px'}}>{s.phone}</td>
-                    <td><span style={{background:'var(--surface-variant)', padding:'2px 9px', borderRadius:'10px', fontSize:'11px', fontWeight:600}}>{s.group || '—'}</span></td>
-                    <td><span className={`pay-badge ${payClass[s.paymentStatus] || 'pay-pending'}`}>{payLabels[s.paymentStatus] || s.paymentStatus}</span></td>
-                    <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{s.enrollDate || '—'}</td>
-                    <td>
-                      <div style={{display:'flex', gap:'6px'}}>
-                        <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={() => togglePay(s.id)}>To'lov ↺</button>
-                        <button className="btn-danger" style={{padding:'4px 8px', fontSize:'11px'}} onClick={() => setStudents(prev => prev.filter(x => x.id !== s.id))}>✕</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {showAdd && (
-            <div className="login-overlay" onClick={e=>{if(e.target===e.currentTarget) setShowAdd(false);}}>
-              <div className="login-box" style={{width:'440px', textAlign:'left'}}>
-                <h3 style={{fontSize:'18px', fontWeight:700, marginBottom:'20px', textAlign:'center'}}>Yangi O'quvchi</h3>
-                <span className="label-sm">Ism-familiya *</span>
-                <input className="input-base" placeholder="Abdullayev Jasur" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} />
-                <span className="label-sm">Telefon *</span>
-                <input className="input-base" placeholder="+998 90 XXX XX XX" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} />
-                <span className="label-sm">Guruh</span>
-                <input className="input-base" placeholder="Guruh A" value={form.group} onChange={e=>setForm({...form,group:e.target.value})} />
-                <span className="label-sm">To'lov holati</span>
-                <select className="input-base" value={form.paymentStatus} onChange={e=>setForm({...form,paymentStatus:e.target.value})}>
-                  <option value="paid">To'langan</option>
-                  <option value="pending">Kutilmoqda</option>
-                  <option value="debt">Qarzdor</option>
-                </select>
-                <span className="label-sm">Qabul sanasi</span>
-                <input type="date" className="input-base" value={form.enrollDate} onChange={e=>setForm({...form,enrollDate:e.target.value})} />
-                <span className="label-sm">Izoh</span>
-                <input className="input-base" placeholder="Qo'shimcha ma'lumot..." value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} />
-                <div style={{display:'flex', gap:'10px', marginTop:'8px'}}>
-                  <button className="btn-primary" style={{flex:1}} onClick={addStudent}>Qo'shish</button>
-                  <button className="btn-outline" onClick={()=>setShowAdd(false)}>Bekor</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    // ===== CALL CENTER MODULE =====
-    const CallCenterModule = ({ leads, users }) => {
       const allCalls = [];
       leads.forEach(lead => {
         lead.chatLogs.forEach(log => {
-          if(log.text && log.text.includes("Qo'ng'iroq")) {
+          if(log.text && (log.text.includes("Qo'ng'iroq") || log.text.includes('📞') || log.text.includes('⛔'))) {
             allCalls.push({
-              id: lead.id + '_' + log.date,
-              leadName: lead.name,
-              phone: lead.phone,
-              operator: lead.owner,
-              date: log.date,
-              note: log.text,
-              status: log.text.includes('LOST') ? 'missed' : 'answered'
+              leadId: String(lead.id), leadName: lead.name, phone: lead.phone,
+              operator: lead.owner, date: log.date, note: log.text,
+              status: log.text.includes('⛔') ? 'missed' : 'answered'
             });
           }
         });
       });
       allCalls.sort((a, b) => new Date(b.date) - new Date(a.date));
 
+      const filtered = allCalls.filter(c => {
+        if(filterOp !== 'all' && c.operator !== filterOp) return false;
+        if(filterSt !== 'all' && c.status !== filterSt) return false;
+        return true;
+      });
+
       const totalAttempts = leads.reduce((s, l) => s + (l.actualCallAttempts || 0), 0);
       const answered = allCalls.filter(c => c.status === 'answered').length;
       const missed = allCalls.filter(c => c.status === 'missed').length;
-      const activeOps = leads.filter(l => l.actualCallAttempts > 0).length;
-
+      const activeLeadsCount = leads.filter(l => l.actualCallAttempts > 0).length;
       const operatorNames = [...new Set(leads.map(l => l.owner))];
+
+      const logCall = () => {
+        if(!selLead) return alert("Mijozni tanlang!");
+        const lead = leads.find(l => String(l.id) === selLead);
+        if(!lead) return;
+        const attempts = (lead.actualCallAttempts || 0) + 1;
+        const isLost = attempts >= globalCallLimit;
+        const logText = isLost
+          ? `⛔ Call Center dan chaqirildi. Limit tugadi (${globalCallLimit} urinish). → LOST`
+          : `📞 Call Center: Qo'ng'iroq #${attempts} / Limit ${globalCallLimit}${callNote ? ' — ' + callNote : ''}`;
+        const updatedLead = {
+          ...lead, actualCallAttempts: attempts,
+          status: isLost ? 'LOST' : lead.status,
+          chatLogs: [...lead.chatLogs, { type:'sys', date: new Date().toISOString(), text: logText }]
+        };
+        setLeads(prev => prev.map(l => String(l.id) === selLead ? updatedLead : l));
+        setSelLead(''); setCallNote(''); setShowAdd(false);
+      };
 
       return (
         <div>
           <div className="mod-header">
             <div>
               <div className="mod-title">Call Center</div>
-              <div className="mod-sub">Qo'ng'iroqlar jurnali va VoIP statistikasi</div>
+              <div className="mod-sub">Qo'ng'iroqlar jurnali va real-time statistika</div>
             </div>
+            <button className="btn-primary" onClick={() => setShowAdd(!showAdd)}>
+              <span className="material-symbols-outlined" style={{fontSize:'16px',lineHeight:1,flexShrink:0}}>add_call</span> Qo'ng'iroq qayd etish
+            </button>
           </div>
+
+          {showAdd && (
+            <div className="card" style={{marginBottom:'16px', background:'rgba(1,167,80,0.04)', border:'1px solid rgba(1,167,80,0.25)'}}>
+              <div style={{fontWeight:600, fontSize:'14px', marginBottom:'14px', display:'flex', alignItems:'center', gap:'8px'}}>
+                <span className="material-symbols-outlined" style={{fontSize:'18px', color:'var(--primary)'}}>call</span>
+                Yangi qo'ng'iroqni qayd etish
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:'10px', alignItems:'end'}}>
+                <div>
+                  <span className="label-sm">Mijoz</span>
+                  <select className="input-base" style={{marginBottom:0}} value={selLead} onChange={e=>setSelLead(e.target.value)}>
+                    <option value="">— Mijozni tanlang —</option>
+                    {leads.filter(l=>!['LOST','WON'].includes(l.status)).map(l => (
+                      <option key={l.id} value={String(l.id)}>{l.name} ({l.phone}) · {l.actualCallAttempts}/{globalCallLimit}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span className="label-sm">Izoh (ixtiyoriy)</span>
+                  <input className="input-base" style={{marginBottom:0}} placeholder="Shartnoma haqida gaplashildi..." value={callNote} onChange={e=>setCallNote(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') logCall(); }} />
+                </div>
+                <div style={{display:'flex', gap:'8px', paddingBottom:'1px'}}>
+                  <button className="btn-primary" onClick={logCall}>Qayd etish</button>
+                  <button className="btn-outline" onClick={()=>setShowAdd(false)}>✕</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="stat-mini-grid">
             {[
               {label:"Jami urinishlar", val:totalAttempts, color:'var(--text-main)'},
               {label:"Javob berildi", val:answered, color:'#01a750'},
               {label:"O'tkazib yuborildi", val:missed, color:'#ef4444'},
-              {label:"Faol mijozlar", val:activeOps, color:'#3b82f6'},
+              {label:"Faol mijozlar", val:activeLeadsCount, color:'#3b82f6'},
             ].map((m, i) => (
               <div key={i} className="stat-mini">
                 <div className="stat-mini-label">{m.label}</div>
@@ -897,25 +788,31 @@ tr:hover td{background:var(--surface-variant);}
             ))}
           </div>
 
-          <div style={{display:'grid', gridTemplateColumns:'1fr 340px', gap:'14px', marginBottom:'14px'}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 320px', gap:'14px', marginBottom:'14px'}}>
             <div className="card">
-              <div style={{fontWeight:600, fontSize:'14px', marginBottom:'14px'}}>Operatorlar statistikasi</div>
+              <div style={{fontWeight:600, fontSize:'14px', marginBottom:'14px'}}>Operatorlar samaradorligi</div>
               {operatorNames.map(op => {
                 const opLeads = leads.filter(l => l.owner === op);
                 const opCalls = opLeads.reduce((s, l) => s + (l.actualCallAttempts||0), 0);
                 const opWon = opLeads.filter(l => l.status==='WON').length;
+                const opLost = opLeads.filter(l => l.status==='LOST').length;
                 const maxCalls = Math.max(1, ...operatorNames.map(o => leads.filter(l=>l.owner===o).reduce((s,l)=>s+(l.actualCallAttempts||0),0)));
                 return (
-                  <div key={op} className="chart-bar-row" style={{marginBottom:'12px', alignItems:'center', gap:'12px'}}>
-                    <div className="avatar" style={{width:'28px', height:'28px', fontSize:'11px', flexShrink:0}}>{op[0].toUpperCase()}</div>
-                    <div style={{flex:1, minWidth:0}}>
-                      <div style={{display:'flex', justifyContent:'space-between', marginBottom:'4px'}}>
-                        <span style={{fontSize:'12px', fontWeight:600}}>{op}</span>
-                        <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{opCalls} qo'ng'iroq · <span style={{color:'#01a750'}}>{opWon} yutdi</span></span>
+                  <div key={op} style={{padding:'12px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', marginBottom:'8px'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px'}}>
+                      <div className="avatar" style={{width:'32px', height:'32px', fontSize:'12px'}}>{op[0].toUpperCase()}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:600, fontSize:'13px'}}>{op}</div>
+                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{opLeads.length} ta mijoz</div>
                       </div>
-                      <div className="chart-bar-track" style={{height:'6px'}}>
-                        <div className="chart-bar-fill" style={{width:(opCalls/maxCalls*100)+'%', background:'var(--primary-container)'}}></div>
+                      <div style={{display:'flex', gap:'10px', fontSize:'12px'}}>
+                        <span style={{color:'#01a750', fontWeight:700}}>{opWon} ✓</span>
+                        <span style={{color:'#ef4444', fontWeight:700}}>{opLost} ✗</span>
+                        <span style={{color:'var(--text-muted)'}}>{opCalls} 📞</span>
                       </div>
+                    </div>
+                    <div className="chart-bar-track" style={{height:'5px'}}>
+                      <div className="chart-bar-fill" style={{width:(opCalls/maxCalls*100)+'%', background:'var(--primary-container)'}}></div>
                     </div>
                   </div>
                 );
@@ -923,30 +820,57 @@ tr:hover td{background:var(--surface-variant);}
             </div>
 
             <div className="card" style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-              <div style={{fontWeight:600, fontSize:'14px', marginBottom:'6px'}}>VoIP Holati</div>
-              <div style={{padding:'16px', background:'var(--bg-hover)', borderRadius:'10px', border:'1px solid var(--border-light)', textAlign:'center', flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'8px'}}>
-                <div style={{width:'52px', height:'52px', borderRadius:'50%', background:'rgba(1,167,80,0.1)', border:'2px solid rgba(1,167,80,0.35)', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                  <span className="material-symbols-outlined" style={{fontSize:'24px', color:'#01a750'}}>call</span>
+              <div style={{fontWeight:600, fontSize:'14px'}}>VoIP Tizim</div>
+              <div style={{flex:1, padding:'16px', background:'var(--bg-hover)', borderRadius:'10px', border:'1px solid var(--border-light)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'10px', textAlign:'center'}}>
+                <div style={{width:'56px', height:'56px', borderRadius:'50%', background:'rgba(1,167,80,0.1)', border:'2px solid rgba(1,167,80,0.4)', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                  <span className="material-symbols-outlined" style={{fontSize:'26px', color:'#01a750'}}>call</span>
                 </div>
-                <div style={{fontSize:'13px', fontWeight:700, color:'#01a750'}}>Tizim Faol</div>
-                <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>Moizvonki VoIP ulangan</div>
-                <code style={{fontSize:'10px', color:'var(--text-muted)', background:'var(--surface-variant)', padding:'3px 8px', borderRadius:'4px'}}>/api/webhook/moizvonki</code>
+                <div>
+                  <div style={{fontSize:'13px', fontWeight:700, color:'#01a750'}}>Moizvonki Faol</div>
+                  <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>VoIP tizim ulangan</div>
+                </div>
+                <code style={{fontSize:'10px', color:'var(--text-muted)', background:'var(--surface-variant)', padding:'4px 10px', borderRadius:'5px', display:'block', width:'100%'}}>POST /api/webhook/moizvonki</code>
+              </div>
+              <div style={{padding:'12px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
+                <div style={{fontSize:'10px', color:'var(--text-muted)', marginBottom:'8px', textTransform:'uppercase', fontWeight:700, letterSpacing:'0.06em'}}>Umumiy ko'rsatkichlar</div>
+                {[
+                  {label:"Jami qo'ng'iroqlar", val:totalAttempts},
+                  {label:"Javob %", val: totalAttempts ? Math.round(answered/totalAttempts*100)+'%' : '0%'},
+                  {label:"Konversiya", val: leads.length ? Math.round(leads.filter(l=>l.status==='WON').length/leads.length*100)+'%' : '0%'},
+                ].map((s,i) => (
+                  <div key={i} style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
+                    <span style={{fontSize:'12px', color:'var(--text-secondary)'}}>{s.label}</span>
+                    <span style={{fontWeight:700, color:'var(--primary)'}}>{s.val}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
           <div className="card" style={{padding:0, overflow:'hidden'}}>
-            <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span style={{fontWeight:600, fontSize:'14px'}}>Qo'ng'iroqlar jurnali</span>
-              <span style={{fontSize:'12px', color:'var(--text-muted)'}}>{allCalls.length} ta yozuv</span>
+            <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap'}}>
+              <span style={{fontWeight:600, fontSize:'14px'}}>Qo'ng'iroqlar jurnali ({filtered.length})</span>
+              <div style={{display:'flex', gap:'8px'}}>
+                <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterOp} onChange={e=>setFilterOp(e.target.value)}>
+                  <option value="all">Barcha operator</option>
+                  {operatorNames.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterSt} onChange={e=>setFilterSt(e.target.value)}>
+                  <option value="all">Barcha holat</option>
+                  <option value="answered">Javob berildi</option>
+                  <option value="missed">O'tkazildi</option>
+                </select>
+              </div>
             </div>
             <table>
               <thead><tr><th>Vaqt</th><th>Mijoz</th><th>Telefon</th><th>Operator</th><th>Holat</th><th>Izoh</th></tr></thead>
               <tbody>
-                {allCalls.length === 0 && (
-                  <tr><td colSpan="6" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>Qo'ng'iroqlar topilmadi. Leadga qo'ng'iroq qilgach bu yerda ko'rinadi.</td></tr>
+                {filtered.length === 0 && (
+                  <tr><td colSpan="6" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
+                    {allCalls.length === 0 ? "Hozircha qo'ng'iroqlar mavjud emas. Yuqoridagi tugma orqali qo'ng'iroq qayd eting." : "Filtr bo'yicha natija topilmadi."}
+                  </td></tr>
                 )}
-                {allCalls.slice(0, 60).map((c, i) => (
+                {filtered.slice(0, 80).map((c, i) => (
                   <tr key={i}>
                     <td style={{fontSize:'11px', color:'var(--text-muted)', whiteSpace:'nowrap'}}>{new Date(c.date).toLocaleString()}</td>
                     <td style={{fontWeight:600}}>{c.leadName}</td>
@@ -954,13 +878,13 @@ tr:hover td{background:var(--surface-variant);}
                     <td><span style={{background:'var(--surface-variant)', padding:'2px 8px', borderRadius:'10px', fontSize:'11px'}}>{c.operator}</span></td>
                     <td>
                       <span style={{padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
-                        background: c.status==='answered' ? 'rgba(1,167,80,0.12)' : 'rgba(239,68,68,0.1)',
-                        color: c.status==='answered' ? '#01a750' : '#ef4444',
-                        border: `1px solid ${c.status==='answered' ? 'rgba(1,167,80,0.3)' : 'rgba(239,68,68,0.3)'}`}}>
+                        background: c.status==='answered'?'rgba(1,167,80,0.12)':'rgba(239,68,68,0.1)',
+                        color: c.status==='answered'?'#01a750':'#ef4444',
+                        border:`1px solid ${c.status==='answered'?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`}}>
                         {c.status==='answered' ? 'Javob' : "O'tkazildi"}
                       </span>
                     </td>
-                    <td style={{fontSize:'11px', color:'var(--text-muted)', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.note}</td>
+                    <td style={{fontSize:'11px', color:'var(--text-muted)', maxWidth:'220px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.note}</td>
                   </tr>
                 ))}
               </tbody>
@@ -970,24 +894,42 @@ tr:hover td{background:var(--surface-variant);}
       );
     };
 
-    // ===== HISOBOTLAR (REPORTS) MODULE =====
+    // ===== HISOBOTLAR (REPORTS) MODULE (fully functional) =====
     const HisobotlarModule = ({ leads }) => {
+      const [period, setPeriod] = useState('all');
+
+      const filterByPeriod = (arr) => {
+        if(period === 'all') return arr;
+        const now = new Date();
+        return arr.filter(l => {
+          const d = new Date(l.chatLogs[0]?.date || 0);
+          if(period === 'today') return d.toDateString() === now.toDateString();
+          const days = period === 'week' ? 7 : 30;
+          return (now - d) <= days * 86400000;
+        });
+      };
+      const fl = filterByPeriod(leads);
+
       const sources = ['meta_fb_ads','telegram_bot','phone_call','referral','website','manual'];
       const sourceLabels = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda" };
       const sourceColors = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280' };
       const stages = ['NEW','CONTACTED','QUALIFIED','PROPOSAL','NEGOTIATION','WON','LOST'];
       const stageLabels = { NEW:'Yangi', CONTACTED:'Aloqa', QUALIFIED:'Ehtiyoj', PROPOSAL:'Taklif', NEGOTIATION:'Muzokara', WON:'Yutildi', LOST:"Yo'qotildi" };
 
-      const maxSource = Math.max(1, ...sources.map(s => leads.filter(l => l.source===s).length));
-      const maxStage = Math.max(1, ...stages.map(s => leads.filter(l => l.status===s).length));
-      const conversion = leads.length ? Math.round(leads.filter(l=>l.status==='WON').length / leads.length * 100) : 0;
+      const maxSource = Math.max(1, ...sources.map(s => fl.filter(l=>l.source===s).length));
+      const maxStage  = Math.max(1, ...stages.map(s => fl.filter(l=>l.status===s).length));
+      const won  = fl.filter(l=>l.status==='WON').length;
+      const lost = fl.filter(l=>l.status==='LOST').length;
+      const conversion = fl.length ? Math.round(won/fl.length*100) : 0;
+      const totalCalls = fl.reduce((s,l)=>s+(l.actualCallAttempts||0),0);
+      const allOwners = [...new Set(leads.map(l=>l.owner))];
 
       const exportCSV = () => {
         const headers = ['ID','Ism','Telefon','Manzil','Manba','Bosqich',"Mas'ul","Qo'ng'iroqlar"];
-        const rows = leads.map(l => [l.id, l.name, l.phone, l.region, l.source, l.status, l.owner, l.actualCallAttempts]);
+        const rows = fl.map(l => [l.id, l.name, l.phone, l.region, l.source, l.status, l.owner, l.actualCallAttempts]);
         const csv = [headers, ...rows].map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
         const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'mizon_leads_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `mizon_${period}_${new Date().toISOString().slice(0,10)}.csv`; a.click();
       };
 
       return (
@@ -997,16 +939,24 @@ tr:hover td{background:var(--surface-variant);}
               <div className="mod-title">Hisobotlar</div>
               <div className="mod-sub">Tahlil, grafik va ma'lumotlarni eksport qilish</div>
             </div>
-            <button className="btn-primary" onClick={exportCSV}><Ico n="download" s={14}/> CSV Eksport</button>
+            <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+              <select className="pipeline-selector" value={period} onChange={e=>setPeriod(e.target.value)}>
+                <option value="all">Barcha vaqt</option>
+                <option value="today">Bugun</option>
+                <option value="week">So'nggi 7 kun</option>
+                <option value="month">So'nggi 30 kun</option>
+              </select>
+              <button className="btn-primary" onClick={exportCSV}><Ico n="download" s={14}/> CSV Eksport</button>
+            </div>
           </div>
 
           <div className="stat-mini-grid">
             {[
-              {label:"Jami leadlar", val:leads.length, color:'var(--text-main)'},
+              {label:"Jami leadlar", val:fl.length, color:'var(--text-main)'},
               {label:"Konversiya", val:conversion+'%', color:'#01a750'},
-              {label:"Yutilgan", val:leads.filter(l=>l.status==='WON').length, color:'#01a750'},
-              {label:"Yo'qotilgan", val:leads.filter(l=>l.status==='LOST').length, color:'#ef4444'},
-            ].map((m, i) => (
+              {label:"Yutilgan", val:won, color:'#01a750'},
+              {label:"Yo'qotilgan", val:lost, color:'#ef4444'},
+            ].map((m,i) => (
               <div key={i} className="stat-mini">
                 <div className="stat-mini-label">{m.label}</div>
                 <div className="stat-mini-value" style={{color:m.color}}>{m.val}</div>
@@ -1016,15 +966,13 @@ tr:hover td{background:var(--surface-variant);}
 
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px'}}>
             <div className="card">
-              <div className="card-title" style={{marginBottom:'14px'}}>Manba bo'yicha leadlar</div>
+              <div className="card-title" style={{marginBottom:'14px'}}>Manba bo'yicha</div>
               {sources.map(s => {
-                const cnt = leads.filter(l => l.source===s).length;
+                const cnt = fl.filter(l=>l.source===s).length;
                 return (
                   <div key={s} className="chart-bar-row">
                     <span className="chart-bar-label">{sourceLabels[s]}</span>
-                    <div className="chart-bar-track">
-                      <div className="chart-bar-fill" style={{width:(cnt/maxSource*100)+'%', background:sourceColors[s]}}></div>
-                    </div>
+                    <div className="chart-bar-track"><div className="chart-bar-fill" style={{width:(cnt/maxSource*100)+'%', background:sourceColors[s]}}></div></div>
                     <span className="chart-bar-val">{cnt}</span>
                   </div>
                 );
@@ -1033,13 +981,11 @@ tr:hover td{background:var(--surface-variant);}
             <div className="card">
               <div className="card-title" style={{marginBottom:'14px'}}>Varonka bosqichlari</div>
               {stages.map(s => {
-                const cnt = leads.filter(l => l.status===s).length;
+                const cnt = fl.filter(l=>l.status===s).length;
                 return (
                   <div key={s} className="chart-bar-row">
                     <span className="chart-bar-label">{stageLabels[s]}</span>
-                    <div className="chart-bar-track">
-                      <div className="chart-bar-fill" style={{width:(cnt/maxStage*100)+'%', background:colColors[s]||'var(--primary-container)'}}></div>
-                    </div>
+                    <div className="chart-bar-track"><div className="chart-bar-fill" style={{width:(cnt/maxStage*100)+'%', background:colColors[s]||'var(--primary-container)'}}></div></div>
                     <span className="chart-bar-val">{cnt}</span>
                   </div>
                 );
@@ -1047,15 +993,60 @@ tr:hover td{background:var(--surface-variant);}
             </div>
           </div>
 
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px'}}>
+            <div className="card">
+              <div className="card-title" style={{marginBottom:'14px'}}>Xodimlar samaradorligi</div>
+              {allOwners.map(op => {
+                const opL = fl.filter(l=>l.owner===op);
+                const opWon = opL.filter(l=>l.status==='WON').length;
+                const opCalls = opL.reduce((s,l)=>s+(l.actualCallAttempts||0),0);
+                const maxOp = Math.max(1, ...allOwners.map(o => fl.filter(l=>l.owner===o).length));
+                return (
+                  <div key={op} style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', marginBottom:'8px'}}>
+                    <div className="avatar" style={{width:'32px', height:'32px', fontSize:'12px'}}>{op[0].toUpperCase()}</div>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex', justifyContent:'space-between', marginBottom:'4px'}}>
+                        <span style={{fontWeight:600, fontSize:'13px'}}>{op}</span>
+                        <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{opL.length} lead · {opCalls} 📞</span>
+                      </div>
+                      <div className="chart-bar-track" style={{height:'5px'}}>
+                        <div className="chart-bar-fill" style={{width:(opL.length/maxOp*100)+'%', background: opWon>0?'#01a750':'var(--primary-container)'}}></div>
+                      </div>
+                    </div>
+                    <span style={{fontSize:'14px', fontWeight:700, color:'#01a750', minWidth:'20px', textAlign:'right'}}>{opWon}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="card">
+              <div className="card-title" style={{marginBottom:'14px'}}>Qo'shimcha ko'rsatkichlar</div>
+              {[
+                {label:"Jami qo'ng'iroqlar", val:totalCalls, icon:'call', color:'#3b82f6'},
+                {label:"O'rtacha qo'ng'iroq / lead", val:fl.length?(totalCalls/fl.length).toFixed(1):'0', icon:'analytics', color:'#8b5cf6'},
+                {label:"Kechikkan vazifalar", val:fl.filter(l=>l.deadline && new Date(l.deadline)<new Date()).length, icon:'timer_off', color:'#ef4444'},
+                {label:"Vazifasiz faol leadlar", val:fl.filter(l=>!l.deadline&&!['NEW','WON','LOST'].includes(l.status)).length, icon:'warning', color:'#f59e0b'},
+              ].map((item,i) => (
+                <div key={i} style={{display:'flex', alignItems:'center', gap:'12px', padding:'10px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', marginBottom:'8px'}}>
+                  <div style={{width:'32px', height:'32px', borderRadius:'8px', background:`${item.color}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+                    <span className="material-symbols-outlined" style={{fontSize:'17px', color:item.color}}>{item.icon}</span>
+                  </div>
+                  <div style={{flex:1, fontSize:'12px', color:'var(--text-secondary)'}}>{item.label}</div>
+                  <div style={{fontWeight:700, fontSize:'16px', color:item.color}}>{item.val}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="card" style={{padding:0, overflow:'hidden'}}>
             <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span style={{fontWeight:600, fontSize:'14px'}}>To'liq lead hisoboti</span>
+              <span style={{fontWeight:600, fontSize:'14px'}}>To'liq lead hisoboti ({fl.length})</span>
               <button className="btn-outline" style={{padding:'6px 12px'}} onClick={exportCSV}><Ico n="download" s={13}/> Yuklab olish</button>
             </div>
             <table>
               <thead><tr><th>Ism</th><th>Telefon</th><th>Manba</th><th>Bosqich</th><th>Mas'ul</th><th>Qo'ng'iroq</th></tr></thead>
               <tbody>
-                {leads.map(l => (
+                {fl.length === 0 && <tr><td colSpan="6" style={{textAlign:'center', padding:'30px', color:'var(--text-muted)'}}>Tanlangan davr uchun ma'lumot topilmadi</td></tr>}
+                {fl.map(l => (
                   <tr key={l.id}>
                     <td style={{fontWeight:600}}>{l.name}</td>
                     <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{l.phone}</td>
@@ -1072,44 +1063,92 @@ tr:hover td{background:var(--surface-variant);}
       );
     };
 
-    // ===== MARKETING ANALYTICS MODULE =====
+    // ===== MARKETING ANALYTICS MODULE (fully functional, localStorage) =====
     const MarketingModule = () => {
-      const fbCampaigns = [
-        {id:1, name:"Asosiy savdo kampaniyasi", status:'active', budget:2500000, spent:1840000, leads:47, cpl:39100, reach:28400},
-        {id:2, name:"Retargeting – Veb sayt", status:'active', budget:800000, spent:620000, leads:18, cpl:34400, reach:9200},
-        {id:3, name:"Brand Awareness – Toshkent", status:'paused', budget:1200000, spent:1200000, leads:31, cpl:38700, reach:45600},
+      const defaultCampaigns = [
+        {id:'c1', name:"Asosiy savdo kampaniyasi", status:'active', budget:2500000, spent:1840000, leads:47, cpl:39100, reach:28400},
+        {id:'c2', name:"Retargeting – Veb sayt", status:'active', budget:800000, spent:620000, leads:18, cpl:34400, reach:9200},
+        {id:'c3', name:"Brand Awareness – Toshkent", status:'paused', budget:1200000, spent:1200000, leads:31, cpl:38700, reach:45600},
       ];
+      const [campaigns, setCampaigns] = useState(() => {
+        const s = localStorage.getItem('mizon_campaigns');
+        return s ? JSON.parse(s) : defaultCampaigns;
+      });
       const tgChannels = [
-        {id:1, name:'@mizon_uz', subscribers:12480, posts:42, reach:38200, clicks:1840, joinRate:'+240 bu oy'},
-        {id:2, name:'@mizon_yangiliklar', subscribers:5320, posts:18, reach:14100, clicks:620, joinRate:'+89 bu oy'},
+        {id:'t1', name:'@mizon_uz', subscribers:12480, posts:42, reach:38200, clicks:1840, joinRate:'+240 bu oy'},
+        {id:'t2', name:'@mizon_yangiliklar', subscribers:5320, posts:18, reach:14100, clicks:620, joinRate:'+89 bu oy'},
       ];
-      const fmt = (n) => n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(0)+'K' : String(n);
-      const fmtSum = (n) => new Intl.NumberFormat('ru-RU').format(n) + " so'm";
+      const [showNew, setShowNew] = useState(false);
+      const [editBudget, setEditBudget] = useState(null);
+      const [newC, setNewC] = useState({name:'', budget:'', reach:''});
 
-      const totalLeads = fbCampaigns.reduce((s,c) => s+c.leads, 0);
-      const totalSpent = fbCampaigns.reduce((s,c) => s+c.spent, 0);
-      const avgCPL = totalLeads ? Math.round(totalSpent / totalLeads) : 0;
-      const totalReach = fbCampaigns.reduce((s,c) => s+c.reach, 0);
+      useEffect(() => { localStorage.setItem('mizon_campaigns', JSON.stringify(campaigns)); }, [campaigns]);
+
+      const toggleStatus = (id) => setCampaigns(prev => prev.map(c => c.id===id ? {...c, status:c.status==='active'?'paused':'active'} : c));
+      const deleteCamp = (id) => { if(window.confirm("Kampaniyani o'chirishni tasdiqlaysizmi?")) setCampaigns(prev => prev.filter(c => c.id!==id)); };
+      const saveBudget = () => {
+        if(!editBudget) return;
+        setCampaigns(prev => prev.map(c => c.id===editBudget.id ? {...c, budget:Number(editBudget.val)||c.budget} : c));
+        setEditBudget(null);
+      };
+      const addCampaign = () => {
+        if(!newC.name || !newC.budget) return alert("Kampaniya nomi va byudjetni kiriting!");
+        setCampaigns(prev => [...prev, {id:'c_'+Date.now(), name:newC.name, status:'active', budget:Number(newC.budget), spent:0, leads:0, cpl:0, reach:Number(newC.reach)||0}]);
+        setNewC({name:'', budget:'', reach:''}); setShowNew(false);
+      };
+
+      const fmt = n => n>=1000000?(n/1000000).toFixed(1)+'M':n>=1000?(n/1000).toFixed(0)+'K':String(n);
+      const fmtSum = n => new Intl.NumberFormat('ru-RU').format(n)+" so'm";
+
+      const totLeads = campaigns.reduce((s,c)=>s+c.leads,0);
+      const totSpent = campaigns.reduce((s,c)=>s+c.spent,0);
+      const avgCPL   = totLeads ? Math.round(totSpent/totLeads) : 0;
+      const actCount = campaigns.filter(c=>c.status==='active').length;
 
       return (
         <div>
           <div className="mod-header">
             <div>
               <div className="mod-title">Marketing Analitika</div>
-              <div className="mod-sub">Facebook Ads va Telegram kanal statistikasi</div>
+              <div className="mod-sub">Facebook Ads kampaniyalar va Telegram kanal boshqaruvi</div>
             </div>
+            <button className="btn-primary" onClick={()=>setShowNew(!showNew)}><Ico n="plus" s={14}/> Yangi Kampaniya</button>
           </div>
 
-          <div className="stat-mini-grid" style={{marginBottom:'24px'}}>
+          {showNew && (
+            <div className="card" style={{marginBottom:'16px', background:'rgba(24,119,242,0.04)', border:'1px solid rgba(24,119,242,0.25)'}}>
+              <div style={{fontWeight:600, fontSize:'14px', marginBottom:'14px', color:'#1877F2'}}>Yangi Facebook Kampaniya</div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:'10px', alignItems:'end'}}>
+                <div>
+                  <span className="label-sm">Kampaniya nomi</span>
+                  <input className="input-base" style={{marginBottom:0}} placeholder="Yoz aksiyasi..." value={newC.name} onChange={e=>setNewC({...newC,name:e.target.value})} />
+                </div>
+                <div>
+                  <span className="label-sm">Byudjet (so'm)</span>
+                  <input type="number" className="input-base" style={{marginBottom:0}} placeholder="1000000" value={newC.budget} onChange={e=>setNewC({...newC,budget:e.target.value})} />
+                </div>
+                <div>
+                  <span className="label-sm">Qamrov (taxmin)</span>
+                  <input type="number" className="input-base" style={{marginBottom:0}} placeholder="10000" value={newC.reach} onChange={e=>setNewC({...newC,reach:e.target.value})} />
+                </div>
+                <div style={{display:'flex', gap:'8px', paddingBottom:'1px'}}>
+                  <button className="btn-primary" onClick={addCampaign}>Qo'shish</button>
+                  <button className="btn-outline" onClick={()=>setShowNew(false)}>✕</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="stat-mini-grid">
             {[
-              {label:"Jami leadlar (Ads)", val:totalLeads, color:'var(--text-main)'},
-              {label:"Sarflandi", val:fmtSum(totalSpent), color:'#f59e0b'},
+              {label:"Faol kampaniyalar", val:actCount, color:'#01a750'},
+              {label:"Jami leadlar", val:totLeads, color:'var(--text-main)'},
+              {label:"Sarflandi", val:fmtSum(totSpent), color:'#f59e0b'},
               {label:"O'rtacha CPL", val:fmtSum(avgCPL), color:'#3b82f6'},
-              {label:"Jami qamrov", val:fmt(totalReach), color:'var(--text-main)'},
-            ].map((m, i) => (
+            ].map((m,i) => (
               <div key={i} className="stat-mini">
                 <div className="stat-mini-label">{m.label}</div>
-                <div className="stat-mini-value" style={{color:m.color, fontSize: i===1||i===2 ? '16px' : '26px', marginTop: i===1||i===2 ? '8px':'0'}}>{m.val}</div>
+                <div className="stat-mini-value" style={{color:m.color, fontSize:i>=2?'16px':'26px', lineHeight:i>=2?1.4:1, marginTop:i>=2?'4px':0}}>{m.val}</div>
               </div>
             ))}
           </div>
@@ -1117,40 +1156,74 @@ tr:hover td{background:var(--surface-variant);}
           <div style={{marginBottom:'24px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px'}}>
               <div style={{width:'32px', height:'32px', background:'#1877F2', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                <span style={{color:'#fff', fontWeight:900, fontSize:'15px', fontFamily:'Georgia, serif'}}>f</span>
+                <span style={{color:'#fff', fontWeight:900, fontSize:'15px', fontFamily:'Georgia,serif'}}>f</span>
               </div>
               <h3 style={{fontSize:'15px', fontWeight:700}}>Facebook Ads Kampaniyalar</h3>
+              <span style={{fontSize:'11px', color:'var(--text-muted)', marginLeft:'auto'}}>{campaigns.length} ta kampaniya</span>
             </div>
-            <div className="card" style={{padding:0, overflow:'hidden'}}>
-              <table>
-                <thead><tr><th>Kampaniya</th><th>Holat</th><th>Byudjet</th><th>Sarflandi</th><th>Leadlar</th><th>CPL</th><th>Qamrov</th></tr></thead>
-                <tbody>
-                  {fbCampaigns.map(c => {
-                    const pct = Math.round(c.spent/c.budget*100);
-                    return (
-                      <tr key={c.id}>
-                        <td style={{fontWeight:600, maxWidth:'180px'}}>{c.name}</td>
-                        <td>
-                          <span style={{padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
-                            background: c.status==='active' ? 'rgba(1,167,80,0.12)' : 'rgba(245,158,11,0.1)',
-                            color: c.status==='active' ? '#01a750' : '#f59e0b',
-                            border: `1px solid ${c.status==='active' ? 'rgba(1,167,80,0.3)' : 'rgba(245,158,11,0.3)'}`
-                          }}>{c.status==='active' ? 'Faol' : "To'xtatildi"}</span>
-                        </td>
-                        <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{fmtSum(c.budget)}</td>
-                        <td>
-                          <div style={{fontSize:'12px'}}>{fmtSum(c.spent)}</div>
-                          <div className="budget-bar" style={{width:'80px', marginTop:'5px'}}><div className="budget-bar-fill" style={{width:pct+'%'}}></div></div>
-                          <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px'}}>{pct}%</div>
-                        </td>
-                        <td><span style={{fontSize:'18px', fontWeight:700, color:'var(--accent)'}}>{c.leads}</span></td>
-                        <td style={{fontSize:'12px'}}>{fmtSum(c.cpl)}</td>
-                        <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{fmt(c.reach)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {campaigns.length === 0 && (
+              <div className="card" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
+                Kampaniya yo'q. Yuqoridagi "Yangi Kampaniya" tugmasini bosing.
+              </div>
+            )}
+            <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+              {campaigns.map(c => {
+                const pct = c.budget > 0 ? Math.min(100, Math.round(c.spent/c.budget*100)) : 0;
+                const isEditingBudget = editBudget?.id === c.id;
+                return (
+                  <div key={c.id} className="card" style={{padding:'16px 20px'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px'}}>
+                      <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                        <span style={{fontWeight:700, fontSize:'14px'}}>{c.name}</span>
+                        <span style={{padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
+                          background:c.status==='active'?'rgba(1,167,80,0.12)':'rgba(245,158,11,0.1)',
+                          color:c.status==='active'?'#01a750':'#f59e0b',
+                          border:`1px solid ${c.status==='active'?'rgba(1,167,80,0.3)':'rgba(245,158,11,0.3)'}`}}>
+                          {c.status==='active'?'Faol':"To'xtatildi"}
+                        </span>
+                      </div>
+                      <div style={{display:'flex', gap:'6px'}}>
+                        <button className="btn-outline" style={{padding:'5px 12px', fontSize:'11px'}} onClick={()=>toggleStatus(c.id)}>
+                          {c.status==='active'?"To'xtatish":'Ishga tushirish'}
+                        </button>
+                        <button className="btn-danger" style={{padding:'5px 9px', fontSize:'12px'}} onClick={()=>deleteCamp(c.id)}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px', marginBottom:'12px'}}>
+                      {[
+                        {label:'Leadlar', val:c.leads, color:'var(--accent)'},
+                        {label:'CPL', val:fmtSum(c.cpl), color:'var(--text-main)'},
+                        {label:'Qamrov', val:fmt(c.reach), color:'#3b82f6'},
+                        {label:'Byudjet %', val:pct+'%', color:pct>=90?'#ef4444':pct>=70?'#f59e0b':'#01a750'},
+                      ].map((s,i) => (
+                        <div key={i} style={{textAlign:'center', padding:'9px', background:'var(--bg-base)', borderRadius:'7px', border:'1px solid var(--border-light)'}}>
+                          <div style={{fontSize:'16px', fontWeight:700, color:s.color}}>{s.val}</div>
+                          <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
+                        <span style={{fontSize:'11px', color:'var(--text-muted)'}}>
+                          Sarflandi: {fmtSum(c.spent)} / {isEditingBudget ? (
+                            <span>
+                              <input type="number" style={{background:'var(--surface-variant)',border:'1px solid var(--border-hover)',borderRadius:'4px',padding:'1px 6px',color:'var(--text-main)',fontSize:'11px',width:'110px'}} value={editBudget.val} onChange={e=>setEditBudget({...editBudget,val:e.target.value})} onKeyDown={e=>{if(e.key==='Enter')saveBudget();if(e.key==='Escape')setEditBudget(null);}} autoFocus />
+                              <button onClick={saveBudget} style={{marginLeft:'4px',fontSize:'11px',background:'var(--primary-container)',color:'#fff',border:'none',borderRadius:'4px',padding:'2px 7px',cursor:'pointer'}}>✓</button>
+                              <button onClick={()=>setEditBudget(null)} style={{marginLeft:'3px',fontSize:'11px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
+                            </span>
+                          ) : (
+                            <span>{fmtSum(c.budget)} <button onClick={()=>setEditBudget({id:c.id,val:c.budget})} style={{fontSize:'10px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:'0 3px',verticalAlign:'middle'}}>✎</button></span>
+                          )}
+                        </span>
+                        <span style={{fontSize:'11px', fontWeight:700, color:pct>=90?'#ef4444':pct>=70?'#f59e0b':'var(--text-muted)'}}>{pct}%</span>
+                      </div>
+                      <div className="budget-bar" style={{height:'6px'}}>
+                        <div className="budget-bar-fill" style={{width:pct+'%', background:pct>=90?'#ef4444':pct>=70?'#f59e0b':'#1877F2', transition:'width 0.4s ease'}}></div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -1167,20 +1240,23 @@ tr:hover td{background:var(--surface-variant);}
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'16px'}}>
                     <div>
                       <div style={{fontWeight:700, fontSize:'15px', color:'#0088cc'}}>{ch.name}</div>
-                      <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'3px'}}>{ch.joinRate}</div>
+                      <div style={{fontSize:'11px', color:'#01a750', marginTop:'3px', fontWeight:600}}>{ch.joinRate}</div>
                     </div>
                     <span style={{background:'rgba(0,136,204,0.12)', color:'#0088cc', padding:'3px 10px', borderRadius:'20px', fontSize:'10px', fontWeight:700, border:'1px solid rgba(0,136,204,0.3)'}}>FAOL</span>
                   </div>
                   <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
                     {[
-                      {label:'Obunachi', val:fmt(ch.subscribers), color:'var(--text-main)'},
-                      {label:'Postlar', val:ch.posts, color:'var(--text-main)'},
-                      {label:'Qamrov', val:fmt(ch.reach), color:'#0088cc'},
-                      {label:'Kliklar', val:fmt(ch.clicks), color:'#01a750'},
+                      {label:'Obunachi', val:fmt(ch.subscribers), color:'var(--text-main)', icon:'group'},
+                      {label:'Postlar', val:ch.posts, color:'var(--text-main)', icon:'article'},
+                      {label:'Qamrov', val:fmt(ch.reach), color:'#0088cc', icon:'visibility'},
+                      {label:'Kliklar', val:fmt(ch.clicks), color:'#01a750', icon:'ads_click'},
                     ].map((s,i) => (
-                      <div key={i} style={{padding:'10px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', textAlign:'center'}}>
-                        <div style={{fontSize:'20px', fontWeight:700, color:s.color}}>{s.val}</div>
-                        <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'3px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
+                      <div key={i} style={{padding:'12px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', display:'flex', alignItems:'center', gap:'10px'}}>
+                        <span className="material-symbols-outlined" style={{fontSize:'18px', color:s.color, opacity:0.7}}>{s.icon}</span>
+                        <div>
+                          <div style={{fontSize:'18px', fontWeight:700, color:s.color, lineHeight:1}}>{s.val}</div>
+                          <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1464,7 +1540,7 @@ tr:hover td{background:var(--surface-variant);}
       const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); };
       const handleDrop = (e, targetStatus) => { e.preventDefault(); const leadId = e.dataTransfer.getData('leadId'); if(leadId) handleStatusChange(leadId, targetStatus); };
 
-      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', students: "O'quvchilar", callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar' };
+      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar' };
 
       // Filtered leads for search
       const filteredActiveLeads = searchQuery.trim()
@@ -1488,9 +1564,6 @@ tr:hover td{background:var(--surface-variant);}
               </div>
               <div className={`nav-item ${activeTab==='leads'?'active':''}`} onClick={()=>{setActiveTab('leads');setSelectedLeadId(null);}}>
                 <Ico n="funnel" s={17}/> Sotuv Varonkasi
-              </div>
-              <div className={`nav-item ${activeTab==='students'?'active':''}`} onClick={()=>{setActiveTab('students');setSelectedLeadId(null);}}>
-                <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>school</span> O'quvchilar
               </div>
               <div className={`nav-item ${activeTab==='callcenter'?'active':''}`} onClick={()=>{setActiveTab('callcenter');setSelectedLeadId(null);}}>
                 <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>call</span> Call Center
@@ -1726,9 +1799,7 @@ tr:hover td{background:var(--surface-variant);}
               {/* TAB CONTENT */}
               {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} />}
 
-              {activeTab === 'students' && <StudentsModule />}
-
-              {activeTab === 'callcenter' && <CallCenterModule leads={leads} users={users} />}
+              {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} />}
 
               {activeTab === 'reports' && role === 'CEO' && <HisobotlarModule leads={leads} />}
 
