@@ -246,6 +246,8 @@ tr:hover td{background:var(--surface-variant);}
 /* ===== STAT MINI CARDS ===== */
 .stat-mini-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
 .stat-mini{background:var(--bg-surface);border:1px solid var(--outline-variant);border-radius:var(--radius-lg);padding:16px 18px;}
+.stat-mini.clickable{cursor:pointer;transition:border-color 0.15s,background 0.15s,transform 0.1s;}
+.stat-mini.clickable:hover{border-color:var(--border-hover);background:var(--bg-hover);transform:translateY(-1px);}
 .stat-mini-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);font-weight:600;margin-bottom:6px;font-family:var(--font-label);}
 .stat-mini-value{font-size:26px;font-weight:700;letter-spacing:-0.03em;}
 
@@ -683,12 +685,13 @@ tr:hover td{background:var(--surface-variant);}
     };
 
     // ===== CALL CENTER MODULE (fully functional) =====
-    const CallCenterModule = ({ leads, setLeads, globalCallLimit }) => {
+    const CallCenterModule = ({ leads, setLeads, globalCallLimit, setSelectedLeadId }) => {
       const [filterOp, setFilterOp] = useState('all');
       const [filterSt, setFilterSt] = useState('all');
       const [showAdd, setShowAdd] = useState(false);
       const [selLead, setSelLead] = useState('');
       const [callNote, setCallNote] = useState('');
+      const [drillDown, setDrillDown] = useState(null);
 
       const allCalls = [];
       leads.forEach(lead => {
@@ -715,6 +718,17 @@ tr:hover td{background:var(--surface-variant);}
       const missed = allCalls.filter(c => c.status === 'missed').length;
       const activeLeadsCount = leads.filter(l => l.actualCallAttempts > 0).length;
       const operatorNames = [...new Set(leads.map(l => l.owner))];
+
+      // Drill-down items for "Faol mijozlar" card
+      const activeCallLeads = leads.filter(l => l.actualCallAttempts > 0).map(l => {
+        const lastCallLog = [...l.chatLogs].reverse().find(lg => lg.text && (lg.text.includes('📞') || lg.text.includes('⛔')));
+        return {
+          leadId: String(l.id), leadName: l.name, phone: l.phone, operator: l.owner,
+          date: lastCallLog?.date || l.chatLogs[0]?.date || '',
+          note: `${l.actualCallAttempts} ta urinish · ${l.status}`,
+          status: l.status === 'LOST' ? 'missed' : 'answered'
+        };
+      });
 
       const logCall = () => {
         if(!selLead) return alert("Mijozni tanlang!");
@@ -776,12 +790,16 @@ tr:hover td{background:var(--surface-variant);}
 
           <div className="stat-mini-grid">
             {[
-              {label:"Jami urinishlar", val:totalAttempts, color:'var(--text-main)'},
-              {label:"Javob berildi", val:answered, color:'#01a750'},
-              {label:"O'tkazib yuborildi", val:missed, color:'#ef4444'},
-              {label:"Faol mijozlar", val:activeLeadsCount, color:'#3b82f6'},
+              {label:"Jami urinishlar", val:totalAttempts, color:'var(--text-main)',
+                onClick: () => setDrillDown({ title:"Jami qo'ng'iroqlar ro'yxati", items: allCalls })},
+              {label:"Javob berildi", val:answered, color:'#01a750',
+                onClick: () => setDrillDown({ title:"Javob berilgan qo'ng'iroqlar", items: allCalls.filter(c => c.status === 'answered') })},
+              {label:"O'tkazib yuborildi", val:missed, color:'#ef4444',
+                onClick: () => setDrillDown({ title:"O'tkazib yuborilgan qo'ng'iroqlar", items: allCalls.filter(c => c.status === 'missed') })},
+              {label:"Faol mijozlar", val:activeLeadsCount, color:'#3b82f6',
+                onClick: () => setDrillDown({ title:"Qo'ng'iroq qilingan mijozlar", items: activeCallLeads })},
             ].map((m, i) => (
-              <div key={i} className="stat-mini">
+              <div key={i} className="stat-mini clickable" onClick={m.onClick} title="Ro'yxatni ko'rish uchun bosing">
                 <div className="stat-mini-label">{m.label}</div>
                 <div className="stat-mini-value" style={{color:m.color}}>{m.val}</div>
               </div>
@@ -890,6 +908,69 @@ tr:hover td{background:var(--surface-variant);}
               </tbody>
             </table>
           </div>
+
+          {/* ===== DRILL-DOWN MODAL ===== */}
+          {drillDown && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+              onClick={() => setDrillDown(null)}>
+              <div style={{background:'var(--bg-surface)',borderRadius:'14px',width:'740px',maxWidth:'95vw',maxHeight:'82vh',display:'flex',flexDirection:'column',boxShadow:'0 12px 48px rgba(0,0,0,0.55)'}}
+                onClick={e => e.stopPropagation()}>
+
+                {/* Header */}
+                <div style={{padding:'18px 22px',borderBottom:'1px solid var(--outline-variant)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                  <div style={{fontWeight:700,fontSize:'15px'}}>{drillDown.title}</div>
+                  <button onClick={() => setDrillDown(null)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:'22px',lineHeight:1,padding:'0 4px'}}>✕</button>
+                </div>
+
+                {/* Table */}
+                <div style={{overflowY:'auto',flex:1}}>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr style={{background:'var(--bg-hover)',position:'sticky',top:0}}>
+                        {['Vaqt','Mijoz','Telefon','Holat','Izoh'].map(h => (
+                          <th key={h} style={{padding:'10px 16px',textAlign:'left',fontSize:'11px',color:'var(--text-muted)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {drillDown.items.length === 0 && (
+                        <tr><td colSpan="5" style={{textAlign:'center',padding:'40px',color:'var(--text-muted)',fontSize:'13px'}}>Ma'lumot topilmadi</td></tr>
+                      )}
+                      {drillDown.items.map((c, i) => (
+                        <tr key={i}
+                          style={{borderBottom:'1px solid var(--outline-variant)',cursor:'pointer',transition:'background 0.1s'}}
+                          onClick={() => { setSelectedLeadId(c.leadId); setDrillDown(null); }}
+                          onMouseEnter={e => e.currentTarget.style.background='var(--bg-hover)'}
+                          onMouseLeave={e => e.currentTarget.style.background=''}>
+                          <td style={{padding:'10px 16px',fontSize:'11px',color:'var(--text-muted)',whiteSpace:'nowrap'}}>{c.date ? new Date(c.date).toLocaleString() : '—'}</td>
+                          <td style={{padding:'10px 16px',fontWeight:600,fontSize:'13px',color:'var(--primary)'}}>{c.leadName}</td>
+                          <td style={{padding:'10px 16px',fontSize:'12px',color:'var(--text-muted)'}}>{c.phone}</td>
+                          <td style={{padding:'10px 16px'}}>
+                            <span style={{padding:'2px 9px',borderRadius:'20px',fontSize:'10px',fontWeight:700,textTransform:'uppercase',
+                              background:c.status==='answered'?'rgba(1,167,80,0.12)':'rgba(239,68,68,0.1)',
+                              color:c.status==='answered'?'#01a750':'#ef4444',
+                              border:`1px solid ${c.status==='answered'?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`}}>
+                              {c.status==='answered' ? 'Javob' : "O'tkazildi"}
+                            </span>
+                          </td>
+                          <td style={{padding:'10px 16px',fontSize:'11px',color:'var(--text-muted)',maxWidth:'180px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.note}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer */}
+                <div style={{padding:'11px 22px',borderTop:'1px solid var(--outline-variant)',fontSize:'12px',color:'var(--text-muted)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                  <span>Jami: <b style={{color:'var(--text-main)'}}>{drillDown.items.length}</b> ta yozuv</span>
+                  <span style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:'13px'}}>touch_app</span>
+                    Mijoz ustiga bosing — kartasini ochadi
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
@@ -1799,7 +1880,7 @@ tr:hover td{background:var(--surface-variant);}
               {/* TAB CONTENT */}
               {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} />}
 
-              {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} />}
+              {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} />}
 
               {activeTab === 'reports' && role === 'CEO' && <HisobotlarModule leads={leads} />}
 
