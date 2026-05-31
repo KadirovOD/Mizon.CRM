@@ -537,23 +537,69 @@ tr:hover td{background:var(--surface-variant);}
     // ===== USER MANAGEMENT =====
     const UserManagement = ({ users, setUsers }) => {
       const [isAdding, setIsAdding] = useState(false);
-      const [editId, setEditId] = useState(null);
-      const [form, setForm] = useState({username:'', password:'', role:'MANAGER'});
-      const saveNewUser = () => {
-        if(!form.username||!form.password) return alert("Barcha qatorlarni to'ldiring!");
-        setUsers([...users,{...form,id:Date.now().toString()}]);
-        setIsAdding(false); setForm({username:'',password:'',role:'MANAGER'});
+      const [editId,   setEditId]   = useState(null);
+      const [form,     setForm]     = useState({username:'', password:'', role:'MANAGER'});
+      const [apiUsers, setApiUsers] = useState(null); // null = not fetched yet
+      const [saving,   setSaving]   = useState(false);
+      const token = localStorage.getItem('mizon_token');
+      const authH = token ? {'Content-Type':'application/json','Authorization':'Bearer '+token} : {'Content-Type':'application/json'};
+
+      // Load users from API
+      const loadApiUsers = () => {
+        if (!token) return;
+        fetch('/api/company/users', {headers: authH})
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d)) setApiUsers(d); })
+          .catch(() => {});
       };
-      const deleteU = (username) => setUsers(users.filter(u=>u.username!==username));
-      const saveEdit = () => { setUsers(users.map(u=>u.username===form.username?form:u)); setEditId(null); };
+      useEffect(() => { loadApiUsers(); }, []);
+
+      const displayUsers = apiUsers !== null ? apiUsers : users;
+
+      const saveNewUser = async () => {
+        if (!form.username || !form.password) return alert("Barcha qatorlarni to'ldiring!");
+        setSaving(true);
+        if (token) {
+          const r = await fetch('/api/company/users', {method:'POST', headers:authH, body:JSON.stringify(form)});
+          const d = await r.json();
+          if (!r.ok) { alert(d.error || 'Xato'); setSaving(false); return; }
+          loadApiUsers();
+        } else {
+          setUsers([...users, {...form, id:Date.now().toString()}]);
+        }
+        setSaving(false); setIsAdding(false); setForm({username:'',password:'',role:'MANAGER'});
+      };
+
+      const deleteU = async (u) => {
+        if (!window.confirm(`"${u.username}" ni o'chirasizmi?`)) return;
+        if (token && u.id) {
+          await fetch(`/api/company/users/${u.id}`, {method:'DELETE', headers:authH});
+          loadApiUsers();
+        } else {
+          setUsers(users.filter(us => us.username !== u.username));
+        }
+      };
+
+      const saveEdit = async () => {
+        if (token && editId) {
+          const r = await fetch(`/api/company/users/${editId}`, {method:'PUT', headers:authH, body:JSON.stringify(form)});
+          if (!r.ok) { const d=await r.json(); alert(d.error||'Xato'); return; }
+          loadApiUsers();
+        } else {
+          setUsers(users.map(u => u.username===form.username ? form : u));
+        }
+        setEditId(null);
+      };
+
       return (
         <div style={{marginTop:'8px'}}>
           <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-            {users.map(u => {
-              if(editId===u.username) return (
-                <div key={u.username} style={{padding:'12px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px', display:'flex', gap:'8px'}}>
-                  <input className="input-base" style={{marginBottom:0}} value={form.username} disabled />
-                  <input className="input-base" style={{marginBottom:0}} placeholder="Parol" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
+            {displayUsers.map(u => {
+              const uid = u.id || u.username;
+              if (editId === uid) return (
+                <div key={uid} style={{padding:'12px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px', display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                  <input className="input-base" style={{marginBottom:0,flex:1,minWidth:'100px'}} value={form.username} disabled />
+                  <input className="input-base" style={{marginBottom:0,flex:1,minWidth:'120px'}} placeholder="Yangi parol (ixtiyoriy)" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
                   <select className="input-base" style={{marginBottom:0}} value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                     <option value="MANAGER">MANAGER</option>
                     <option value="CEO">CEO</option>
@@ -563,17 +609,17 @@ tr:hover td{background:var(--surface-variant);}
                 </div>
               );
               return (
-                <div key={u.username} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 14px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
+                <div key={uid} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 14px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
                   <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                     <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px'}}>{u.username[0].toUpperCase()}</div>
                     <div>
                       <div style={{fontWeight:600, color:'var(--accent)'}}>{u.username}</div>
-                      <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{u.role} · Parol: {u.password}</div>
+                      <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{u.role}{u.full_name && u.full_name!==u.username ? ' · '+u.full_name : ''}</div>
                     </div>
                   </div>
                   <div style={{display:'flex', gap:'8px'}}>
-                    <button className="btn-outline" style={{padding:'6px 12px'}} onClick={()=>{setEditId(u.username);setForm(u);}}>Tahrirlash</button>
-                    <button className="btn-danger" style={{padding:'6px 12px'}} onClick={()=>deleteU(u.username)}>O'chirish</button>
+                    <button className="btn-outline" style={{padding:'6px 12px'}} onClick={()=>{setEditId(uid);setForm({username:u.username,password:'',role:u.role||'MANAGER'});}}>Tahrirlash</button>
+                    <button className="btn-danger" style={{padding:'6px 12px'}} onClick={()=>deleteU(u)}>O'chirish</button>
                   </div>
                 </div>
               );
@@ -583,13 +629,13 @@ tr:hover td{background:var(--surface-variant);}
             <div style={{padding:'16px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px', marginTop:'14px', display:'flex', flexDirection:'column', gap:'6px'}}>
               <span className="label-sm">Yangi Xodim Ma'lumotlari</span>
               <input className="input-base" placeholder="Login (username)" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} />
-              <input className="input-base" placeholder="Maxfiy parol" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
+              <input className="input-base" placeholder="Maxfiy parol" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
               <select className="input-base" value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                 <option value="MANAGER">MANAGER (Sotuvchi)</option>
                 <option value="CEO">CEO (Boshqaruvchi)</option>
               </select>
               <div style={{display:'flex', gap:'8px'}}>
-                <button className="btn-primary" onClick={saveNewUser}>Qo'shish</button>
+                <button className="btn-primary" onClick={saveNewUser} disabled={saving}>{saving?'Saqlanmoqda...':'Qo\'shish'}</button>
                 <button className="btn-outline" onClick={()=>setIsAdding(false)}>Bekor qilish</button>
               </div>
             </div>
@@ -1349,19 +1395,308 @@ tr:hover td{background:var(--surface-variant);}
       );
     };
 
+    // ===== SUPER ADMIN PANEL =====
+    const SuperAdminPanel = ({ authUser, onLogout }) => {
+      const [companies,    setCompanies]    = useState([]);
+      const [loading,      setLoading]      = useState(true);
+      const [view,         setView]         = useState('list'); // 'list' | 'create' | 'detail'
+      const [selCompany,   setSelCompany]   = useState(null);
+      const [compUsers,    setCompUsers]    = useState([]);
+      const [showAddUser,  setShowAddUser]  = useState(false);
+      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:''});
+      const [userForm,     setUserForm]     = useState({username:'', password:'', role:'MANAGER', full_name:''});
+      const [msg,          setMsg]          = useState('');
+      const [saving,       setSaving]       = useState(false);
+
+      const token = localStorage.getItem('mizon_token');
+      const H = {'Content-Type':'application/json','Authorization':'Bearer '+token};
+
+      const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
+
+      const loadCompanies = async () => {
+        setLoading(true);
+        try {
+          const r = await fetch('/api/superadmin/companies', {headers:H});
+          const d = await r.json();
+          setCompanies(Array.isArray(d) ? d : []);
+        } catch(e) { flash('Xato: '+e.message); }
+        setLoading(false);
+      };
+
+      const loadCompanyUsers = async (comp) => {
+        const r = await fetch(`/api/superadmin/companies/${comp.id}/users`, {headers:H});
+        setCompUsers(await r.json());
+      };
+
+      useEffect(() => { loadCompanies(); }, []);
+
+      const createCompany = async (e) => {
+        e.preventDefault(); setSaving(true);
+        const r = await fetch('/api/superadmin/companies', {method:'POST', headers:H, body:JSON.stringify(createForm)});
+        const d = await r.json(); setSaving(false);
+        if (!r.ok) return flash('❌ '+d.error);
+        flash('✅ '+d.message);
+        setView('list'); loadCompanies();
+        setCreateForm({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:''});
+      };
+
+      const toggleActive = async (comp) => {
+        await fetch(`/api/superadmin/companies/${comp.id}`, {method:'PUT', headers:H, body:JSON.stringify({is_active:!comp.is_active})});
+        loadCompanies();
+        if (selCompany?.id === comp.id) setSelCompany({...selCompany, is_active:!comp.is_active});
+      };
+
+      const deleteCompany = async (comp) => {
+        if (!window.confirm(`"${comp.name}" kompaniyasini va barcha ma'lumotlarini o'chirasizmi?`)) return;
+        await fetch(`/api/superadmin/companies/${comp.id}`, {method:'DELETE', headers:H});
+        loadCompanies(); setView('list');
+      };
+
+      const openDetail = async (comp) => {
+        setSelCompany(comp); setView('detail');
+        await loadCompanyUsers(comp);
+      };
+
+      const addUser = async (e) => {
+        e.preventDefault(); setSaving(true);
+        const r = await fetch(`/api/superadmin/companies/${selCompany.id}/users`, {method:'POST', headers:H, body:JSON.stringify(userForm)});
+        const d = await r.json(); setSaving(false);
+        if (!r.ok) return flash('❌ '+d.error);
+        setShowAddUser(false); setUserForm({username:'', password:'', role:'MANAGER', full_name:''});
+        loadCompanyUsers(selCompany);
+      };
+
+      const deleteUser = async (uid) => {
+        if (!window.confirm("Foydalanuvchini o'chirish?")) return;
+        await fetch(`/api/superadmin/users/${uid}`, {method:'DELETE', headers:H});
+        loadCompanyUsers(selCompany);
+      };
+
+      const planBadge = (plan) => ({basic:'#3b82f6', pro:'#8b5cf6', enterprise:'#f59e0b'}[plan]||'#6b7280');
+
+      return (
+        <div style={{minHeight:'100vh', background:'var(--bg-base)', fontFamily:'var(--font-body)'}}>
+          {/* Header */}
+          <div style={{background:'var(--bg-surface)', borderBottom:'1px solid var(--outline-variant)', padding:'0 28px', display:'flex', alignItems:'center', justifyContent:'space-between', height:'56px', flexShrink:0}}>
+            <div style={{display:'flex', alignItems:'center', gap:'14px'}}>
+              <div style={{width:'32px', height:'32px', background:'linear-gradient(135deg,#6366f1,#4f46e5)', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                <span style={{fontSize:'14px', fontWeight:800, color:'#fff'}}>S</span>
+              </div>
+              <div>
+                <div style={{fontWeight:700, fontSize:'15px', letterSpacing:'-0.3px'}}>Mizon Super Admin</div>
+                <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Platforma boshqaruvi</div>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+              {view !== 'list' && <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('list')}>← Orqaga</button>}
+              <button className="btn-primary" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('create')}>+ Kompaniya qo'shish</button>
+              <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={onLogout}>Chiqish</button>
+            </div>
+          </div>
+
+          {/* Flash message */}
+          {msg && <div style={{background:msg.startsWith('✅')?'rgba(1,167,80,0.12)':'rgba(239,68,68,0.1)', border:`1px solid ${msg.startsWith('✅')?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`, color:msg.startsWith('✅')?'#01a750':'#ef4444', padding:'12px 28px', fontSize:'13px'}}>{msg}</div>}
+
+          <div style={{padding:'28px', maxWidth:'1100px', margin:'0 auto'}}>
+
+            {/* ── CREATE VIEW ── */}
+            {view === 'create' && (
+              <div>
+                <div style={{fontWeight:700, fontSize:'18px', marginBottom:'20px'}}>Yangi kompaniya yaratish</div>
+                <form onSubmit={createCompany} style={{background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'14px', padding:'24px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px'}}>
+                  <div style={{gridColumn:'1/-1', fontWeight:600, fontSize:'13px', color:'var(--text-secondary)', borderBottom:'1px solid var(--outline-variant)', paddingBottom:'10px', marginBottom:'4px'}}>Kompaniya ma'lumotlari</div>
+                  <div>
+                    <span className="label-sm">Kompaniya nomi *</span>
+                    <input className="input-base" placeholder="Avtosalon Tashkent" value={createForm.name} onChange={e=>setCreateForm({...createForm,name:e.target.value})} required />
+                  </div>
+                  <div>
+                    <span className="label-sm">URL Slug * (lotin harflar, tire)</span>
+                    <input className="input-base" placeholder="avtosalon-tashkent" value={createForm.slug}
+                      onChange={e=>setCreateForm({...createForm,slug:e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')})} required />
+                    {createForm.slug && <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>Mijoz URL: <b style={{color:'var(--primary)'}}>?company={createForm.slug}</b></div>}
+                  </div>
+                  <div>
+                    <span className="label-sm">Tarif rejasi</span>
+                    <select className="input-base" value={createForm.plan} onChange={e=>setCreateForm({...createForm,plan:e.target.value})}>
+                      <option value="basic">Basic (bepul)</option>
+                      <option value="pro">Pro</option>
+                      <option value="enterprise">Enterprise</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span className="label-sm">Qo'ng'iroq limiti</span>
+                    <input className="input-base" type="number" min="1" max="50" value={createForm.call_limit} onChange={e=>setCreateForm({...createForm,call_limit:parseInt(e.target.value)||5})} />
+                  </div>
+                  <div style={{gridColumn:'1/-1', fontWeight:600, fontSize:'13px', color:'var(--text-secondary)', borderBottom:'1px solid var(--outline-variant)', paddingBottom:'10px', marginTop:'6px', marginBottom:'4px'}}>CEO (admin) akkaunti</div>
+                  <div>
+                    <span className="label-sm">CEO username *</span>
+                    <input className="input-base" placeholder="ceo_avtosalon" value={createForm.admin_username} onChange={e=>setCreateForm({...createForm,admin_username:e.target.value})} required />
+                  </div>
+                  <div>
+                    <span className="label-sm">CEO paroli *</span>
+                    <input className="input-base" type="password" placeholder="Xavfsiz parol" value={createForm.admin_password} onChange={e=>setCreateForm({...createForm,admin_password:e.target.value})} required />
+                  </div>
+                  <div style={{gridColumn:'1/-1', display:'flex', gap:'10px', marginTop:'6px'}}>
+                    <button className="btn-primary" type="submit" disabled={saving} style={{padding:'10px 24px'}}>{saving?'Yaratilmoqda...':'Kompaniya yaratish'}</button>
+                    <button className="btn-outline" type="button" onClick={()=>setView('list')} style={{padding:'10px 24px'}}>Bekor qilish</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* ── DETAIL VIEW ── */}
+            {view === 'detail' && selCompany && (
+              <div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'12px'}}>
+                  <div>
+                    <div style={{fontWeight:700, fontSize:'20px'}}>{selCompany.name}</div>
+                    <div style={{fontSize:'13px', color:'var(--text-muted)', marginTop:'4px'}}>
+                      URL: <code style={{background:'var(--surface-variant)', padding:'2px 8px', borderRadius:'4px', fontSize:'12px'}}>?company={selCompany.slug}</code>
+                      <span style={{marginLeft:'12px', padding:'2px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:700, background:`${planBadge(selCompany.plan)}22`, color:planBadge(selCompany.plan)}}>{selCompany.plan?.toUpperCase()}</span>
+                    </div>
+                  </div>
+                  <div style={{display:'flex', gap:'8px'}}>
+                    <button className={selCompany.is_active ? 'btn-outline' : 'btn-primary'} style={{padding:'7px 14px', fontSize:'12px'}} onClick={()=>toggleActive(selCompany)}>
+                      {selCompany.is_active ? '⛔ Bloklash' : '✅ Faollashtirish'}
+                    </button>
+                    <button className="btn-danger" style={{padding:'7px 14px', fontSize:'12px'}} onClick={()=>deleteCompany(selCompany)}>O'chirish</button>
+                  </div>
+                </div>
+
+                {/* Stats row */}
+                <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px', marginBottom:'22px'}}>
+                  {[
+                    {label:'Xodimlar', val:compUsers.length, color:'var(--primary)'},
+                    {label:'Qo\'ng\'iroq limiti', val:selCompany.call_limit, color:'#3b82f6'},
+                    {label:'Holat', val:selCompany.is_active?'Faol':'Bloklangan', color:selCompany.is_active?'#01a750':'#ef4444'},
+                  ].map((s,i) => (
+                    <div key={i} className="stat-mini">
+                      <div className="stat-mini-label">{s.label}</div>
+                      <div className="stat-mini-value" style={{color:s.color, fontSize:'20px'}}>{s.val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Users */}
+                <div className="card" style={{padding:0, overflow:'hidden'}}>
+                  <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <span style={{fontWeight:600, fontSize:'14px'}}>Xodimlar ({compUsers.length})</span>
+                    <button className="btn-primary" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setShowAddUser(!showAddUser)}>+ Xodim qo'shish</button>
+                  </div>
+                  {showAddUser && (
+                    <form onSubmit={addUser} style={{padding:'16px 20px', background:'rgba(1,167,80,0.04)', borderBottom:'1px solid var(--outline-variant)', display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:'10px', alignItems:'end'}}>
+                      <div><span className="label-sm">Username *</span><input className="input-base" style={{marginBottom:0}} placeholder="menejer_2" value={userForm.username} onChange={e=>setUserForm({...userForm,username:e.target.value})} required /></div>
+                      <div><span className="label-sm">Parol *</span><input className="input-base" style={{marginBottom:0}} type="password" placeholder="••••••" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})} required /></div>
+                      <div><span className="label-sm">Rol</span>
+                        <select className="input-base" style={{marginBottom:0}} value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
+                          <option value="MANAGER">MANAGER</option><option value="CEO">CEO</option>
+                        </select>
+                      </div>
+                      <div style={{display:'flex', gap:'6px', paddingBottom:'1px'}}>
+                        <button className="btn-primary" type="submit" disabled={saving}>{saving?'...':'Qo\'shish'}</button>
+                        <button className="btn-outline" type="button" onClick={()=>setShowAddUser(false)}>✕</button>
+                      </div>
+                    </form>
+                  )}
+                  <table><thead><tr><th>Username</th><th>Rol</th><th>Qo'shilgan</th><th></th></tr></thead>
+                    <tbody>
+                      {compUsers.map(u => (
+                        <tr key={u.id}>
+                          <td style={{fontWeight:600}}><span className="avatar" style={{width:'24px',height:'24px',fontSize:'10px',display:'inline-flex',marginRight:'8px'}}>{u.username[0].toUpperCase()}</span>{u.username}</td>
+                          <td><span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:u.role==='CEO'?'rgba(1,167,80,0.12)':'var(--surface-variant)',color:u.role==='CEO'?'#01a750':'var(--text-secondary)'}}>{u.role}</span></td>
+                          <td style={{fontSize:'11px',color:'var(--text-muted)'}}>{new Date(u.created_at).toLocaleDateString()}</td>
+                          <td><button className="btn-danger" style={{padding:'4px 10px',fontSize:'11px'}} onClick={()=>deleteUser(u.id)}>O'chirish</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── LIST VIEW ── */}
+            {view === 'list' && (
+              <div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
+                  <div style={{fontWeight:700, fontSize:'20px'}}>Kompaniyalar ({companies.length})</div>
+                  <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px', width:'400px'}}>
+                    {[
+                      {label:'Jami', val:companies.length, color:'var(--text-main)'},
+                      {label:'Faol', val:companies.filter(c=>c.is_active).length, color:'#01a750'},
+                      {label:'Bloklangan', val:companies.filter(c=>!c.is_active).length, color:'#ef4444'},
+                    ].map((s,i) => (
+                      <div key={i} className="stat-mini" style={{padding:'10px 14px'}}>
+                        <div className="stat-mini-label">{s.label}</div>
+                        <div className="stat-mini-value" style={{color:s.color, fontSize:'20px'}}>{s.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                {loading && <div style={{textAlign:'center',padding:'60px',color:'var(--text-muted)'}}>Yuklanmoqda...</div>}
+                {!loading && companies.length === 0 && (
+                  <div style={{textAlign:'center', padding:'60px', color:'var(--text-muted)'}}>
+                    <div style={{fontSize:'40px', marginBottom:'12px'}}>🏢</div>
+                    <div style={{fontSize:'15px', fontWeight:600, marginBottom:'8px'}}>Hech qanday kompaniya yo'q</div>
+                    <div style={{fontSize:'13px'}}>Birinchi mijozni qo'shing</div>
+                    <button className="btn-primary" style={{marginTop:'16px', padding:'10px 24px'}} onClick={()=>setView('create')}>+ Kompaniya qo'shish</button>
+                  </div>
+                )}
+                <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                  {companies.map(c => (
+                    <div key={c.id} style={{background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px', padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap'}}>
+                      <div style={{display:'flex', alignItems:'center', gap:'14px', flex:1}}>
+                        <div style={{width:'42px', height:'42px', background:c.is_active?'rgba(1,167,80,0.12)':'var(--surface-variant)', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+                          <span style={{fontSize:'18px', fontWeight:800, color:c.is_active?'#01a750':'var(--text-muted)'}}>{c.name[0]?.toUpperCase()}</span>
+                        </div>
+                        <div>
+                          <div style={{fontWeight:700, fontSize:'15px'}}>{c.name}</div>
+                          <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'3px', display:'flex', gap:'12px', flexWrap:'wrap'}}>
+                            <span>🔗 <code style={{background:'var(--surface-variant)', padding:'1px 6px', borderRadius:'4px', fontSize:'11px'}}>?company={c.slug}</code></span>
+                            <span>👥 {c.user_count||0} xodim</span>
+                            <span>📋 {c.lead_count||0} lead</span>
+                            <span>📞 limit: {c.call_limit}</span>
+                            <span style={{padding:'1px 8px', borderRadius:'10px', fontSize:'10px', fontWeight:700, background:`${planBadge(c.plan)}22`, color:planBadge(c.plan)}}>{c.plan?.toUpperCase()}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                        <span style={{padding:'3px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:700, background:c.is_active?'rgba(1,167,80,0.12)':'rgba(239,68,68,0.1)', color:c.is_active?'#01a750':'#ef4444', border:`1px solid ${c.is_active?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`}}>
+                          {c.is_active?'Faol':'Bloklangan'}
+                        </span>
+                        <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>openDetail(c)}>Boshqarish</button>
+                        <button className={c.is_active?'btn-outline':'btn-primary'} style={{padding:'6px 12px', fontSize:'11px'}} onClick={()=>toggleActive(c)}>
+                          {c.is_active?'Bloklash':'Faollashtirish'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
     // ===== APP =====
     const App = () => {
       const urlParams = new URLSearchParams(window.location.search);
       const isFormMode = urlParams.get('leadForm') === 'true';
       const formPipeId = urlParams.get('pipe');
 
+      // ── URL params ───────────────────────────────────────────────
+      const companySlug    = urlParams.get('company')    || '';
+      const isSuperAdminMode = urlParams.get('superadmin') === 'true';
+
+      // ── Auth state ───────────────────────────────────────────────
       const [users, setUsers] = useState([
-        { username: 'ceo', password: '123', role: 'CEO' },
+        { username: 'ceo',       password: '123', role: 'CEO' },
         { username: 'menejer_1', password: '123', role: 'MANAGER' }
       ]);
       const [authUser, setAuthUser] = useState(() => {
         try { const s = localStorage.getItem('mizon_session'); return s ? JSON.parse(s) : null; } catch(e) { return null; }
       });
+      const [companyInfo, setCompanyInfo] = useState(null); // { name, slug, logo_url, is_active }
       const [darkMode, setDarkMode] = useState(() => {
         const s = localStorage.getItem('mizon_theme');
         return s ? s === 'dark' : true;
@@ -1371,7 +1706,9 @@ tr:hover td{background:var(--surface-variant);}
         localStorage.setItem('mizon_theme', darkMode ? 'dark' : 'light');
       }, [darkMode]);
 
-      const [loginForm, setLoginForm] = useState({username:'', password:''});
+      const [loginForm, setLoginForm]   = useState({username:'', password:''});
+      const [loginLoading, setLoginLoading] = useState(false);
+      const [loginError,   setLoginError]   = useState('');
       const [activeTab, setActiveTab] = useState('dashboard');
       const [settingsActiveTab, setSettingsActiveTab] = useState('users');
       const [pipelines, setPipelines] = useState(() => { const s = localStorage.getItem('mizon_pipelines'); return s ? JSON.parse(s) : initialPipelines; });
@@ -1385,8 +1722,25 @@ tr:hover td{background:var(--surface-variant);}
       const stageIdToFrontend = { 1:'NEW', 2:'CONTACTED', 3:'QUALIFIED', 4:'PROPOSAL', 5:'NEGOTIATION', 6:'WON', 7:'LOST' };
       const frontendToStageId = { 'NEW':1, 'CONTACTED':2, 'QUALIFIED':3, 'PROPOSAL':4, 'NEGOTIATION':5, 'WON':6, 'LOST':7, 'MEETING':2, 'CONTRACT':3 };
 
+      // Fetch company info from slug (for branded login page)
       useEffect(() => {
-        fetch('/api/leads').then(res => {
+        if (!companySlug) return;
+        fetch(`/api/company/info?slug=${encodeURIComponent(companySlug)}`)
+          .then(r => r.json()).then(d => { if (d.found) setCompanyInfo(d); })
+          .catch(() => {});
+      }, [companySlug]);
+
+      // Helper: auth headers for all API calls
+      const getAuthHeaders = () => {
+        const t = localStorage.getItem('mizon_token');
+        return { 'Content-Type':'application/json', ...(t ? { 'Authorization':'Bearer '+t } : {}) };
+      };
+
+      useEffect(() => {
+        const headers = {};
+        const t = localStorage.getItem('mizon_token');
+        if (t) headers['Authorization'] = 'Bearer ' + t;
+        fetch('/api/leads', { headers }).then(res => {
           if(!res.ok) throw new Error('API mavjud emas');
           return res.json();
         }).then(data => {
@@ -1492,31 +1846,75 @@ tr:hover td{background:var(--surface-variant);}
         return () => window.removeEventListener('keydown', handleKeyDown);
       }, [selectedLeadId]);
 
-      const handleLogin = (e) => {
+      const handleLogin = async (e) => {
         e.preventDefault();
-        const match = users.find(u => u.username===loginForm.username && u.password===loginForm.password);
-        if(match) { setAuthUser(match); localStorage.setItem('mizon_session', JSON.stringify(match)); setActiveTab('dashboard'); }
-        else alert("Login yoki parol nato'g'ri!");
+        setLoginLoading(true); setLoginError('');
+        try {
+          const res = await fetch('/api/auth/login', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ username:loginForm.username, password:loginForm.password, company_slug: companySlug })
+          });
+          const data = await res.json();
+          if (!res.ok) { setLoginError(data.error || "Login yoki parol noto'g'ri"); setLoginLoading(false); return; }
+          localStorage.setItem('mizon_token', data.token);
+          localStorage.setItem('mizon_session', JSON.stringify(data.user));
+          if (data.user.callLimit) localStorage.setItem('mizon_callLimit', String(data.user.callLimit));
+          setAuthUser(data.user);
+          setActiveTab('dashboard');
+        } catch {
+          // Fallback: local demo auth
+          const match = users.find(u => u.username===loginForm.username && u.password===loginForm.password);
+          if (match) { setAuthUser(match); localStorage.setItem('mizon_session', JSON.stringify(match)); setActiveTab('dashboard'); }
+          else setLoginError("Server bilan ulanishda xato. Login yoki parol noto'g'ri.");
+        } finally { setLoginLoading(false); }
       };
 
       if(!authUser) {
+        const loginTitle   = isSuperAdminMode ? 'MIZON SUPER ADMIN' : (companyInfo?.name || 'MIZON CRM');
+        const loginSubtitle = isSuperAdminMode
+          ? 'Platforma boshqaruvi. Faqat vakolatli foydalanuvchilar.'
+          : companyInfo?.name
+            ? `${companyInfo.name} — CRM tizimiga xush kelibsiz`
+            : 'Tizimga kirish uchun xodim ruxsatnomasini kiriting.';
+        const logoLetter = isSuperAdminMode ? 'S' : (companyInfo?.name?.[0]?.toUpperCase() || 'M');
+        const logoBg     = isSuperAdminMode ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'var(--primary-container)';
         return (
           <div className="login-overlay">
             <form onSubmit={handleLogin} className="login-box">
-              <div style={{width:'48px', height:'48px', background:'var(--primary-container)', borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', boxShadow:'0 0 24px rgba(1,167,80,0.3)'}}>
-                <span style={{fontSize:'20px', fontWeight:800, color:'#fff', fontFamily:'var(--font-label)'}}>M</span>
+              <div style={{width:'52px', height:'52px', background:logoBg, borderRadius:'14px', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px', boxShadow:'0 0 28px rgba(1,167,80,0.25)'}}>
+                <span style={{fontSize:'22px', fontWeight:800, color:'#fff', fontFamily:'var(--font-label)'}}>{logoLetter}</span>
               </div>
-              <h1 style={{fontSize:'28px', marginBottom:'6px', fontWeight:800, letterSpacing:'-0.8px'}}>MIZON CRM</h1>
-              <p style={{color:'var(--text-muted)', marginBottom:'28px', fontSize:'13px'}}>Tizimga kirish uchun xodim ruxsatnomasini kiriting.</p>
-              <input className="input-base" placeholder="Login (ceo yoki menejer_1)" value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} />
+              <h1 style={{fontSize:'24px', marginBottom:'5px', fontWeight:800, letterSpacing:'-0.6px'}}>{loginTitle}</h1>
+              <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'12px', lineHeight:1.5}}>{loginSubtitle}</p>
+              {loginError && (
+                <div style={{background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', marginBottom:'14px'}}>
+                  {loginError}
+                </div>
+              )}
+              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus />
               <input className="input-base" type="password" placeholder="Parol" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} />
-              <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px'}} type="submit">Tizimga Kirish</button>
+              <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px', opacity:loginLoading?0.7:1}} type="submit" disabled={loginLoading}>
+                {loginLoading ? 'Tekshirilmoqda...' : 'Tizimga Kirish'}
+              </button>
+              {companySlug && !isSuperAdminMode && (
+                <div style={{marginTop:'16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
+                  Kompaniya: <b style={{color:'var(--primary)'}}>{companySlug}</b>
+                </div>
+              )}
             </form>
           </div>
         );
       }
 
       const role = authUser.role;
+
+      // ── Super Admin — full-screen panel ──────────────────────────
+      if (role === 'SUPERADMIN') return <SuperAdminPanel authUser={authUser} onLogout={() => {
+        setAuthUser(null);
+        localStorage.removeItem('mizon_session');
+        localStorage.removeItem('mizon_token');
+      }} />;
+
       const activeColumns = columnsMap[activePipe] || [];
       const activeLeads = leads.filter(l => l.pipelineId === activePipe);
       const selectedLeadData = leads.find(l => l.id == selectedLeadId);
@@ -1525,7 +1923,7 @@ tr:hover td{background:var(--surface-variant);}
         if(String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
         fetch('/api/leads/'+lead.id, {
           method:'PUT',
-          headers:{'Content-Type':'application/json'},
+          headers: getAuthHeaders(),
           body:JSON.stringify({
             status:frontendToStageId[lead.status]||lead.status,
             name:lead.name, phone:lead.phone, region:lead.region, source:lead.source,
@@ -1547,7 +1945,7 @@ tr:hover td{background:var(--surface-variant);}
           chatLogs:[{type:'sys', date:new Date().toISOString(), text:`Menejer (${authUser.username}) qo'lda kiritdi.`}]
         };
         fetch('/api/leads', {
-          method:'POST', headers:{'Content-Type':'application/json'},
+          method:'POST', headers: getAuthHeaders(),
           body:JSON.stringify({name:newLeadForm.name, phone:newLeadForm.phone, region:newLeadForm.region, owner:authUser.username, pipelineId:activePipe, status:frontendToStageId[initialStage]||1})
         }).then(res=>res.json()).then(data => {
           if(data.success) localLead.id = data.lead.id;
@@ -1678,7 +2076,12 @@ tr:hover td{background:var(--surface-variant);}
                   <div className="sidebar-user-role">{authUser.role}</div>
                 </div>
               </div>
-              <div className="nav-item" onClick={()=>{setAuthUser(null); localStorage.removeItem('mizon_session');}}>
+              <div className="nav-item" onClick={()=>{
+                setAuthUser(null);
+                localStorage.removeItem('mizon_session');
+                localStorage.removeItem('mizon_token');
+                localStorage.removeItem('mizon_callLimit');
+              }}>
                 <Ico n="logout" s={16}/> Tizimdan chiqish
               </div>
             </div>

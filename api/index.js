@@ -1,8 +1,12 @@
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
+const cors    = require('cors');
+const path    = require('path');
 const { Pool } = require('pg');
+const bcrypt  = require('bcryptjs');
+const jwt     = require('jsonwebtoken');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+const JWT_SECRET = process.env.JWT_SECRET || 'mizon-dev-secret-2024-change-in-prod';
 
 const app = express();
 
@@ -10,111 +14,171 @@ const app = express();
 const pool = process.env.POSTGRES_URL || process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     })
   : null;
 
-// Attach db to every request (null if no DB configured)
-app.use((req, res, next) => {
-  req.db = pool;
-  next();
-});
+app.use((req, res, next) => { req.db = pool; next(); });
 
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
 
 // ========== SERVE FRONTEND (local dev only) ==========
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
+// ========== JWT MIDDLEWARE ==========
+const parseToken = (req, res, next) => {
+  const h = req.headers.authorization;
+  if (h && h.startsWith('Bearer ')) {
+    try { req.user = jwt.verify(h.slice(7), JWT_SECRET); } catch { req.user = null; }
+  } else { req.user = null; }
+  next();
+};
+app.use(parseToken);
+
 // ========== DB INIT ==========
 async function initDb() {
   if (!pool) { console.log('⚠️  Database URL not configured — running in demo mode.'); return; }
   const client = await pool.connect();
   try {
+    // ── Core tables ──────────────────────────────────────────────────────────
     await client.query(`
+      CREATE TABLE IF NOT EXISTS companies (
+        id         SERIAL PRIMARY KEY,
+        name       VARCHAR(255) NOT NULL,
+        slug       VARCHAR(100) UNIQUE NOT NULL,
+        logo_url   TEXT,
+        plan       VARCHAR(20)  DEFAULT 'basic',
+        is_active  BOOLEAN      DEFAULT true,
+        call_limit INT          DEFAULT 5,
+        created_at TIMESTAMP    DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS crm_users (
+        id            SERIAL PRIMARY KEY,
+        company_id    INT REFERENCES companies(id) ON DELETE CASCADE,
+        username      VARCHAR(100) NOT NULL,
+        password_hash TEXT NOT NULL,
+        role          VARCHAR(20)  DEFAULT 'MANAGER',
+        full_name     VARCHAR(255),
+        is_active     BOOLEAN      DEFAULT true,
+        created_at    TIMESTAMP    DEFAULT NOW(),
+        UNIQUE(company_id, username)
+      );
+
       CREATE TABLE IF NOT EXISTS crm_stage (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        sequence INTEGER DEFAULT 0
+        id         SERIAL PRIMARY KEY,
+        name       VARCHAR(100) NOT NULL,
+        sequence   INTEGER      DEFAULT 0,
+        company_id INT REFERENCES companies(id) ON DELETE CASCADE
       );
+
       CREATE TABLE IF NOT EXISTS crm_lead (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        contact_name VARCHAR(255),
-        phone VARCHAR(50),
-        email VARCHAR(100),
-        stage_id INTEGER REFERENCES crm_stage(id) ON DELETE SET NULL,
-        mizon_source VARCHAR(100) DEFAULT 'manual',
-        telegram_chat_id VARCHAR(100),
-        lead_score INTEGER DEFAULT 0,
-        budget_range VARCHAR(50),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        chatlogs JSONB DEFAULT '[]'::jsonb,
-        deadline TIMESTAMP,
+        id                SERIAL PRIMARY KEY,
+        name              VARCHAR(255) NOT NULL,
+        contact_name      VARCHAR(255),
+        phone             VARCHAR(50),
+        email             VARCHAR(100),
+        stage_id          INTEGER REFERENCES crm_stage(id) ON DELETE SET NULL,
+        mizon_source      VARCHAR(100) DEFAULT 'manual',
+        telegram_chat_id  VARCHAR(100),
+        lead_score        INTEGER DEFAULT 0,
+        budget_range      VARCHAR(50),
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        chatlogs          JSONB DEFAULT '[]'::jsonb,
+        deadline          TIMESTAMP,
         actualcallattempts INTEGER DEFAULT 0,
-        taskdescription TEXT,
-        owner VARCHAR(50) DEFAULT 'ceo',
-        region VARCHAR(255),
-        pipelineid VARCHAR(50) DEFAULT 'p1'
+        taskdescription   TEXT,
+        owner             VARCHAR(50) DEFAULT 'ceo',
+        region            VARCHAR(255),
+        pipelineid        VARCHAR(50) DEFAULT 'p1',
+        company_id        INT REFERENCES companies(id) ON DELETE CASCADE
       );
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS chatlogs JSONB DEFAULT '[]'::jsonb;
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS deadline TIMESTAMP;
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS actualcallattempts INTEGER DEFAULT 0;
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskdescription TEXT;
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS owner VARCHAR(50) DEFAULT 'ceo';
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS region VARCHAR(255);
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS pipelineid VARCHAR(50) DEFAULT 'p1';
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS facebook_lead_id VARCHAR(100) UNIQUE;
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS ad_name VARCHAR(255);
-      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS form_name VARCHAR(255);
-    `);
-    const stages = await client.query('SELECT COUNT(*) FROM crm_stage');
-    if (parseInt(stages.rows[0].count) === 0) {
-      await client.query(`
-        INSERT INTO crm_stage (name, sequence) VALUES 
-        ('Yangi Lead', 1), ('Aloqaga chiqildi', 2), ('Ehtiyoj aniqlandi', 3),
-        ('Taklif yuborildi', 4), ('Muzokaralar', 5), ('Yutildi', 6), ('Muvaffaqiyatsiz', 7)
-      `);
-    }
 
-    // Odoo-style integration configuration table
-    await client.query(`
       CREATE TABLE IF NOT EXISTS crm_integration_config (
-        id SERIAL PRIMARY KEY,
-        platform VARCHAR(50) NOT NULL,
-        page_id VARCHAR(100),
-        form_id VARCHAR(100),
+        id           SERIAL PRIMARY KEY,
+        platform     VARCHAR(50)  NOT NULL,
+        page_id      VARCHAR(100),
+        form_id      VARCHAR(100),
         access_token TEXT,
-        field_mapping JSONB DEFAULT '{}'::jsonb
+        field_mapping JSONB DEFAULT '{}'::jsonb,
+        company_id   INT REFERENCES companies(id) ON DELETE CASCADE
       );
-    `);
 
-    // External API keys storage
-    await client.query(`
       CREATE TABLE IF NOT EXISTS crm_api_keys (
-        id SERIAL PRIMARY KEY,
-        service VARCHAR(100) NOT NULL,
-        label VARCHAR(255) NOT NULL,
-        key_value TEXT NOT NULL,
+        id         SERIAL PRIMARY KEY,
+        service    VARCHAR(100) NOT NULL,
+        label      VARCHAR(255) NOT NULL,
+        key_value  TEXT NOT NULL,
+        company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS crm_voip_config (
+        id         SERIAL PRIMARY KEY,
+        account_id VARCHAR(100) NOT NULL,
+        api_token  TEXT NOT NULL,
+        caller_id  VARCHAR(50) DEFAULT '',
+        domain     VARCHAR(100) DEFAULT 'app.moizvonki.ru',
+        company_id INT REFERENCES companies(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    // Moi Zvonki VoIP config
+    // ── Migrations for existing tables ───────────────────────────────────────
     await client.query(`
-      CREATE TABLE IF NOT EXISTS crm_voip_config (
-        id SERIAL PRIMARY KEY,
-        account_id VARCHAR(100) NOT NULL,
-        api_token TEXT NOT NULL,
-        caller_id VARCHAR(50) DEFAULT '',
-        domain VARCHAR(100) DEFAULT 'app.moizvonki.ru',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS chatlogs          JSONB    DEFAULT '[]'::jsonb;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS deadline          TIMESTAMP;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS actualcallattempts INTEGER  DEFAULT 0;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskdescription   TEXT;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS owner             VARCHAR(50) DEFAULT 'ceo';
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS region            VARCHAR(255);
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS pipelineid        VARCHAR(50) DEFAULT 'p1';
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS facebook_lead_id  VARCHAR(100) UNIQUE;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS ad_name           VARCHAR(255);
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS form_name         VARCHAR(255);
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS company_id        INT;
+      ALTER TABLE crm_stage ADD COLUMN IF NOT EXISTS company_id       INT;
     `);
+
+    // ── Seed default company (first run / backward compat) ───────────────────
+    const compCount = await client.query('SELECT COUNT(*) FROM companies');
+    if (parseInt(compCount.rows[0].count) === 0) {
+      console.log('🌱 Seeding default company...');
+      const dc = await client.query(
+        "INSERT INTO companies (name, slug, call_limit) VALUES ('Mizon Demo', 'demo', 5) RETURNING id"
+      );
+      const defaultCompId = dc.rows[0].id;
+
+      // Migrate orphan leads/stages to default company
+      await client.query('UPDATE crm_lead  SET company_id = $1 WHERE company_id IS NULL', [defaultCompId]);
+      await client.query('UPDATE crm_stage SET company_id = $1 WHERE company_id IS NULL', [defaultCompId]);
+
+      // Create default users
+      const ceoHash = await bcrypt.hash('123', 10);
+      const mgHash  = await bcrypt.hash('123', 10);
+      await client.query(`
+        INSERT INTO crm_users (company_id, username, password_hash, role, full_name)
+        VALUES ($1,'ceo',$2,'CEO','CEO'), ($1,'menejer_1',$3,'MANAGER','Menejer 1')
+        ON CONFLICT DO NOTHING
+      `, [defaultCompId, ceoHash, mgHash]);
+
+      // Seed stages if empty
+      const sc = await client.query("SELECT COUNT(*) FROM crm_stage WHERE company_id = $1", [defaultCompId]);
+      if (parseInt(sc.rows[0].count) === 0) {
+        await client.query(`
+          INSERT INTO crm_stage (name, sequence, company_id) VALUES
+          ('Yangi Lead',1,$1),('Aloqaga chiqildi',2,$1),('Ehtiyoj aniqlandi',3,$1),
+          ('Taklif yuborildi',4,$1),('Muzokaralar',5,$1),('Yutildi',6,$1),('Muvaffaqiyatsiz',7,$1)
+        `, [defaultCompId]);
+      }
+
+      console.log(`✅ Default company created (slug=demo, CEO login: ceo/123)`);
+    }
 
     console.log('✅ Database initialized successfully.');
   } catch (error) {
@@ -125,116 +189,133 @@ async function initDb() {
 }
 initDb();
 
-// ========== ROUTES ==========
-const leadController = require('./controllers/leadController');
-const webhookController = require('./controllers/webhookController');
-const voipController = require('./controllers/voipController');
+// ========== CONTROLLERS ==========
+const leadController       = require('./controllers/leadController');
+const webhookController    = require('./controllers/webhookController');
+const voipController       = require('./controllers/voipController');
+const authController       = require('./controllers/authController');
+const superAdminController = require('./controllers/superAdminController');
+const companyController    = require('./controllers/companyController');
 
-// Health check
+// ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    dbConnected: !!pool, 
-    version: 'V7',
-    timestamp: new Date().toISOString() 
-  });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V8', timestamp:new Date().toISOString() });
 });
 
-// Leads CRUD
-app.get('/api/leads', leadController.getLeads);
-app.post('/api/leads', leadController.createLead);
-app.put('/api/leads/:id', leadController.updateLeadFull);
-app.delete('/api/leads/:id', leadController.deleteLead);
-app.get('/api/leads/:id/chatlogs', leadController.getLeadChatlogs);
+// ── Auth ─────────────────────────────────────────────────────────────────────
+app.post('/api/auth/login', authController.login);
+app.get('/api/auth/me',     authController.me);
 
-// Stages
-app.get('/api/stages', leadController.getStages);
+// ── Super Admin ───────────────────────────────────────────────────────────────
+app.get   ('/api/superadmin/companies',              superAdminController.listCompanies);
+app.post  ('/api/superadmin/companies',              superAdminController.createCompany);
+app.get   ('/api/superadmin/companies/:id',          superAdminController.getCompany);
+app.put   ('/api/superadmin/companies/:id',          superAdminController.updateCompany);
+app.delete('/api/superadmin/companies/:id',          superAdminController.deleteCompany);
+app.get   ('/api/superadmin/companies/:id/users',    superAdminController.listUsers);
+app.post  ('/api/superadmin/companies/:id/users',    superAdminController.addUser);
+app.delete('/api/superadmin/users/:userId',          superAdminController.deleteUser);
 
-// Webhooks
-app.get('/api/webhook/meta', webhookController.verifyMetaWebhook);
-app.post('/api/webhook/meta', webhookController.handleMetaWebhook);
-app.post('/api/webhook/telegram', webhookController.handleTelegramWebhook);
+// ── Company user management (CEO) ────────────────────────────────────────────
+app.get   ('/api/company/users',      companyController.listUsers);
+app.post  ('/api/company/users',      companyController.addUser);
+app.put   ('/api/company/users/:id',  companyController.updateUser);
+app.delete('/api/company/users/:id',  companyController.deleteUser);
+
+// ── Leads CRUD ───────────────────────────────────────────────────────────────
+app.get   ('/api/leads',              leadController.getLeads);
+app.post  ('/api/leads',              leadController.createLead);
+app.put   ('/api/leads/:id',          leadController.updateLeadFull);
+app.delete('/api/leads/:id',          leadController.deleteLead);
+app.get   ('/api/leads/:id/chatlogs', leadController.getLeadChatlogs);
+app.get   ('/api/stages',             leadController.getStages);
+app.get   ('/api/stats',              leadController.getStats);
+
+// ── Webhooks ─────────────────────────────────────────────────────────────────
+app.get ('/api/webhook/meta',      webhookController.verifyMetaWebhook);
+app.post('/api/webhook/meta',      webhookController.handleMetaWebhook);
+app.post('/api/webhook/telegram',  webhookController.handleTelegramWebhook);
 app.post('/api/webhook/moizvonki', voipController.handleWebhook);
 
-// VoIP (Moi Zvonki)
-app.get('/api/voip/config', voipController.getConfig);
+// ── VoIP ─────────────────────────────────────────────────────────────────────
+app.get ('/api/voip/config', voipController.getConfig);
 app.post('/api/voip/config', voipController.saveConfig);
-app.post('/api/call', voipController.initiateCall);
+app.post('/api/call',        voipController.initiateCall);
 
-// Integrations Config
+// ── Integrations ─────────────────────────────────────────────────────────────
 app.post('/api/integrations', async (req, res) => {
-  if (!req.db) return res.status(500).json({error: 'DB disabled'});
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
   const { platform, page_id, form_id, access_token, field_mapping } = req.body;
+  const cid = req.user?.companyId || null;
   try {
     await req.db.query(
-      `INSERT INTO crm_integration_config (platform, page_id, form_id, access_token, field_mapping)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [platform, page_id, form_id, access_token, JSON.stringify(field_mapping)]
+      'INSERT INTO crm_integration_config (platform,page_id,form_id,access_token,field_mapping,company_id) VALUES ($1,$2,$3,$4,$5,$6)',
+      [platform, page_id, form_id, access_token, JSON.stringify(field_mapping), cid]
     );
-    res.json({success: true});
-  } catch(e) {
-    res.status(500).json({error: e.message});
-  }
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Stats (Dashboard API)
-app.get('/api/stats', leadController.getStats);
-
-// External API Keys CRUD
+// ── API Keys ─────────────────────────────────────────────────────────────────
 app.get('/api/api-keys', async (req, res) => {
   if (!req.db) return res.json([]);
+  const cid = req.user?.companyId;
   try {
-    const result = await req.db.query(
-      'SELECT id, service, label, created_at FROM crm_api_keys ORDER BY created_at DESC'
+    const r = await req.db.query(
+      'SELECT id,service,label,created_at FROM crm_api_keys WHERE company_id=$1 OR company_id IS NULL ORDER BY created_at DESC',
+      [cid]
     );
-    res.json(result.rows);
-  } catch(e) {
-    res.status(500).json({error: e.message});
-  }
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/api-keys', async (req, res) => {
-  if (!req.db) return res.status(500).json({error: 'DB disabled'});
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
   const { service, label, key_value } = req.body;
-  if (!service || !label || !key_value) return res.status(400).json({error: 'service, label, key_value majburiy'});
+  if (!service || !label || !key_value) return res.status(400).json({ error: 'service, label, key_value majburiy' });
+  const cid = req.user?.companyId || null;
   try {
-    const result = await req.db.query(
-      'INSERT INTO crm_api_keys (service, label, key_value) VALUES ($1, $2, $3) RETURNING id, service, label, created_at',
-      [service, label, key_value]
+    const r = await req.db.query(
+      'INSERT INTO crm_api_keys (service,label,key_value,company_id) VALUES ($1,$2,$3,$4) RETURNING id,service,label,created_at',
+      [service, label, key_value, cid]
     );
-    res.json(result.rows[0]);
-  } catch(e) {
-    res.status(500).json({error: e.message});
-  }
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.delete('/api/api-keys/:id', async (req, res) => {
-  if (!req.db) return res.status(500).json({error: 'DB disabled'});
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
   try {
-    await req.db.query('DELETE FROM crm_api_keys WHERE id = $1', [req.params.id]);
-    res.json({success: true});
-  } catch(e) {
-    res.status(500).json({error: e.message});
-  }
+    await req.db.query('DELETE FROM crm_api_keys WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Frontend SPA fallback (for local dev)
+// ── Slug check (public) ───────────────────────────────────────────────────────
+app.get('/api/company/info', async (req, res) => {
+  const { slug } = req.query;
+  if (!slug || !req.db) return res.json({ found: false });
+  try {
+    const r = await req.db.query('SELECT name, slug, logo_url, is_active FROM companies WHERE slug=$1', [slug]);
+    if (!r.rows.length) return res.json({ found: false });
+    res.json({ found: true, ...r.rows[0] });
+  } catch { res.json({ found: false }); }
+});
+
+// ── Frontend SPA fallback ─────────────────────────────────────────────────────
 app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
+  if (!req.path.startsWith('/api'))
     res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
-  }
 });
 
 // ========== START SERVER (local dev) ==========
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
-    console.log(`\n🚀 Mizon CRM Server running at http://localhost:${PORT}`);
-    console.log(`📊 Dashboard: http://localhost:${PORT}`);
+    console.log(`\n🚀 Mizon CRM v8 — http://localhost:${PORT}`);
     console.log(`📡 API: http://localhost:${PORT}/api/health`);
-    console.log(`🔗 Webhooks: /api/webhook/meta | /api/webhook/telegram\n`);
+    console.log(`🔑 Super Admin: http://localhost:${PORT}?superadmin=true\n`);
   });
 }
 
-// Export for Vercel Serverless
 module.exports = app;
