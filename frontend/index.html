@@ -671,30 +671,129 @@ tr:hover td{background:var(--surface-variant);}
       const [formData,    setFormData]    = useState({});
       const [copiedItem,  setCopiedItem]  = useState(null);
       const [msg,         setMsg]         = useState('');
+      const [saving,      setSaving]      = useState(false);
+
+      const authH = () => {
+        const t = localStorage.getItem('mizon_token');
+        return {'Content-Type':'application/json', 'Authorization':'Bearer '+t};
+      };
+
+      // Load existing integrations from backend on mount
+      useEffect(() => {
+        const H = {'Authorization':'Bearer '+localStorage.getItem('mizon_token')};
+        // Load platform integrations
+        fetch('/api/integrations', {headers:H}).then(r=>r.ok?r.json():null).then(list => {
+          if (!Array.isArray(list)) return;
+          const loaded = {};
+          list.forEach(cfg => {
+            loaded[cfg.platform] = {
+              page_id:      cfg.page_id      || '',
+              form_id:      cfg.form_id      || '',
+              _connected_at: cfg.created_at  || new Date().toISOString(),
+              ...(cfg.extra_config || {}),
+            };
+          });
+          setConfigs(prev => {
+            const merged = {...prev, ...loaded};
+            localStorage.setItem('mizon_integrations', JSON.stringify(merged));
+            return merged;
+          });
+        }).catch(()=>{});
+        // Load VoIP config
+        fetch('/api/voip/config', {headers:H}).then(r=>r.ok?r.json():null).then(d => {
+          if (d?.configured) {
+            setConfigs(prev => {
+              const upd = {...prev, voip:{account_id:d.account_id, caller_id:d.caller_id, domain:d.domain, _connected_at:d.created_at||new Date().toISOString()}};
+              localStorage.setItem('mizon_integrations', JSON.stringify(upd));
+              return upd;
+            });
+          }
+        }).catch(()=>{});
+        // Load API keys
+        fetch('/api/api-keys', {headers:H}).then(r=>r.ok?r.json():null).then(list => {
+          if (!Array.isArray(list)) return;
+          const keys = list.map(k=>({id:k.id, token:k.key_value||k.label, created_at:k.created_at}));
+          if (keys.length) { setApiKeys(keys); localStorage.setItem('mizon_api_keys_local', JSON.stringify(keys)); }
+        }).catch(()=>{});
+      }, []);
 
       const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 3200); };
       const copyText = (text, id) => {
         navigator.clipboard?.writeText(text).catch(()=>{});
         setCopiedItem(id); setTimeout(()=>setCopiedItem(null), 2000);
       };
-      const saveConfig = (key, data) => {
-        const updated = {...configs, [key]: {...data, _connected_at: new Date().toISOString()}};
-        setConfigs(updated); localStorage.setItem('mizon_integrations', JSON.stringify(updated));
-        flash('✅ ' + (ALL_INTG.find(i=>i.key===key)?.name||key) + ' integratsiyasi saqlandi');
+
+      const saveConfig = async (key, data) => {
+        setSaving(true);
+        const intgName = ALL_INTG.find(i=>i.key===key)?.name || key;
+        try {
+          let ok = false;
+          if (key === 'voip') {
+            // VoIP: dedicated endpoint
+            const r = await fetch('/api/voip/config', {method:'POST', headers:authH(), body:JSON.stringify({
+              account_id: data.account_id, api_token: data.api_token,
+              caller_id: data.caller_id, domain: data.domain||'app.moizvonki.ru',
+            })});
+            ok = r.ok;
+            if (!r.ok) { const e=await r.json(); throw new Error(e.error||'Server xatosi'); }
+          } else if (key === 'telegram') {
+            // Telegram: register webhook with Telegram Bot API
+            const r = await fetch('/api/integrations/telegram/setup', {method:'POST', headers:authH(), body:JSON.stringify({
+              bot_token: data.bot_token, chat_id: data.chat_id||'',
+            })});
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error||'Telegram webhook ro\'yxatdan o\'tmadi');
+            ok = true;
+          } else {
+            // Facebook, Instagram, Custom Webhook
+            const r = await fetch('/api/integrations', {method:'POST', headers:authH(), body:JSON.stringify({
+              platform: key, page_id: data.page_id||null, form_id: data.form_id||null,
+              access_token: data.access_token||null, field_mapping: {},
+              extra_config: {name: data.name, secret: data.secret},
+            })});
+            ok = r.ok;
+            if (!r.ok) { const e=await r.json(); throw new Error(e.error||'Server xatosi'); }
+          }
+          const updated = {...configs, [key]: {...data, _connected_at: new Date().toISOString()}};
+          setConfigs(updated); localStorage.setItem('mizon_integrations', JSON.stringify(updated));
+          flash('✅ ' + intgName + ' integratsiyasi saqlandi');
+        } catch(e) {
+          flash('❌ ' + e.message);
+        }
+        setSaving(false);
         setActiveModal(null);
       };
-      const disconnectIntg = (key) => {
+
+      const disconnectIntg = async (key) => {
         if (!window.confirm('Integratsiyani uzasizmi?')) return;
+        try {
+          if (key !== 'voip' && key !== 'telegram') {
+            await fetch(`/api/integrations/${encodeURIComponent(key)}`, {method:'DELETE', headers:authH()});
+          }
+        } catch {}
         const updated = {...configs}; delete updated[key];
         setConfigs(updated); localStorage.setItem('mizon_integrations', JSON.stringify(updated));
         flash('🔌 Integratsiya uzildi'); setActiveModal(null);
       };
+
       const openModal = (intg) => { setFormData(configs[intg.key]||{}); setActiveModal(intg); };
-      const genApiKey = () => {
-        const k = {id:Date.now(), token:'mzk_'+Math.random().toString(36).substr(2,14)+Date.now().toString(36), created_at:new Date().toISOString()};
+      const genApiKey = async () => {
+        const token = 'mzk_'+Math.random().toString(36).substr(2,14)+Date.now().toString(36);
+        try {
+          const r = await fetch('/api/api-keys', {method:'POST', headers:authH(), body:JSON.stringify({service:'mizon_crm', label:'API Key '+new Date().toLocaleDateString(), key_value:token})});
+          if (r.ok) {
+            const k = await r.json();
+            const upd = [...apiKeys, {id:k.id||Date.now(), token:k.label||token, created_at:k.created_at||new Date().toISOString()}];
+            setApiKeys(upd); localStorage.setItem('mizon_api_keys_local', JSON.stringify(upd));
+            return;
+          }
+        } catch {}
+        // Fallback: local only
+        const k = {id:Date.now(), token, created_at:new Date().toISOString()};
         const upd = [...apiKeys, k]; setApiKeys(upd); localStorage.setItem('mizon_api_keys_local', JSON.stringify(upd));
       };
-      const delApiKey = (id) => {
+      const delApiKey = async (id) => {
+        try { await fetch(`/api/api-keys/${id}`, {method:'DELETE', headers:authH()}); } catch {}
         const upd = apiKeys.filter(k=>k.id!==id); setApiKeys(upd); localStorage.setItem('mizon_api_keys_local', JSON.stringify(upd));
       };
 
@@ -702,8 +801,8 @@ tr:hover td{background:var(--surface-variant);}
       const ALL_INTG = [
         { key:'telegram',  name:'Telegram Bot',     logo:'✈️',  color:'#0088cc', bg:'rgba(0,136,204,0.12)',
           desc:'Bot orqali leadlarni avtomatik qabul qiling va mijozlarga xabar yuboring',
-          fields:[ {k:'bot_token',label:'Bot Token',ph:'7123456789:AAFxyz...',t:'text'}, {k:'chat_id',label:'Admin Chat ID (xabarnoma uchun)',ph:'-100123456789',t:'text'} ],
-          wh:{label:'Webhook URL — BotFather ga kiriting',url:`${origin}/api/webhook/telegram`} },
+          fields:[ {k:'bot_token',label:'Bot Token (@BotFather dan oling)',ph:'7123456789:AAFxyz...',t:'text'}, {k:'chat_id',label:'Admin Chat ID (xabarnoma uchun, ixtiyoriy)',ph:'-100123456789',t:'text'} ],
+          wh:{label:'Webhook avtomatik ro\'yxatdan o\'tkaziladi — qo\'lda kiritish shart emas',url:`${origin}/api/webhook/telegram`} },
         { key:'instagram', name:'Instagram',         logo:'📸',  color:'#E4405F', bg:'rgba(228,64,95,0.12)',
           desc:'Instagram Direct va lead formalarini sinxronlash, Meta Business orqali',
           fields:[ {k:'access_token',label:'Access Token',ph:'EAABwzL...',t:'password'}, {k:'page_id',label:'Instagram Page ID',ph:'123456789',t:'text'}, {k:'form_id',label:'Lead Form ID (ixtiyoriy)',ph:'forma_123',t:'text'} ],
@@ -880,8 +979,8 @@ tr:hover td{background:var(--surface-variant);}
 
                   {/* Action buttons */}
                   <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
-                    <button className="btn-primary" style={{flex:1,padding:'10px'}} onClick={()=>saveConfig(activeModal.key, formData)}>
-                      {configs[activeModal.key]?'💾 Yangilash':'🔌 Ulash'}
+                    <button className="btn-primary" style={{flex:1,padding:'10px'}} disabled={saving} onClick={()=>saveConfig(activeModal.key, formData)}>
+                      {saving ? '⏳ Saqlanmoqda...' : (configs[activeModal.key]?'💾 Yangilash':'🔌 Ulash')}
                     </button>
                     {configs[activeModal.key] && (
                       <button style={{padding:'10px 14px',background:'none',border:'1px solid rgba(239,68,68,0.35)',color:'#ef4444',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600}} onClick={()=>disconnectIntg(activeModal.key)}>Uzish</button>

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
+const https   = require('https');
 const { Pool } = require('pg');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
@@ -143,6 +144,10 @@ async function initDb() {
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS form_name         VARCHAR(255);
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS company_id        INT;
       ALTER TABLE crm_stage ADD COLUMN IF NOT EXISTS company_id       INT;
+      ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS is_active   BOOLEAN   DEFAULT true;
+      ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS extra_config JSONB    DEFAULT '{}';
+      ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP DEFAULT NOW();
+      ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS company_id  INT;
     `);
 
     // ── Seed default company (first run / backward compat) ───────────────────
@@ -244,17 +249,125 @@ app.post('/api/voip/config', voipController.saveConfig);
 app.post('/api/call',        voipController.initiateCall);
 
 // ── Integrations ─────────────────────────────────────────────────────────────
-app.post('/api/integrations', async (req, res) => {
-  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
-  const { platform, page_id, form_id, access_token, field_mapping } = req.body;
+
+// GET /api/integrations — list integrations for this company
+app.get('/api/integrations', async (req, res) => {
+  if (!req.db) return res.json([]);
   const cid = req.user?.companyId || null;
   try {
+    const r = await req.db.query(
+      `SELECT id, platform, page_id, form_id, field_mapping, extra_config, created_at
+       FROM crm_integration_config
+       WHERE company_id=$1 OR company_id IS NULL
+       ORDER BY id DESC`,
+      [cid]
+    );
+    // Never return access_token to frontend
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/integrations — upsert facebook/instagram/webhook config
+app.post('/api/integrations', async (req, res) => {
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
+  const { platform, page_id, form_id, access_token, field_mapping, extra_config } = req.body;
+  if (!platform) return res.status(400).json({ error: 'platform majburiy' });
+  const cid = req.user?.companyId || null;
+  try {
+    // Upsert: delete old then insert (keeps it clean per company per platform)
     await req.db.query(
-      'INSERT INTO crm_integration_config (platform,page_id,form_id,access_token,field_mapping,company_id) VALUES ($1,$2,$3,$4,$5,$6)',
-      [platform, page_id, form_id, access_token, JSON.stringify(field_mapping), cid]
+      'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+      [platform, cid]
+    );
+    await req.db.query(
+      `INSERT INTO crm_integration_config
+         (platform, page_id, form_id, access_token, field_mapping, extra_config, company_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [
+        platform,
+        page_id    || null,
+        form_id    || null,
+        access_token || null,
+        JSON.stringify(field_mapping  || {}),
+        JSON.stringify(extra_config   || {}),
+        cid,
+      ]
     );
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/integrations/:platform — disconnect an integration
+app.delete('/api/integrations/:platform', async (req, res) => {
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
+  const cid = req.user?.companyId || null;
+  try {
+    await req.db.query(
+      'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+      [req.params.platform, cid]
+    );
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/integrations/telegram/setup — save bot token + register webhook with Telegram
+app.post('/api/integrations/telegram/setup', async (req, res) => {
+  const { bot_token, chat_id } = req.body || {};
+  if (!bot_token) return res.status(400).json({ error: 'bot_token majburiy' });
+  const cid = req.user?.companyId || null;
+
+  // Register webhook URL with Telegram Bot API
+  const appUrl = process.env.APP_URL || `https://${req.headers.host}`;
+  const webhookUrl = `${appUrl}/api/webhook/telegram`;
+
+  try {
+    const tgResult = await new Promise((resolve, reject) => {
+      const postData = JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ['message', 'callback_query'],
+        drop_pending_updates: true,
+      });
+      const options = {
+        hostname: 'api.telegram.org',
+        path:     `/bot${bot_token}/setWebhook`,
+        method:   'POST',
+        headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) },
+      };
+      const request = https.request(options, (resp) => {
+        let data = ''; resp.on('data', c => data += c);
+        resp.on('end', () => { try { resolve(JSON.parse(data)); } catch { resolve({ ok: false }); } });
+      });
+      request.on('error', reject);
+      request.write(postData); request.end();
+    });
+
+    if (!tgResult.ok) {
+      return res.status(400).json({
+        error: `Telegram webhook ro'yxatdan o'tmadi: ${tgResult.description || JSON.stringify(tgResult)}`,
+      });
+    }
+
+    // Save to DB
+    if (req.db) {
+      await req.db.query(
+        'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+        ['telegram', cid]
+      );
+      await req.db.query(
+        `INSERT INTO crm_integration_config
+           (platform, access_token, extra_config, company_id)
+         VALUES ('telegram', $1, $2, $3)`,
+        [bot_token, JSON.stringify({ chat_id: chat_id || '', webhook_url: webhookUrl }), cid]
+      );
+    }
+
+    // Update env for current runtime session
+    process.env.TELEGRAM_BOT_TOKEN = bot_token;
+
+    res.json({ success: true, webhook_url: webhookUrl, telegram: tgResult });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── API Keys ─────────────────────────────────────────────────────────────────
