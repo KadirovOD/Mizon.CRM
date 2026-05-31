@@ -747,9 +747,12 @@ tr:hover td{background:var(--surface-variant);}
           } else {
             // Facebook, Instagram, Custom Webhook
             const r = await fetch('/api/integrations', {method:'POST', headers:authH(), body:JSON.stringify({
-              platform: key, page_id: data.page_id||null, form_id: data.form_id||null,
-              access_token: data.access_token||null, field_mapping: {},
-              extra_config: {name: data.name, secret: data.secret},
+              platform:      key,
+              page_id:       data.page_id       || data.account_id || null,
+              form_id:       data.form_id        || null,
+              access_token:  data.access_token   || null,
+              field_mapping: data._fm            || {},   // AmoCRM-style field mapping
+              extra_config:  {name: data.name, secret: data.secret, account_id: data.account_id},
             })});
             ok = r.ok;
             if (!r.ok) { const e=await r.json(); throw new Error(e.error||'Server xatosi'); }
@@ -776,7 +779,13 @@ tr:hover td{background:var(--surface-variant);}
         flash('🔌 Integratsiya uzildi'); setActiveModal(null);
       };
 
-      const openModal = (intg) => { setFormData(configs[intg.key]||{}); setActiveModal(intg); };
+      const openModal = (intg) => {
+        const saved = configs[intg.key] || {};
+        // Load saved field mapping or default for Facebook
+        const fm = saved._fm || (intg.showMapping ? {...DEFAULT_FM} : {});
+        setFormData({...saved, _fm: fm});
+        setActiveModal(intg);
+      };
       const genApiKey = async () => {
         const token = 'mzk_'+Math.random().toString(36).substr(2,14)+Date.now().toString(36);
         try {
@@ -798,27 +807,79 @@ tr:hover td{background:var(--surface-variant);}
       };
 
       const origin = window.location.origin;
+
+      // AmoCRM uslubida Facebook maydon nomlari → CRM maydonlari moslash
+      const FB_FIELDS = [
+        {fb:'full_name',    lbl:'Ism va familiya (full_name)'},
+        {fb:'first_name',   lbl:'Ism (first_name)'},
+        {fb:'last_name',    lbl:'Familiya (last_name)'},
+        {fb:'email',        lbl:'Elektron pochta (email)'},
+        {fb:'phone_number', lbl:'Telefon raqami (phone_number)'},
+        {fb:'city',         lbl:'Shahar (city)'},
+        {fb:'country',      lbl:'Mamlakat (country)'},
+        {fb:'company_name', lbl:'Kompaniya (company_name)'},
+        {fb:'job_title',    lbl:'Lavozim (job_title)'},
+        {fb:'comments',     lbl:'Izoh/xabar (comments)'},
+      ];
+      const CRM_OPTS = [
+        {v:'',           l:'— O\'tkazib yuborish —'},
+        {v:'name',       l:'Ism (name)'},
+        {v:'email',      l:'Email'},
+        {v:'phone',      l:'Telefon (phone)'},
+        {v:'region',     l:'Hudud / Shahar'},
+        {v:'company',    l:'Kompaniya'},
+        {v:'note',       l:'Izoh / Vazifa tavsifi'},
+      ];
+      // Default field mapping (Odoo crm.lead uslubi)
+      const DEFAULT_FM = {full_name:'name', email:'email', phone_number:'phone', city:'region', company_name:'company', comments:'note'};
+
       const ALL_INTG = [
-        { key:'telegram',  name:'Telegram Bot',     logo:'✈️',  color:'#0088cc', bg:'rgba(0,136,204,0.12)',
+        { key:'telegram',  name:'Telegram Bot', logo:'✈️', color:'#0088cc', bg:'rgba(0,136,204,0.12)',
           desc:'Bot orqali leadlarni avtomatik qabul qiling va mijozlarga xabar yuboring',
-          fields:[ {k:'bot_token',label:'Bot Token (@BotFather dan oling)',ph:'7123456789:AAFxyz...',t:'text'}, {k:'chat_id',label:'Admin Chat ID (xabarnoma uchun, ixtiyoriy)',ph:'-100123456789',t:'text'} ],
-          wh:{label:'Webhook avtomatik ro\'yxatdan o\'tkaziladi — qo\'lda kiritish shart emas',url:`${origin}/api/webhook/telegram`} },
-        { key:'instagram', name:'Instagram',         logo:'📸',  color:'#E4405F', bg:'rgba(228,64,95,0.12)',
-          desc:'Instagram Direct va lead formalarini sinxronlash, Meta Business orqali',
-          fields:[ {k:'access_token',label:'Access Token',ph:'EAABwzL...',t:'password'}, {k:'page_id',label:'Instagram Page ID',ph:'123456789',t:'text'}, {k:'form_id',label:'Lead Form ID (ixtiyoriy)',ph:'forma_123',t:'text'} ],
-          wh:{label:'Meta Webhook URL',url:`${origin}/api/webhook/meta`}, verifyToken:'mizon_meta_webhook_v1' },
-        { key:'facebook',  name:'Facebook Ads',      logo:'👥',  color:'#1877F2', bg:'rgba(24,119,242,0.12)',
-          desc:'Lead Ads formalarini avtomatik CRM ga yuklash va real-time sinxronlash',
-          fields:[ {k:'page_id',label:'Page ID',ph:'123456789',t:'text'}, {k:'form_id',label:'Form ID',ph:'forma_id',t:'text'}, {k:'access_token',label:'Access Token',ph:'EAABwzL...',t:'password'} ],
-          wh:{label:'Meta Webhook URL',url:`${origin}/api/webhook/meta`}, verifyToken:'mizon_meta_webhook_v1' },
-        { key:'webhook',   name:'Custom Webhook',    logo:'🔗',  color:'#6366f1', bg:'rgba(99,102,241,0.12)',
+          fields:[
+            {k:'bot_token', label:'Bot Token — @BotFather dan /newbot buyrug\'i orqali oling', ph:'7123456789:AAFxyz...', t:'text'},
+            {k:'chat_id',   label:'Admin Chat ID — sizga xabarnomalar keladigan chat (ixtiyoriy)', ph:'-100123456789 yoki 123456789', t:'text'},
+          ],
+          wh:{label:'Webhook — saqlash tugmasini bossangiz avtomatik ro\'yxatdan o\'tkaziladi', url:`${origin}/api/webhook/telegram`} },
+
+        { key:'instagram', name:'Instagram', logo:'📸', color:'#E4405F', bg:'rgba(228,64,95,0.12)',
+          desc:'Instagram Direct xabarlardan avtomatik lead yaratish — maydon moslash shart emas',
+          igNote:true,
+          fields:[
+            {k:'access_token', label:'Page Access Token — Meta Business Suite → Sozlamalar → API', ph:'EAABwzLjNMZB...', t:'password'},
+            {k:'account_id',   label:'Instagram Business Account ID (Sahifangizning IG ID si)', ph:'17841400000000000', t:'text'},
+          ],
+          wh:{label:'Webhook URL — Meta Developer Dashboard → Webhooks ga kiriting', url:`${origin}/api/webhook/meta`},
+          verifyToken:'mizon_meta_webhook_v1' },
+
+        { key:'facebook', name:'Facebook Ads', logo:'👥', color:'#1877F2', bg:'rgba(24,119,242,0.12)',
+          desc:'Lead Ads formalarini real-time CRM ga yuklash — maydon moslash bilan',
+          showMapping:true,
+          fields:[
+            {k:'access_token', label:'Page Access Token — Meta Business Suite → Sozlamalar → API', ph:'EAABwzLjNMZB...', t:'password'},
+            {k:'page_id',      label:'Facebook Page ID — sahifa sozlamalaridan topasiz', ph:'123456789012345', t:'text'},
+            {k:'form_id',      label:'Lead Form ID — ixtiyoriy (bo\'sh = barcha formalar qabul qilinadi)', ph:'', t:'text'},
+          ],
+          wh:{label:'Webhook URL — Meta Developer Dashboard → Webhooks → leadgen ga kiriting', url:`${origin}/api/webhook/meta`},
+          verifyToken:'mizon_meta_webhook_v1' },
+
+        { key:'webhook', name:'Custom Webhook', logo:'🔗', color:'#6366f1', bg:'rgba(99,102,241,0.12)',
           desc:'Istalgan sayt yoki tizimdan POST so\'rov orqali lead yuborish imkoniyati',
-          fields:[ {k:'name',label:'Integratsiya nomi',ph:'Mening saytim',t:'text'}, {k:'secret',label:'Secret Key (ixtiyoriy)',ph:'Auto-yaratiladi',t:'text'} ],
-          wh:{label:'Lead qabul qilish endpoint (POST)',url:`${origin}/api/leads`} },
-        { key:'voip',      name:'Moizvonki VoIP',    logo:'📞',  color:'#01a750', bg:'rgba(1,167,80,0.12)',
+          fields:[
+            {k:'name',   label:'Integratsiya nomi', ph:'Mening saytim', t:'text'},
+            {k:'secret', label:'Secret Key (ixtiyoriy)', ph:'Auto-yaratiladi', t:'text'},
+          ],
+          wh:{label:'Lead qabul qilish endpoint (POST so\'rov)', url:`${origin}/api/leads`} },
+
+        { key:'voip', name:'Moizvonki VoIP', logo:'📞', color:'#01a750', bg:'rgba(1,167,80,0.12)',
           desc:'IP-telefon, avtomatik qo\'ng\'iroq qayd etish va Call Center statistikasi',
-          fields:[ {k:'account_id',label:'Account ID',ph:'user@moizvonki.ru',t:'text'}, {k:'api_token',label:'API Token',ph:'your-api-token',t:'password'}, {k:'caller_id',label:'Caller ID',ph:'+998901234567',t:'text'}, {k:'domain',label:'Domain',ph:'app.moizvonki.ru',t:'text'} ],
-          wh:{label:'Callback Webhook — Moizvonki kabinetiga kiriting',url:`${origin}/api/webhook/moizvonki`} },
+          fields:[
+            {k:'account_id', label:'Account ID — Moizvonki kabinetidagi login', ph:'user@moizvonki.ru', t:'text'},
+            {k:'api_token',  label:'API Token — Moizvonki → Sozlamalar → API', ph:'your-api-token', t:'password'},
+            {k:'caller_id',  label:'Caller ID — chiquvchi qo\'ng\'iroqlar uchun raqam', ph:'+998901234567', t:'text'},
+            {k:'domain',     label:'Domain', ph:'app.moizvonki.ru', t:'text'},
+          ],
+          wh:{label:'Callback Webhook — Moizvonki kabinetiga kiriting', url:`${origin}/api/webhook/moizvonki`} },
       ];
 
       const connected = ALL_INTG.filter(i=>!!configs[i.key]);
@@ -931,7 +992,8 @@ tr:hover td{background:var(--surface-variant);}
           {/* ── INTEGRATION MODAL ─────────────────────────────── */}
           {activeModal && activeModal !== 'apikeys' && (
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
-              <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:'460px',maxHeight:'88vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
+              <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth: activeModal.showMapping?'580px':'460px',maxHeight:'92vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
+
                 {/* Header */}
                 <div style={{padding:'20px 22px 16px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)'}}>
                   <div style={{width:'42px',height:'42px',background:activeModal.bg,borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>{activeModal.logo}</div>
@@ -943,10 +1005,11 @@ tr:hover td{background:var(--surface-variant);}
                 </div>
 
                 <div style={{padding:'20px 22px'}}>
-                  {/* Webhook info box */}
+
+                  {/* ── Webhook URL (copy box) ── */}
                   {activeModal.wh && (
-                    <div style={{background:activeModal.bg,border:`1px solid ${activeModal.color}30`,borderRadius:'9px',padding:'12px 14px',marginBottom:'18px'}}>
-                      <div style={{fontSize:'10px',fontWeight:700,color:activeModal.color,marginBottom:'7px',textTransform:'uppercase',letterSpacing:'0.07em'}}>{activeModal.wh.label}</div>
+                    <div style={{background:activeModal.bg,border:`1px solid ${activeModal.color}30`,borderRadius:'9px',padding:'11px 14px',marginBottom:'16px'}}>
+                      <div style={{fontSize:'10px',fontWeight:700,color:activeModal.color,marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>{activeModal.wh.label}</div>
                       <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                         <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all',lineHeight:'1.5'}}>{activeModal.wh.url}</code>
                         <button onClick={()=>copyText(activeModal.wh.url,'modal_wh')} style={{padding:'4px 10px',fontSize:'11px',fontWeight:700,background:copiedItem==='modal_wh'?'#01a750':activeModal.color,color:'white',border:'none',borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,transition:'background 0.15s'}}>
@@ -956,10 +1019,10 @@ tr:hover td{background:var(--surface-variant);}
                     </div>
                   )}
 
-                  {/* Verify token (Facebook / Instagram) */}
+                  {/* ── Verify Token (Facebook & Instagram) ── */}
                   {activeModal.verifyToken && (
-                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'10px 14px',marginBottom:'16px'}}>
-                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'0.07em'}}>Verify Token — Meta Webhook sahifasiga kiriting</div>
+                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'10px 14px',marginBottom:'14px'}}>
+                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'0.07em'}}>Verify Token — Meta Developer Dashboard → Webhooks sahifasiga kiriting</div>
                       <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                         <code style={{flex:1,fontSize:'12px',color:'var(--primary)',fontWeight:600}}>{activeModal.verifyToken}</code>
                         <button onClick={()=>copyText(activeModal.verifyToken,'vtok')} style={{padding:'3px 9px',fontSize:'11px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer',color:copiedItem==='vtok'?'#01a750':'var(--text-muted)',fontWeight:700}}>
@@ -969,15 +1032,69 @@ tr:hover td{background:var(--surface-variant);}
                     </div>
                   )}
 
-                  {/* Form fields */}
+                  {/* ── Form fields ── */}
                   {activeModal.fields.map(f => (
-                    <div key={f.k} style={{marginBottom:'13px'}}>
+                    <div key={f.k} style={{marginBottom:'12px'}}>
                       <span className="label-sm">{f.label}</span>
                       <input className="input-base" type={f.t} placeholder={f.ph} value={formData[f.k]||''} onChange={e=>setFormData({...formData,[f.k]:e.target.value})} style={{marginBottom:0}}/>
                     </div>
                   ))}
 
-                  {/* Action buttons */}
+                  {/* ── Instagram: avtomatik DM note (AmoCRM uslubi) ── */}
+                  {activeModal.igNote && (
+                    <div style={{background:'rgba(228,64,95,0.08)',border:'1px solid rgba(228,64,95,0.25)',borderRadius:'9px',padding:'13px 16px',marginTop:'6px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'7px'}}>
+                        <span style={{fontSize:'16px'}}>📸</span>
+                        <span style={{fontWeight:700,fontSize:'13px',color:'#E4405F'}}>Avtomatik sinxronlash (AmoCRM uslubi)</span>
+                      </div>
+                      <div style={{fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.7'}}>
+                        Instagram Direct xabarlar avtomatik lead yaratadi — <b>maydon moslash kerak emas</b>.<br/>
+                        Quyidagilar avtomatik CRM ga o'tadi:
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 16px',marginTop:'9px'}}>
+                        {[['👤 Ism','Telegram/IG profil nomidan'],['💬 Xabar','Chatlog ga qo\'shiladi'],['📞 Telefon','Xabardan avtomatik ajratiladi'],['📧 Email','Xabardan avtomatik ajratiladi']].map(([k,v],i)=>(
+                          <div key={i} style={{fontSize:'11px',color:'var(--text-secondary)'}}><b style={{color:'var(--text-main)'}}>{k}</b> — {v}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Facebook: Field Mapping UI (AmoCRM uslubi) ── */}
+                  {activeModal.showMapping && (
+                    <div style={{marginTop:'18px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
+                        <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
+                        <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>📋 Maydon Moslash (Field Mapping)</span>
+                        <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
+                      </div>
+                      <div style={{background:'rgba(24,119,242,0.05)',border:'1px solid rgba(24,119,242,0.15)',borderRadius:'9px',overflow:'hidden'}}>
+                        {/* Header row */}
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',gap:'0',padding:'8px 14px',background:'rgba(24,119,242,0.1)',borderBottom:'1px solid rgba(24,119,242,0.15)'}}>
+                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.06em'}}>Facebook forma maydoni</span>
+                          <span></span>
+                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.06em'}}>CRM maydoni</span>
+                        </div>
+                        {/* Mapping rows */}
+                        {FB_FIELDS.map((row,i) => (
+                          <div key={row.fb} style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',gap:'0',padding:'7px 14px',borderBottom:i<FB_FIELDS.length-1?'1px solid rgba(24,119,242,0.08)':'none',alignItems:'center'}}>
+                            <div style={{fontSize:'12px',color:'var(--text-secondary)'}}>{row.lbl}</div>
+                            <div style={{textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>→</div>
+                            <select
+                              value={(formData._fm||{})[row.fb]||''}
+                              onChange={e=>{const fm={...(formData._fm||{}), [row.fb]:e.target.value}; setFormData({...formData,_fm:fm});}}
+                              style={{background:'var(--bg-surface)',border:'1px solid var(--outline-variant)',borderRadius:'5px',padding:'4px 8px',fontSize:'11px',color:'var(--text-main)',cursor:'pointer',outline:'none',width:'100%'}}>
+                              {CRM_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                            </select>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'7px',lineHeight:'1.5'}}>
+                        💡 Formangizda o'zga maydonlar bo'lsa — ular avtomatik fallback orqali taniqli maydonlarga moslashtiriladi.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Action buttons ── */}
                   <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
                     <button className="btn-primary" style={{flex:1,padding:'10px'}} disabled={saving} onClick={()=>saveConfig(activeModal.key, formData)}>
                       {saving ? '⏳ Saqlanmoqda...' : (configs[activeModal.key]?'💾 Yangilash':'🔌 Ulash')}
