@@ -12,10 +12,16 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mizon-dev-secret-2024-change-in-pr
 const app = express();
 
 // ========== DATABASE ==========
-const pool = process.env.POSTGRES_URL || process.env.DATABASE_URL
+const DB_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const pool = DB_URL
   ? new Pool({
-      connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      connectionString: DB_URL,
+      ssl: DB_URL.includes('localhost') || DB_URL.includes('127.0.0.1')
+        ? false
+        : { rejectUnauthorized: false },   // Railway / Supabase / Neon SSL
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
     })
   : null;
 
@@ -26,6 +32,14 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+// Raw body — webhook endpoint uchun HMAC imzoni to'g'ri tekshirish
+app.use('/api/webhook/meta', express.raw({ type: 'application/json' }), (req, _res, next) => {
+  if (Buffer.isBuffer(req.body)) {
+    req.rawBody = req.body.toString('utf8');
+    try { req.body = JSON.parse(req.rawBody); } catch { req.body = {}; }
+  }
+  next();
+});
 app.use(express.json());
 
 // ========== SERVE FRONTEND (local dev only) ==========
@@ -413,14 +427,13 @@ app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
 });
 
-// ========== START SERVER (local dev) ==========
+// ========== START SERVER ==========
+// Always listen — works on Railway (production) and local dev both
 const PORT = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => {
-    console.log(`\n🚀 Mizon CRM v8 — http://localhost:${PORT}`);
-    console.log(`📡 API: http://localhost:${PORT}/api/health`);
-    console.log(`🔑 Super Admin: http://localhost:${PORT}?superadmin=true\n`);
-  });
-}
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🚀 Mizon CRM — port ${PORT}`);
+  console.log(`📡 Health: http://localhost:${PORT}/api/health`);
+  console.log(`🗄️  DB: ${DB_URL ? 'PostgreSQL ulandi' : 'Demo rejim (DB yo\'q)'}`);
+});
 
-module.exports = app;
+module.exports = app; // keep for testing / serverless compatibility

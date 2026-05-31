@@ -116,8 +116,8 @@ exports.handleMetaWebhook = async (req, res) => {
   // ACK immediately — Meta requires response within 10 seconds
   res.status(200).send('EVENT_RECEIVED');
 
-  // Signature check (HMAC-SHA256)
-  const rawBody = JSON.stringify(req.body);
+  // Signature check (HMAC-SHA256) — rawBody middleware tomonidan to'ldiriladi
+  const rawBody = req.rawBody || JSON.stringify(req.body);
   if (!verifyMetaSignature(rawBody, req.headers['x-hub-signature-256'])) {
     console.warn('❌ Meta webhook: invalid signature');
     return;
