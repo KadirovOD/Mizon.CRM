@@ -691,12 +691,24 @@ tr:hover td{background:var(--surface-variant);}
           if (!Array.isArray(list)) return;
           const loaded = {};
           list.forEach(cfg => {
-            loaded[cfg.platform] = {
-              page_id:      cfg.page_id      || '',
-              form_id:      cfg.form_id      || '',
-              _connected_at: cfg.created_at  || new Date().toISOString(),
-              ...(cfg.extra_config || {}),
-            };
+            if (['facebook','instagram'].includes(cfg.platform)) {
+              // Multi-connection: array per platform
+              if (!loaded[cfg.platform]) loaded[cfg.platform] = [];
+              loaded[cfg.platform].push({
+                id:           cfg.id,
+                page_id:      cfg.page_id || '',
+                form_id:      cfg.form_id || '',
+                _connected_at: cfg.created_at || new Date().toISOString(),
+                ...(cfg.extra_config || {}),
+              });
+            } else {
+              loaded[cfg.platform] = {
+                page_id:      cfg.page_id      || '',
+                form_id:      cfg.form_id      || '',
+                _connected_at: cfg.created_at  || new Date().toISOString(),
+                ...(cfg.extra_config || {}),
+              };
+            }
           });
           setConfigs(prev => {
             const merged = {...prev, ...loaded};
@@ -887,11 +899,14 @@ tr:hover td{background:var(--surface-variant);}
           wh:{label:'Callback Webhook — Moizvonki kabinetiga kiriting', url:`${origin}/api/webhook/moizvonki`} },
       ];
 
-      const connected = ALL_INTG.filter(i=>!!configs[i.key]);
+      const cfgIsOn = (key) => { const c = configs[key]; return Array.isArray(c) ? c.length > 0 : !!c; };
+      const cfgCount = (key) => { const c = configs[key]; return Array.isArray(c) ? c.length : (cfgIsOn(key) ? 1 : 0); };
+      const connected = ALL_INTG.filter(i => cfgIsOn(i.key));
 
       // ── Card component ──────────────────────────────────────────────
       const IntgCard = ({intg}) => {
-        const isOn = !!configs[intg.key];
+        const isOn  = cfgIsOn(intg.key);
+        const count = cfgCount(intg.key);
         return (
           <div onClick={()=>openModal(intg)} style={{background:'var(--bg-surface)', border:`1px solid ${isOn?intg.color+'50':'var(--outline-variant)'}`, borderRadius:'13px', padding:'18px', cursor:'pointer', transition:'border-color 0.18s, box-shadow 0.18s', position:'relative', overflow:'hidden'}}
             onMouseEnter={e=>{e.currentTarget.style.borderColor=intg.color+'90'; e.currentTarget.style.boxShadow=`0 4px 18px ${intg.color}25`;}}
@@ -902,9 +917,9 @@ tr:hover td{background:var(--surface-variant);}
             <div style={{fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.55',marginBottom:'14px',minHeight:'36px'}}>{intg.desc}</div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span style={{fontSize:'10px',fontWeight:700,padding:'3px 9px',borderRadius:'20px',background:isOn?'rgba(1,167,80,0.14)':'var(--surface-variant)',color:isOn?'#01a750':'var(--text-muted)',border:isOn?'1px solid rgba(1,167,80,0.3)':'1px solid transparent'}}>
-                {isOn?'● Ulangan':'○ Ulanmagan'}
+                {isOn ? (count > 1 ? `● ${count} ta ulangan` : '● Ulangan') : '○ Ulanmagan'}
               </span>
-              <span style={{fontSize:'12px',color:intg.color,fontWeight:600}}>{isOn?'Tahrirlash →':'Ulash →'}</span>
+              <span style={{fontSize:'12px',color:intg.color,fontWeight:600}}>{isOn ? (count > 1 ? `+Ulash →` : 'Tahrirlash →') : 'Ulash →'}</span>
             </div>
           </div>
         );
@@ -995,124 +1010,426 @@ tr:hover td{background:var(--surface-variant);}
           </div>
 
           {/* ── INTEGRATION MODAL ─────────────────────────────── */}
-          {activeModal && activeModal !== 'apikeys' && (
-            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
-              <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth: activeModal.showMapping?'580px':'460px',maxHeight:'92vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
+          {activeModal && activeModal !== 'apikeys' && (() => {
+            // ── Facebook OAuth multi-step flow ─────────────────────
+            const FbOAuthFlow = () => {
+              const [fbStep,   setFbStep]   = useState(0); // 0=list+btn, 1=waiting, 2=pages, 3=forms+mapping
+              const [fbToken,  setFbToken]  = useState('');
+              const [fbPages,  setFbPages]  = useState([]);
+              const [fbPage,   setFbPage]   = useState(null);
+              const [fbForms,  setFbForms]  = useState([]);
+              const [fbForm,   setFbForm]   = useState(null);
+              const [fbFm,     setFbFm]     = useState({...DEFAULT_FM});
+              const [fbSaving, setFbSaving] = useState(false);
+              const [loadingF, setLoadingF] = useState(false);
+              const connList = Array.isArray(configs.facebook) ? configs.facebook : (configs.facebook ? [configs.facebook] : []);
 
-                {/* Header */}
-                <div style={{padding:'20px 22px 16px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)'}}>
-                  <div style={{width:'42px',height:'42px',background:activeModal.bg,borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>{activeModal.logo}</div>
-                  <div style={{flex:1}}>
-                    <div style={{fontWeight:700,fontSize:'16px'}}>{activeModal.name}</div>
-                    <div style={{fontSize:'11px',color:'var(--text-muted)'}}>Integratsiya sozlamalari</div>
-                  </div>
-                  <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1,padding:'4px'}}>✕</button>
-                </div>
+              useEffect(() => {
+                const handler = (e) => {
+                  if (e.data?.type === 'fb_oauth_success') { setFbToken(e.data.token||''); setFbPages(e.data.pages||[]); setFbStep(2); }
+                  else if (e.data?.type === 'fb_oauth_error') { flash('❌ Facebook: '+(e.data.error||'Xato')); setFbStep(0); }
+                };
+                window.addEventListener('message', handler);
+                return () => window.removeEventListener('message', handler);
+              }, []);
 
+              const startFbOAuth = () => {
+                const popup = window.open('/api/oauth/facebook/init', 'fb_oauth', 'width=600,height=700,left=200,top=100');
+                if (!popup) { flash('❌ Popup bloklandi. Brauzer sozlamalarini tekshiring.'); return; }
+                setFbStep(1);
+              };
+
+              const selectFbPage = async (pg) => {
+                setFbPage(pg); setLoadingF(true); setFbForm(null);
+                try {
+                  const r = await fetch(`/api/oauth/facebook/forms?page_id=${pg.id}&page_token=${encodeURIComponent(pg.access_token)}`);
+                  setFbForms(r.ok ? (await r.json()) : []);
+                } catch { setFbForms([]); }
+                setLoadingF(false); setFbStep(3);
+              };
+
+              const saveFb = async () => {
+                if (!fbPage) return;
+                setFbSaving(true);
+                try {
+                  const r = await fetch('/api/integrations', {method:'POST', headers:authH(), body:JSON.stringify({
+                    platform:'facebook', page_id:fbPage.id, form_id:fbForm?.id||null,
+                    access_token:fbPage.access_token, field_mapping:fbFm,
+                    extra_config:{page_name:fbPage.name, form_name:fbForm?.name||''},
+                  })});
+                  const d = await r.json();
+                  if (!r.ok) throw new Error(d.error||'Xato');
+                  const newEntry = {id:d.id, page_id:fbPage.id, page_name:fbPage.name, form_id:fbForm?.id, form_name:fbForm?.name||'', _connected_at:new Date().toISOString()};
+                  const newList  = [...connList, newEntry];
+                  const updated  = {...configs, facebook: newList};
+                  setConfigs(updated); localStorage.setItem('mizon_integrations', JSON.stringify(updated));
+                  flash('✅ '+fbPage.name+' ulandi'); setFbStep(0); setFbPage(null); setFbForm(null);
+                } catch(e) { flash('❌ '+e.message); }
+                setFbSaving(false);
+              };
+
+              const disconnectFbPage = async (item) => {
+                if (!window.confirm(`"${item.page_name||item.page_id}" ni uzasizmi?`)) return;
+                if (item.id) { try { await fetch(`/api/integrations/id/${item.id}`,{method:'DELETE',headers:authH()}); } catch {} }
+                const newList = connList.filter(p=>p!==item);
+                const updated = {...configs};
+                if (newList.length > 0) updated.facebook = newList;
+                else delete updated.facebook;
+                setConfigs(updated); localStorage.setItem('mizon_integrations',JSON.stringify(updated));
+                flash(newList.length?`🔌 "${item.page_name||item.page_id}" uzildi`:'🔌 Facebook integratsiyasi uzildi');
+              };
+
+              return (
                 <div style={{padding:'20px 22px'}}>
-
-                  {/* ── Webhook URL (copy box) ── */}
-                  {activeModal.wh && (
-                    <div style={{background:activeModal.bg,border:`1px solid ${activeModal.color}30`,borderRadius:'9px',padding:'11px 14px',marginBottom:'16px'}}>
-                      <div style={{fontSize:'10px',fontWeight:700,color:activeModal.color,marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>{activeModal.wh.label}</div>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                        <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all',lineHeight:'1.5'}}>{activeModal.wh.url}</code>
-                        <button onClick={()=>copyText(activeModal.wh.url,'modal_wh')} style={{padding:'4px 10px',fontSize:'11px',fontWeight:700,background:copiedItem==='modal_wh'?'#01a750':activeModal.color,color:'white',border:'none',borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,transition:'background 0.15s'}}>
-                          {copiedItem==='modal_wh'?'✓ Nusxalandi':'📋 Nusxa'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Verify Token (Facebook & Instagram) ── */}
-                  {activeModal.verifyToken && (
-                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'10px 14px',marginBottom:'14px'}}>
-                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'0.07em'}}>Verify Token — Meta Developer Dashboard → Webhooks sahifasiga kiriting</div>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                        <code style={{flex:1,fontSize:'12px',color:'var(--primary)',fontWeight:600}}>{activeModal.verifyToken}</code>
-                        <button onClick={()=>copyText(activeModal.verifyToken,'vtok')} style={{padding:'3px 9px',fontSize:'11px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer',color:copiedItem==='vtok'?'#01a750':'var(--text-muted)',fontWeight:700}}>
-                          {copiedItem==='vtok'?'✓':'📋'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Form fields ── */}
-                  {activeModal.fields.map(f => (
-                    <div key={f.k} style={{marginBottom:'12px'}}>
-                      <span className="label-sm">{f.label}</span>
-                      <input className="input-base" type={f.t} placeholder={f.ph} value={formData[f.k]||''} onChange={e=>setFormData({...formData,[f.k]:e.target.value})} style={{marginBottom:0}}/>
-                    </div>
-                  ))}
-
-                  {/* ── Instagram: avtomatik DM note (AmoCRM uslubi) ── */}
-                  {activeModal.igNote && (
-                    <div style={{background:'rgba(228,64,95,0.08)',border:'1px solid rgba(228,64,95,0.25)',borderRadius:'9px',padding:'13px 16px',marginTop:'6px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'7px'}}>
-                        <span style={{fontSize:'16px'}}>📸</span>
-                        <span style={{fontWeight:700,fontSize:'13px',color:'#E4405F'}}>Avtomatik sinxronlash (AmoCRM uslubi)</span>
-                      </div>
-                      <div style={{fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.7'}}>
-                        Instagram Direct xabarlar avtomatik lead yaratadi — <b>maydon moslash kerak emas</b>.<br/>
-                        Quyidagilar avtomatik CRM ga o'tadi:
-                      </div>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 16px',marginTop:'9px'}}>
-                        {[['👤 Ism','Telegram/IG profil nomidan'],['💬 Xabar','Chatlog ga qo\'shiladi'],['📞 Telefon','Xabardan avtomatik ajratiladi'],['📧 Email','Xabardan avtomatik ajratiladi']].map(([k,v],i)=>(
-                          <div key={i} style={{fontSize:'11px',color:'var(--text-secondary)'}}><b style={{color:'var(--text-main)'}}>{k}</b> — {v}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Facebook: Field Mapping UI (AmoCRM uslubi) ── */}
-                  {activeModal.showMapping && (
-                    <div style={{marginTop:'18px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
-                        <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
-                        <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>📋 Maydon Moslash (Field Mapping)</span>
-                        <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
-                      </div>
-                      <div style={{background:'rgba(24,119,242,0.05)',border:'1px solid rgba(24,119,242,0.15)',borderRadius:'9px',overflow:'hidden'}}>
-                        {/* Header row */}
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',gap:'0',padding:'8px 14px',background:'rgba(24,119,242,0.1)',borderBottom:'1px solid rgba(24,119,242,0.15)'}}>
-                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.06em'}}>Facebook forma maydoni</span>
-                          <span></span>
-                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.06em'}}>CRM maydoni</span>
-                        </div>
-                        {/* Mapping rows */}
-                        {FB_FIELDS.map((row,i) => (
-                          <div key={row.fb} style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',gap:'0',padding:'7px 14px',borderBottom:i<FB_FIELDS.length-1?'1px solid rgba(24,119,242,0.08)':'none',alignItems:'center'}}>
-                            <div style={{fontSize:'12px',color:'var(--text-secondary)'}}>{row.lbl}</div>
-                            <div style={{textAlign:'center',fontSize:'12px',color:'var(--text-muted)'}}>→</div>
-                            <select
-                              value={(formData._fm||{})[row.fb]||''}
-                              onChange={e=>{const fm={...(formData._fm||{}), [row.fb]:e.target.value}; setFormData({...formData,_fm:fm});}}
-                              style={{background:'var(--bg-surface)',border:'1px solid var(--outline-variant)',borderRadius:'5px',padding:'4px 8px',fontSize:'11px',color:'var(--text-main)',cursor:'pointer',outline:'none',width:'100%'}}>
-                              {CRM_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-                            </select>
+                  {/* Step 0: Connected list + OAuth button */}
+                  {fbStep === 0 && (<>
+                    {connList.length > 0 && (
+                      <div style={{marginBottom:'14px'}}>
+                        <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'8px'}}>Ulangan sahifalar ({connList.length})</div>
+                        {connList.map((p,i)=>(
+                          <div key={p.id||i} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 13px',background:'rgba(24,119,242,0.07)',border:'1px solid rgba(24,119,242,0.25)',borderRadius:'8px',marginBottom:'6px'}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:600,fontSize:'13px'}}>{p.page_name||p.page_id}</div>
+                              {p.form_name&&<div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}>📋 {p.form_name}</div>}
+                              {p._connected_at&&<div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{new Date(p._connected_at).toLocaleDateString()}</div>}
+                            </div>
+                            <span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:'rgba(1,167,80,0.12)',color:'#01a750',border:'1px solid rgba(1,167,80,0.3)'}}>● Faol</span>
+                            <button style={{padding:'4px 10px',fontSize:'11px',background:'none',border:'1px solid rgba(239,68,68,0.3)',color:'#ef4444',borderRadius:'6px',cursor:'pointer'}} onClick={()=>disconnectFbPage(p)}>Uzish</button>
                           </div>
                         ))}
                       </div>
-                      <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'7px',lineHeight:'1.5'}}>
-                        💡 Formangizda o'zga maydonlar bo'lsa — ular avtomatik fallback orqali taniqli maydonlarga moslashtiriladi.
+                    )}
+                    {/* Webhook URL */}
+                    <div style={{background:'rgba(24,119,242,0.07)',border:'1px solid rgba(24,119,242,0.2)',borderRadius:'9px',padding:'10px 14px',marginBottom:'12px'}}>
+                      <div style={{fontSize:'10px',fontWeight:700,color:'#1877F2',marginBottom:'5px',textTransform:'uppercase'}}>Webhook URL — Meta Developer → Webhooks → leadgen</div>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                        <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{origin}/api/webhook/meta</code>
+                        <button onClick={()=>copyText(origin+'/api/webhook/meta','fb_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='fb_wh'?'#01a750':'#1877F2',color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                          {copiedItem==='fb_wh'?'✓':'📋 Nusxa'}
+                        </button>
                       </div>
+                    </div>
+                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'9px 13px',marginBottom:'14px',display:'flex',alignItems:'center',gap:'10px'}}>
+                      <span style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase'}}>Verify Token:</span>
+                      <code style={{flex:1,fontSize:'12px',color:'var(--primary)',fontWeight:600}}>mizon_meta_webhook_v1</code>
+                      <button onClick={()=>copyText('mizon_meta_webhook_v1','fbvt')} style={{padding:'2px 8px',fontSize:'10px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'4px',cursor:'pointer',color:copiedItem==='fbvt'?'#01a750':'var(--text-muted)',fontWeight:700}}>{copiedItem==='fbvt'?'✓':'📋'}</button>
+                    </div>
+                    <button onClick={startFbOAuth} style={{width:'100%',padding:'14px',background:'#1877F2',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',marginBottom:'8px'}}>
+                      <span style={{fontSize:'18px'}}>👥</span> Facebook bilan kirish
+                    </button>
+                    <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',lineHeight:'1.5'}}>
+                      Tugma bosilsa Facebook login oynasi ochiladi. Sahifangizga admin ekanligingizni tasdiqlang.
+                    </div>
+                  </>)}
+
+                  {/* Step 1: Waiting */}
+                  {fbStep === 1 && (
+                    <div style={{textAlign:'center',padding:'36px 20px'}}>
+                      <div style={{fontSize:'36px',marginBottom:'14px',animation:'spin 1s linear infinite',display:'inline-block'}}>⏳</div>
+                      <div style={{fontWeight:700,fontSize:'15px',marginBottom:'6px'}}>Facebook oynasi ochiq...</div>
+                      <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'20px'}}>Yangi oynada Facebook ga kiring va ruxsat bering</div>
+                      <button className="btn-outline" onClick={()=>setFbStep(0)}>← Bekor qilish</button>
                     </div>
                   )}
 
-                  {/* ── Action buttons ── */}
-                  <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
-                    <button className="btn-primary" style={{flex:1,padding:'10px'}} disabled={saving} onClick={()=>saveConfig(activeModal.key, formData)}>
-                      {saving ? '⏳ Saqlanmoqda...' : (configs[activeModal.key]?'💾 Yangilash':'🔌 Ulash')}
-                    </button>
-                    {configs[activeModal.key] && (
-                      <button style={{padding:'10px 14px',background:'none',border:'1px solid rgba(239,68,68,0.35)',color:'#ef4444',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600}} onClick={()=>disconnectIntg(activeModal.key)}>Uzish</button>
+                  {/* Step 2: Page selection */}
+                  {fbStep === 2 && (<>
+                    <div style={{fontWeight:700,fontSize:'14px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{background:'#1877F2',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>2</span>
+                      Qaysi sahifani ulash?
+                    </div>
+                    {fbPages.length === 0 && <div style={{padding:'20px',textAlign:'center',color:'var(--text-muted)',fontSize:'13px'}}>⚠️ Sahifalar topilmadi. Sahifangizning admin ekanligingizni tekshiring.</div>}
+                    <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'14px'}}>
+                      {fbPages.map(pg=>(
+                        <button key={pg.id} onClick={()=>selectFbPage(pg)} style={{padding:'13px 16px',background:'var(--bg-base)',border:'2px solid var(--outline-variant)',borderRadius:'10px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',textAlign:'left',transition:'all 0.15s'}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor='#1877F2';e.currentTarget.style.background='rgba(24,119,242,0.06)';}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.background='var(--bg-base)';}}>
+                          <div style={{width:'36px',height:'36px',background:'rgba(24,119,242,0.12)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}}>👥</div>
+                          <div style={{flex:1}}><div style={{fontWeight:600,fontSize:'13px'}}>{pg.name}</div><div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>ID: {pg.id}</div></div>
+                          <span style={{color:'#1877F2',fontSize:'12px',fontWeight:600}}>Tanlash →</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button className="btn-outline" style={{width:'100%'}} onClick={()=>setFbStep(0)}>← Orqaga</button>
+                  </>)}
+
+                  {/* Step 3: Forms + field mapping */}
+                  {fbStep === 3 && fbPage && (<>
+                    {loadingF ? (
+                      <div style={{textAlign:'center',padding:'24px',color:'var(--text-muted)'}}>📄 Formalar yuklanmoqda...</div>
+                    ) : (<>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
+                        <span style={{background:'#1877F2',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>3</span>
+                        <div style={{fontWeight:700,fontSize:'13px'}}>📄 Sahifa: <span style={{color:'#1877F2'}}>{fbPage.name}</span></div>
+                      </div>
+                      <div style={{marginBottom:'14px'}}>
+                        <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',marginBottom:'7px'}}>Forma tanlang</div>
+                        <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
+                          <button onClick={()=>setFbForm(null)} style={{padding:'9px 13px',background:fbForm===null?'rgba(24,119,242,0.1)':'var(--bg-base)',border:fbForm===null?'2px solid #1877F2':'1px solid var(--outline-variant)',borderRadius:'7px',cursor:'pointer',textAlign:'left',fontSize:'12px',fontWeight:fbForm===null?700:400,color:fbForm===null?'#1877F2':'var(--text-main)'}}>
+                            📋 Barcha formalar (filtr yo'q)
+                          </button>
+                          {fbForms.map(f=>(
+                            <button key={f.id} onClick={()=>setFbForm(f)} style={{padding:'9px 13px',background:fbForm?.id===f.id?'rgba(24,119,242,0.1)':'var(--bg-base)',border:fbForm?.id===f.id?'2px solid #1877F2':'1px solid var(--outline-variant)',borderRadius:'7px',cursor:'pointer',textAlign:'left',fontSize:'12px',fontWeight:fbForm?.id===f.id?700:400,color:fbForm?.id===f.id?'#1877F2':'var(--text-main)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                              <span>{f.name}</span>
+                              {f.status&&<span style={{fontSize:'10px',color:'var(--text-muted)',padding:'2px 6px',background:'var(--surface-variant)',borderRadius:'4px'}}>{f.status}</span>}
+                            </button>
+                          ))}
+                          {fbForms.length===0&&<div style={{fontSize:'12px',color:'var(--text-muted)',padding:'8px 12px',background:'rgba(245,158,11,0.07)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'7px'}}>⚠️ Bu sahifada lead formalar topilmadi. Barcha eventlar qabul qilinadi.</div>}
+                        </div>
+                      </div>
+                      {/* Field Mapping */}
+                      <div style={{marginBottom:'14px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'9px'}}>
+                          <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
+                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>📋 Maydon Moslash</span>
+                          <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
+                        </div>
+                        <div style={{background:'rgba(24,119,242,0.05)',border:'1px solid rgba(24,119,242,0.15)',borderRadius:'9px',overflow:'hidden'}}>
+                          <div style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',padding:'7px 13px',background:'rgba(24,119,242,0.1)',borderBottom:'1px solid rgba(24,119,242,0.15)'}}>
+                            <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase'}}>Facebook maydoni</span>
+                            <span></span>
+                            <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase'}}>CRM maydoni</span>
+                          </div>
+                          {FB_FIELDS.map((row,i)=>(
+                            <div key={row.fb} style={{display:'grid',gridTemplateColumns:'1fr 20px 1fr',padding:'6px 13px',borderBottom:i<FB_FIELDS.length-1?'1px solid rgba(24,119,242,0.08)':'none',alignItems:'center'}}>
+                              <div style={{fontSize:'11px',color:'var(--text-secondary)'}}>{row.lbl}</div>
+                              <div style={{textAlign:'center',fontSize:'11px',color:'var(--text-muted)'}}>→</div>
+                              <select value={fbFm[row.fb]||''} onChange={e=>setFbFm({...fbFm,[row.fb]:e.target.value})} style={{background:'var(--bg-surface)',border:'1px solid var(--outline-variant)',borderRadius:'5px',padding:'4px 7px',fontSize:'11px',color:'var(--text-main)',cursor:'pointer',outline:'none',width:'100%'}}>
+                                {CRM_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',gap:'8px'}}>
+                        <button className="btn-primary" style={{flex:1,padding:'11px'}} disabled={fbSaving} onClick={saveFb}>{fbSaving?'⏳ Ulanmoqda...':'🔌 Ulash'}</button>
+                        <button className="btn-outline" style={{padding:'11px 15px'}} onClick={()=>setFbStep(2)}>← Sahifalar</button>
+                      </div>
+                    </>)}
+                  </>)}
+                </div>
+              );
+            };
+
+            // ── Instagram OAuth multi-step flow ────────────────────
+            const IgOAuthFlow = () => {
+              const [igStep,     setIgStep]     = useState(0); // 0=list+btn, 1=waiting, 2=accounts, 3=type+save
+              const [igAccounts, setIgAccounts] = useState([]);
+              const [igAccount,  setIgAccount]  = useState(null);
+              const [igConnType, setIgConnType] = useState('direct'); // 'direct' | 'comments'
+              const [igSaving,   setIgSaving]   = useState(false);
+              const connList = Array.isArray(configs.instagram) ? configs.instagram : (configs.instagram ? [configs.instagram] : []);
+
+              useEffect(() => {
+                const handler = (e) => {
+                  if (e.data?.type === 'ig_oauth_success') { setIgAccounts(e.data.accounts||[]); setIgStep(2); }
+                  else if (e.data?.type === 'ig_oauth_error') { flash('❌ Instagram: '+(e.data.error||'Xato')); setIgStep(0); }
+                };
+                window.addEventListener('message', handler);
+                return () => window.removeEventListener('message', handler);
+              }, []);
+
+              const startIgOAuth = () => {
+                const popup = window.open('/api/oauth/instagram/init', 'ig_oauth', 'width=600,height=700,left=200,top=100');
+                if (!popup) { flash('❌ Popup bloklandi.'); return; }
+                setIgStep(1);
+              };
+
+              const saveIg = async () => {
+                if (!igAccount) return;
+                setIgSaving(true);
+                try {
+                  const r = await fetch('/api/integrations', {method:'POST', headers:authH(), body:JSON.stringify({
+                    platform:'instagram', page_id:igAccount.ig_id||igAccount.page_id,
+                    access_token:igAccount.access_token,
+                    extra_config:{account_name:igAccount.ig_username||igAccount.ig_name, page_name:igAccount.page_name, ig_id:igAccount.ig_id, connection_type:igConnType},
+                  })});
+                  const d = await r.json();
+                  if (!r.ok) throw new Error(d.error||'Xato');
+                  const newEntry = {id:d.id, account_name:igAccount.ig_username||igAccount.ig_name, page_name:igAccount.page_name, connection_type:igConnType, _connected_at:new Date().toISOString()};
+                  const newList  = [...connList, newEntry];
+                  const updated  = {...configs, instagram: newList};
+                  setConfigs(updated); localStorage.setItem('mizon_integrations',JSON.stringify(updated));
+                  flash('✅ @'+(igAccount.ig_username||igAccount.ig_name)+' ulandi'); setIgStep(0); setIgAccount(null);
+                } catch(e) { flash('❌ '+e.message); }
+                setIgSaving(false);
+              };
+
+              const disconnectIgAccount = async (item) => {
+                if (!window.confirm(`"@${item.account_name||item.ig_id}" ni uzasizmi?`)) return;
+                if (item.id) { try { await fetch(`/api/integrations/id/${item.id}`,{method:'DELETE',headers:authH()}); } catch {} }
+                const newList = connList.filter(p=>p!==item);
+                const updated = {...configs};
+                if (newList.length > 0) updated.instagram = newList;
+                else delete updated.instagram;
+                setConfigs(updated); localStorage.setItem('mizon_integrations',JSON.stringify(updated));
+                flash(newList.length?`🔌 "@${item.account_name}" uzildi`:'🔌 Instagram integratsiyasi uzildi');
+              };
+
+              return (
+                <div style={{padding:'20px 22px'}}>
+                  {/* Step 0 */}
+                  {igStep === 0 && (<>
+                    {connList.length > 0 && (
+                      <div style={{marginBottom:'14px'}}>
+                        <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:'8px'}}>Ulangan Instagram hisoblari ({connList.length})</div>
+                        {connList.map((a,i)=>(
+                          <div key={a.id||i} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 13px',background:'rgba(228,64,95,0.07)',border:'1px solid rgba(228,64,95,0.25)',borderRadius:'8px',marginBottom:'6px'}}>
+                            <div style={{flex:1}}>
+                              <div style={{fontWeight:600,fontSize:'13px'}}>@{a.account_name||a.ig_id}</div>
+                              {a.page_name&&<div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}>📄 {a.page_name}</div>}
+                              {a.connection_type&&<div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{a.connection_type==='direct'?'💬 Direct xabarlar':'💭 Izohlar'}</div>}
+                            </div>
+                            <span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:'rgba(1,167,80,0.12)',color:'#01a750',border:'1px solid rgba(1,167,80,0.3)'}}>● Faol</span>
+                            <button style={{padding:'4px 10px',fontSize:'11px',background:'none',border:'1px solid rgba(239,68,68,0.3)',color:'#ef4444',borderRadius:'6px',cursor:'pointer'}} onClick={()=>disconnectIgAccount(a)}>Uzish</button>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                    <button className="btn-outline" style={{padding:'10px 14px'}} onClick={()=>setActiveModal(null)}>Bekor</button>
+                    <div style={{background:'rgba(228,64,95,0.07)',border:'1px solid rgba(228,64,95,0.2)',borderRadius:'9px',padding:'10px 14px',marginBottom:'12px'}}>
+                      <div style={{fontSize:'10px',fontWeight:700,color:'#E4405F',marginBottom:'5px',textTransform:'uppercase'}}>Webhook URL — Meta Developer → Webhooks → messages</div>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                        <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{origin}/api/webhook/meta</code>
+                        <button onClick={()=>copyText(origin+'/api/webhook/meta','ig_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='ig_wh'?'#01a750':'#E4405F',color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{copiedItem==='ig_wh'?'✓':'📋 Nusxa'}</button>
+                      </div>
+                    </div>
+                    <button onClick={startIgOAuth} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',marginBottom:'8px'}}>
+                      <span style={{fontSize:'18px'}}>📸</span> Instagram bilan kirish
+                    </button>
+                    <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',lineHeight:'1.5'}}>
+                      Instagram Business hisobingiz Facebook Sahifasiga ulangan bo'lishi kerak.
+                    </div>
+                  </>)}
+
+                  {/* Step 1: Waiting */}
+                  {igStep === 1 && (
+                    <div style={{textAlign:'center',padding:'36px 20px'}}>
+                      <div style={{fontSize:'36px',marginBottom:'14px'}}>⏳</div>
+                      <div style={{fontWeight:700,fontSize:'15px',marginBottom:'6px'}}>Instagram oynasi ochiq...</div>
+                      <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'20px'}}>Yangi oynada Facebook orqali kiring va ruxsat bering</div>
+                      <button className="btn-outline" onClick={()=>setIgStep(0)}>← Bekor qilish</button>
+                    </div>
+                  )}
+
+                  {/* Step 2: Account selection */}
+                  {igStep === 2 && (<>
+                    <div style={{fontWeight:700,fontSize:'14px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{background:'#E4405F',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>2</span>
+                      Instagram Business hisobini tanlang
+                    </div>
+                    {igAccounts.length===0&&<div style={{padding:'20px',textAlign:'center',color:'var(--text-muted)',fontSize:'12px'}}>⚠️ Instagram Business hisobi topilmadi. Sahifangizga Instagram ulangan ekanligini tekshiring.</div>}
+                    <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'14px'}}>
+                      {igAccounts.map((a,i)=>(
+                        <button key={a.ig_id||i} onClick={()=>{setIgAccount(a);setIgStep(3);}} style={{padding:'13px 16px',background:'var(--bg-base)',border:'2px solid var(--outline-variant)',borderRadius:'10px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',textAlign:'left',transition:'all 0.15s'}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor='#E4405F';e.currentTarget.style.background='rgba(228,64,95,0.06)';}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.background='var(--bg-base)';}}>
+                          <div style={{width:'36px',height:'36px',background:'rgba(228,64,95,0.12)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}}>📸</div>
+                          <div style={{flex:1}}>
+                            <div style={{fontWeight:600,fontSize:'13px'}}>@{a.ig_username||a.ig_name}</div>
+                            <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>📄 {a.page_name} · ID: {a.ig_id}</div>
+                          </div>
+                          <span style={{color:'#E4405F',fontSize:'12px',fontWeight:600}}>Tanlash →</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button className="btn-outline" style={{width:'100%'}} onClick={()=>setIgStep(0)}>← Orqaga</button>
+                  </>)}
+
+                  {/* Step 3: Connection type + save */}
+                  {igStep === 3 && igAccount && (<>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'14px'}}>
+                      <span style={{background:'#E4405F',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>3</span>
+                      <div style={{fontWeight:700,fontSize:'13px'}}>@{igAccount.ig_username||igAccount.ig_name}</div>
+                    </div>
+                    <div style={{marginBottom:'16px'}}>
+                      <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',marginBottom:'8px'}}>Ulanish turini tanlang</div>
+                      {[
+                        {v:'direct',  label:'💬 Direct xabarlar', desc:'Instagram DM ga kelgan har bir xabar — yangi lead'},
+                        {v:'comments',label:'💭 Izohlar (Comments)', desc:'Post izohlaridan lead yaratish'},
+                      ].map(opt=>(
+                        <button key={opt.v} onClick={()=>setIgConnType(opt.v)} style={{width:'100%',padding:'12px 16px',background:igConnType===opt.v?'rgba(228,64,95,0.1)':'var(--bg-base)',border:igConnType===opt.v?'2px solid #E4405F':'1px solid var(--outline-variant)',borderRadius:'9px',cursor:'pointer',textAlign:'left',marginBottom:'7px',transition:'all 0.15s'}}>
+                          <div style={{fontWeight:600,fontSize:'13px',color:igConnType===opt.v?'#E4405F':'var(--text-main)'}}>{opt.label}</div>
+                          <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'3px'}}>{opt.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{display:'flex',gap:'8px'}}>
+                      <button style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366)',color:'white',border:'none',borderRadius:'9px',fontSize:'13px',fontWeight:700,cursor:'pointer',opacity:igSaving?0.7:1}} disabled={igSaving} onClick={saveIg}>{igSaving?'⏳ Ulanmoqda...':'📸 Ulash'}</button>
+                      <button className="btn-outline" style={{padding:'11px 15px'}} onClick={()=>setIgStep(2)}>← Hisob</button>
+                    </div>
+                  </>)}
+                </div>
+              );
+            };
+
+            // ── Modal wrapper ───────────────────────────────────────
+            const isFbIg = activeModal.key === 'facebook' || activeModal.key === 'instagram';
+            return (
+              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
+                <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:isFbIg?'500px':(activeModal.showMapping?'580px':'460px'),maxHeight:'92vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
+
+                  {/* Header */}
+                  <div style={{padding:'18px 22px 14px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)',position:'sticky',top:0,background:'var(--bg-surface)',zIndex:1}}>
+                    <div style={{width:'42px',height:'42px',background:activeModal.bg,borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>{activeModal.logo}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:'16px'}}>{activeModal.name}</div>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{isFbIg?'OAuth orqali ulash':'Integratsiya sozlamalari'}</div>
+                    </div>
+                    <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1,padding:'4px'}}>✕</button>
                   </div>
+
+                  {/* Facebook OAuth */}
+                  {activeModal.key === 'facebook' && <FbOAuthFlow />}
+
+                  {/* Instagram OAuth */}
+                  {activeModal.key === 'instagram' && <IgOAuthFlow />}
+
+                  {/* Standard form modal (telegram, voip, webhook) */}
+                  {!isFbIg && (
+                    <div style={{padding:'20px 22px'}}>
+                      {activeModal.wh && (
+                        <div style={{background:activeModal.bg,border:`1px solid ${activeModal.color}30`,borderRadius:'9px',padding:'11px 14px',marginBottom:'16px'}}>
+                          <div style={{fontSize:'10px',fontWeight:700,color:activeModal.color,marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>{activeModal.wh.label}</div>
+                          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                            <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all',lineHeight:'1.5'}}>{activeModal.wh.url}</code>
+                            <button onClick={()=>copyText(activeModal.wh.url,'modal_wh')} style={{padding:'4px 10px',fontSize:'11px',fontWeight:700,background:copiedItem==='modal_wh'?'#01a750':activeModal.color,color:'white',border:'none',borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,transition:'background 0.15s'}}>
+                              {copiedItem==='modal_wh'?'✓ Nusxalandi':'📋 Nusxa'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {activeModal.verifyToken && (
+                        <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'10px 14px',marginBottom:'14px'}}>
+                          <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'5px',textTransform:'uppercase',letterSpacing:'0.07em'}}>Verify Token — Meta Developer Dashboard → Webhooks sahifasiga kiriting</div>
+                          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                            <code style={{flex:1,fontSize:'12px',color:'var(--primary)',fontWeight:600}}>{activeModal.verifyToken}</code>
+                            <button onClick={()=>copyText(activeModal.verifyToken,'vtok')} style={{padding:'3px 9px',fontSize:'11px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer',color:copiedItem==='vtok'?'#01a750':'var(--text-muted)',fontWeight:700}}>
+                              {copiedItem==='vtok'?'✓':'📋'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {activeModal.fields.map(f => (
+                        <div key={f.k} style={{marginBottom:'12px'}}>
+                          <span className="label-sm">{f.label}</span>
+                          <input className="input-base" type={f.t} placeholder={f.ph} value={formData[f.k]||''} onChange={e=>setFormData({...formData,[f.k]:e.target.value})} style={{marginBottom:0}}/>
+                        </div>
+                      ))}
+                      <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
+                        <button className="btn-primary" style={{flex:1,padding:'10px'}} disabled={saving} onClick={()=>saveConfig(activeModal.key, formData)}>
+                          {saving ? '⏳ Saqlanmoqda...' : (cfgIsOn(activeModal.key)?'💾 Yangilash':'🔌 Ulash')}
+                        </button>
+                        {cfgIsOn(activeModal.key) && (
+                          <button style={{padding:'10px 14px',background:'none',border:'1px solid rgba(239,68,68,0.35)',color:'#ef4444',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600}} onClick={()=>disconnectIntg(activeModal.key)}>Uzish</button>
+                        )}
+                        <button className="btn-outline" style={{padding:'10px 14px'}} onClick={()=>setActiveModal(null)}>Bekor</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── API KEYS MODAL ─────────────────────────────────── */}
           {activeModal === 'apikeys' && (
@@ -1979,6 +2296,8 @@ tr:hover td{background:var(--surface-variant);}
       const [saving,       setSaving]       = useState(false);
       const [lastCreated,  setLastCreated]  = useState(null);
       const [copiedSlug,   setCopiedSlug]   = useState(null);
+      const [editUserModal, setEditUserModal] = useState(null); // null | user object
+      const [editUserForm,  setEditUserForm]  = useState({username:'', password:'', role:'MANAGER', full_name:''});
 
       const token = localStorage.getItem('mizon_token');
       const H = {'Content-Type':'application/json','Authorization':'Bearer '+token};
@@ -2051,6 +2370,24 @@ tr:hover td{background:var(--surface-variant);}
       const deleteUser = async (uid) => {
         if (!window.confirm("Foydalanuvchini o'chirish?")) return;
         await fetch(`/api/superadmin/users/${uid}`, {method:'DELETE', headers:H});
+        loadCompanyUsers(selCompany);
+      };
+
+      const openEditUser = (u) => {
+        setEditUserForm({ username: u.username, password: '', role: u.role, full_name: u.full_name || '' });
+        setEditUserModal(u);
+      };
+
+      const submitEditUser = async (e) => {
+        e.preventDefault(); setSaving(true);
+        const body = { role: editUserForm.role, full_name: editUserForm.full_name };
+        if (editUserForm.username && editUserForm.username !== editUserModal.username) body.username = editUserForm.username;
+        if (editUserForm.password) body.password = editUserForm.password;
+        const r = await fetch(`/api/superadmin/users/${editUserModal.id}`, {method:'PUT', headers:H, body:JSON.stringify(body)});
+        const d = await r.json(); setSaving(false);
+        if (!r.ok) return flash('❌ ' + d.error);
+        flash('✅ Foydalanuvchi yangilandi');
+        setEditUserModal(null);
         loadCompanyUsers(selCompany);
       };
 
@@ -2187,14 +2524,61 @@ tr:hover td{background:var(--surface-variant);}
                     <tbody>
                       {compUsers.map(u => (
                         <tr key={u.id}>
-                          <td style={{fontWeight:600}}><span className="avatar" style={{width:'24px',height:'24px',fontSize:'10px',display:'inline-flex',marginRight:'8px'}}>{u.username[0].toUpperCase()}</span>{u.username}</td>
+                          <td style={{fontWeight:600}}><span className="avatar" style={{width:'24px',height:'24px',fontSize:'10px',display:'inline-flex',marginRight:'8px'}}>{u.username[0].toUpperCase()}</span>{u.username}{u.full_name&&u.full_name!==u.username&&<span style={{fontSize:'11px',color:'var(--text-muted)',marginLeft:'6px'}}>({u.full_name})</span>}</td>
                           <td><span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:u.role==='CEO'?'rgba(1,167,80,0.12)':'var(--surface-variant)',color:u.role==='CEO'?'#01a750':'var(--text-secondary)'}}>{u.role}</span></td>
                           <td style={{fontSize:'11px',color:'var(--text-muted)'}}>{new Date(u.created_at).toLocaleDateString()}</td>
-                          <td><button className="btn-danger" style={{padding:'4px 10px',fontSize:'11px'}} onClick={()=>deleteUser(u.id)}>O'chirish</button></td>
+                          <td style={{display:'flex',gap:'6px'}}>
+                            <button className="btn-outline" style={{padding:'4px 10px',fontSize:'11px'}} onClick={()=>openEditUser(u)}>✏️ Tahrirlash</button>
+                            <button className="btn-danger" style={{padding:'4px 10px',fontSize:'11px'}} onClick={()=>deleteUser(u.id)}>O'chirish</button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── EDIT USER MODAL ── */}
+            {editUserModal && (
+              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setEditUserModal(null);}}>
+                <div style={{background:'var(--bg-surface)',borderRadius:'14px',width:'100%',maxWidth:'420px',boxShadow:'0 24px 64px rgba(0,0,0,0.5)'}}>
+                  <div style={{padding:'18px 22px 14px',borderBottom:'1px solid var(--outline-variant)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:'15px'}}>Foydalanuvchini tahrirlash</div>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>@{editUserModal.username}</div>
+                    </div>
+                    <button onClick={()=>setEditUserModal(null)} style={{background:'none',border:'none',fontSize:'18px',cursor:'pointer',color:'var(--text-muted)'}}>✕</button>
+                  </div>
+                  <form onSubmit={submitEditUser} style={{padding:'18px 22px'}}>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+                      <div style={{gridColumn:'1/-1'}}>
+                        <span className="label-sm">Username</span>
+                        <input className="input-base" style={{marginBottom:0}} placeholder={editUserModal.username} value={editUserForm.username} onChange={e=>setEditUserForm({...editUserForm,username:e.target.value})} />
+                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'3px'}}>Bo'sh qoldirsangiz o'zgarmaydi</div>
+                      </div>
+                      <div style={{gridColumn:'1/-1'}}>
+                        <span className="label-sm">To'liq ism</span>
+                        <input className="input-base" style={{marginBottom:0}} placeholder="Ism Familiya" value={editUserForm.full_name} onChange={e=>setEditUserForm({...editUserForm,full_name:e.target.value})} />
+                      </div>
+                      <div>
+                        <span className="label-sm">Yangi parol</span>
+                        <input className="input-base" style={{marginBottom:0}} type="password" placeholder="Yangi parol (ixtiyoriy)" value={editUserForm.password} onChange={e=>setEditUserForm({...editUserForm,password:e.target.value})} />
+                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'3px'}}>Bo'sh = o'zgarmaydi</div>
+                      </div>
+                      <div>
+                        <span className="label-sm">Rol</span>
+                        <select className="input-base" style={{marginBottom:0}} value={editUserForm.role} onChange={e=>setEditUserForm({...editUserForm,role:e.target.value})}>
+                          <option value="MANAGER">MANAGER</option>
+                          <option value="CEO">CEO</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:'8px',marginTop:'16px'}}>
+                      <button className="btn-primary" type="submit" disabled={saving} style={{flex:1,padding:'10px'}}>{saving?'Saqlanmoqda...':'💾 Saqlash'}</button>
+                      <button className="btn-outline" type="button" style={{padding:'10px 16px'}} onClick={()=>setEditUserModal(null)}>Bekor</button>
+                    </div>
+                  </form>
                 </div>
               </div>
             )}
@@ -2327,6 +2711,19 @@ tr:hover td{background:var(--surface-variant);}
       const [loginForm, setLoginForm]   = useState({username:'', password:''});
       const [loginLoading, setLoginLoading] = useState(false);
       const [loginError,   setLoginError]   = useState('');
+      const [loginLock,    setLoginLock]    = useState(null); // {secsLeft, until}
+
+      // Countdown timer for locked state
+      useEffect(() => {
+        if (!loginLock) return;
+        if (loginLock.secsLeft <= 0) { setLoginLock(null); return; }
+        const iv = setInterval(() => {
+          const remaining = Math.ceil((loginLock.until - Date.now()) / 1000);
+          if (remaining <= 0) { setLoginLock(null); clearInterval(iv); }
+          else setLoginLock(prev => prev ? {...prev, secsLeft: remaining} : null);
+        }, 1000);
+        return () => clearInterval(iv);
+      }, [loginLock?.until]);
       const [activeTab, setActiveTab] = useState('dashboard');
       const [settingsActiveTab, setSettingsActiveTab] = useState('users');
       const [pipelines, setPipelines] = useState(() => { const s = localStorage.getItem('mizon_pipelines'); return s ? JSON.parse(s) : initialPipelines; });
@@ -2467,6 +2864,7 @@ tr:hover td{background:var(--surface-variant);}
 
       const handleLogin = async (e) => {
         e.preventDefault();
+        if (loginLock && loginLock.secsLeft > 0) return; // bloklangan
         setLoginLoading(true); setLoginError('');
         try {
           const res = await fetch('/api/auth/login', {
@@ -2474,7 +2872,19 @@ tr:hover td{background:var(--surface-variant);}
             body: JSON.stringify({ username:loginForm.username, password:loginForm.password, company_slug: companySlug })
           });
           const data = await res.json();
-          if (!res.ok) { setLoginError(data.error || "Login yoki parol noto'g'ri"); setLoginLoading(false); return; }
+          if (!res.ok) {
+            if (data.locked && data.secsLeft) {
+              setLoginLock({ secsLeft: data.secsLeft, until: Date.now() + data.secsLeft * 1000 });
+              setLoginError('');
+            } else {
+              setLoginError(data.error || "Login yoki parol noto'g'ri");
+              if (data.attemptsLeft !== undefined) {
+                setLoginError(data.error || `Login yoki parol noto'g'ri. ${data.attemptsLeft} ta urinish qoldi.`);
+              }
+            }
+            setLoginLoading(false); return;
+          }
+          setLoginLock(null);
           localStorage.setItem('mizon_token', data.token);
           localStorage.setItem('mizon_session', JSON.stringify(data.user));
           if (data.user.callLimit) localStorage.setItem('mizon_callLimit', String(data.user.callLimit));
@@ -2505,15 +2915,26 @@ tr:hover td{background:var(--surface-variant);}
               </div>
               <h1 style={{fontSize:'24px', marginBottom:'5px', fontWeight:800, letterSpacing:'-0.6px'}}>{loginTitle}</h1>
               <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'12px', lineHeight:1.5}}>{loginSubtitle}</p>
-              {loginError && (
+              {/* Lockout banner */}
+              {loginLock && loginLock.secsLeft > 0 && (
+                <div style={{background:'rgba(239,68,68,0.08)', border:'2px solid rgba(239,68,68,0.4)', color:'#ef4444', borderRadius:'10px', padding:'14px 16px', fontSize:'13px', marginBottom:'14px', textAlign:'center'}}>
+                  <div style={{fontSize:'26px', marginBottom:'6px'}}>🔒</div>
+                  <div style={{fontWeight:700, marginBottom:'4px'}}>Kirish vaqtincha bloklandi</div>
+                  <div style={{fontSize:'20px', fontWeight:800, fontVariantNumeric:'tabular-nums', letterSpacing:'0.04em', margin:'6px 0'}}>
+                    {String(Math.floor(loginLock.secsLeft/60)).padStart(2,'0')}:{String(loginLock.secsLeft%60).padStart(2,'0')}
+                  </div>
+                  <div style={{fontSize:'11px', opacity:0.8}}>Blok tugagach qayta urinib ko'ring</div>
+                </div>
+              )}
+              {loginError && !loginLock && (
                 <div style={{background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', marginBottom:'14px'}}>
                   {loginError}
                 </div>
               )}
-              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus />
-              <input className="input-base" type="password" placeholder="Parol" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} />
-              <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px', opacity:loginLoading?0.7:1}} type="submit" disabled={loginLoading}>
-                {loginLoading ? 'Tekshirilmoqda...' : 'Tizimga Kirish'}
+              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus disabled={!!(loginLock && loginLock.secsLeft > 0)} />
+              <input className="input-base" type="password" placeholder="Parol" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} disabled={!!(loginLock && loginLock.secsLeft > 0)} />
+              <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px', opacity:(loginLoading||(loginLock&&loginLock.secsLeft>0))?0.5:1}} type="submit" disabled={loginLoading||(loginLock&&loginLock.secsLeft>0)}>
+                {loginLoading ? 'Tekshirilmoqda...' : (loginLock&&loginLock.secsLeft>0 ? `🔒 Bloklangan (${Math.ceil(loginLock.secsLeft/60)} daq)` : 'Tizimga Kirish')}
               </button>
               {companySlug && !isSuperAdminMode && (
                 <div style={{marginTop:'16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>

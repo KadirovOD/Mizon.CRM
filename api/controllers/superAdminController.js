@@ -218,6 +218,61 @@ exports.addUser = async (req, res) => {
   }
 };
 
+// ── PUT /api/superadmin/users/:userId ─────────────────────────────────────────
+exports.updateUser = async (req, res) => {
+  if (!isSA(req, res)) return;
+  const { username, password, role, full_name } = req.body || {};
+  try {
+    if (ec.isAvailable()) {
+      const users = await ec.getUsers();
+      const idx   = users.findIndex(u => u.id === req.params.userId);
+      if (idx === -1) return res.status(404).json({ error: 'Foydalanuvchi topilmadi' });
+
+      // Unique username check within company
+      if (username && users.some((u, i) => i !== idx && u.company_id === users[idx].company_id && u.username === username))
+        return res.status(400).json({ error: 'Bu username allaqachon mavjud' });
+
+      const updated = { ...users[idx] };
+      if (username)   updated.username   = username;
+      if (role)       updated.role       = role;
+      if (full_name)  updated.full_name  = full_name;
+      if (password)   updated.password_hash = await bcrypt.hash(password, 10);
+
+      users[idx] = updated;
+      await ec.saveUsers(users);
+      return res.json({ success: true });
+    }
+    if (req.db) {
+      if (password) {
+        const hash = await bcrypt.hash(password, 10);
+        await req.db.query(
+          `UPDATE crm_users
+             SET username   = COALESCE($1, username),
+                 password_hash = $2,
+                 role       = COALESCE($3, role),
+                 full_name  = COALESCE($4, full_name)
+           WHERE id = $5`,
+          [username || null, hash, role || null, full_name || null, req.params.userId]
+        );
+      } else {
+        await req.db.query(
+          `UPDATE crm_users
+             SET username  = COALESCE($1, username),
+                 role      = COALESCE($2, role),
+                 full_name = COALESCE($3, full_name)
+           WHERE id = $4`,
+          [username || null, role || null, full_name || null, req.params.userId]
+        );
+      }
+      return res.json({ success: true });
+    }
+    return res.status(500).json({ error: 'Storage ulangan emas' });
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: 'Bu username allaqachon mavjud' });
+    res.status(500).json({ error: e.message });
+  }
+};
+
 // ── DELETE /api/superadmin/users/:userId ──────────────────────────────────────
 exports.deleteUser = async (req, res) => {
   if (!isSA(req, res)) return;

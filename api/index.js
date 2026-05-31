@@ -227,6 +227,7 @@ const voipController       = require('./controllers/voipController');
 const authController       = require('./controllers/authController');
 const superAdminController = require('./controllers/superAdminController');
 const companyController    = require('./controllers/companyController');
+const oauthController      = require('./controllers/oauthController');
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -246,6 +247,7 @@ app.put   ('/api/superadmin/companies/:id',          superAdminController.update
 app.delete('/api/superadmin/companies/:id',          superAdminController.deleteCompany);
 app.get   ('/api/superadmin/companies/:id/users',    superAdminController.listUsers);
 app.post  ('/api/superadmin/companies/:id/users',    superAdminController.addUser);
+app.put   ('/api/superadmin/users/:userId',          superAdminController.updateUser);
 app.delete('/api/superadmin/users/:userId',          superAdminController.deleteUser);
 
 // ── Company user management (CEO) ────────────────────────────────────────────
@@ -274,7 +276,16 @@ app.get ('/api/voip/config', voipController.getConfig);
 app.post('/api/voip/config', voipController.saveConfig);
 app.post('/api/call',        voipController.initiateCall);
 
+// ── OAuth ─────────────────────────────────────────────────────────────────────
+app.get('/api/oauth/facebook/init',      oauthController.fbInit);
+app.get('/api/oauth/facebook/callback',  oauthController.fbCallback);
+app.get('/api/oauth/facebook/forms',     oauthController.fbForms);
+app.get('/api/oauth/instagram/init',     oauthController.igInit);
+app.get('/api/oauth/instagram/callback', oauthController.igCallback);
+
 // ── Integrations ─────────────────────────────────────────────────────────────
+// Facebook va Instagram bir kompaniyada bir nechta sahifa/hisobni qo'llab-quvvatlaydi
+const MULTI_PLATFORMS = ['facebook', 'instagram'];
 
 // GET /api/integrations — list integrations for this company
 app.get('/api/integrations', async (req, res) => {
@@ -293,37 +304,48 @@ app.get('/api/integrations', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// POST /api/integrations — upsert facebook/instagram/webhook config
+// POST /api/integrations — upsert (single) or append (multi) integration
 app.post('/api/integrations', async (req, res) => {
   if (!req.db) return res.status(500).json({ error: 'DB disabled' });
   const { platform, page_id, form_id, access_token, field_mapping, extra_config } = req.body;
   if (!platform) return res.status(400).json({ error: 'platform majburiy' });
   const cid = req.user?.companyId || null;
   try {
-    // Upsert: delete old then insert (keeps it clean per company per platform)
-    await req.db.query(
-      'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
-      [platform, cid]
-    );
-    await req.db.query(
+    // Bir nechta ulash: facebook/instagram uchun eskisini o'chirmaymiz
+    if (!MULTI_PLATFORMS.includes(platform)) {
+      await req.db.query(
+        'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+        [platform, cid]
+      );
+    }
+    const r = await req.db.query(
       `INSERT INTO crm_integration_config
          (platform, page_id, form_id, access_token, field_mapping, extra_config, company_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
       [
         platform,
-        page_id    || null,
-        form_id    || null,
-        access_token || null,
-        JSON.stringify(field_mapping  || {}),
-        JSON.stringify(extra_config   || {}),
+        page_id       || null,
+        form_id       || null,
+        access_token  || null,
+        JSON.stringify(field_mapping || {}),
+        JSON.stringify(extra_config  || {}),
         cid,
       ]
     );
+    res.json({ success: true, id: r.rows[0].id });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/integrations/id/:id — specific row (facebook/instagram multi-entry)
+app.delete('/api/integrations/id/:id', async (req, res) => {
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
+  try {
+    await req.db.query('DELETE FROM crm_integration_config WHERE id=$1', [req.params.id]);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// DELETE /api/integrations/:platform — disconnect an integration
+// DELETE /api/integrations/:platform — disconnect ALL of a platform
 app.delete('/api/integrations/:platform', async (req, res) => {
   if (!req.db) return res.status(500).json({ error: 'DB disabled' });
   const cid = req.user?.companyId || null;
