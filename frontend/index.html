@@ -1407,11 +1407,20 @@ tr:hover td{background:var(--surface-variant);}
       const [userForm,     setUserForm]     = useState({username:'', password:'', role:'MANAGER', full_name:''});
       const [msg,          setMsg]          = useState('');
       const [saving,       setSaving]       = useState(false);
+      const [lastCreated,  setLastCreated]  = useState(null);
+      const [copiedSlug,   setCopiedSlug]   = useState(null);
 
       const token = localStorage.getItem('mizon_token');
       const H = {'Content-Type':'application/json','Authorization':'Bearer '+token};
 
       const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
+
+      const copyUrl = (slug) => {
+        const url = `${window.location.origin}?company=${slug}`;
+        const done = () => { setCopiedSlug(slug); setTimeout(()=>setCopiedSlug(null), 2200); };
+        if (navigator.clipboard) { navigator.clipboard.writeText(url).then(done).catch(done); }
+        else { try { const el=document.createElement('textarea'); el.value=url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); } catch{} done(); }
+      };
 
       const loadCompanies = async () => {
         setLoading(true);
@@ -1435,7 +1444,7 @@ tr:hover td{background:var(--surface-variant);}
         const r = await fetch('/api/superadmin/companies', {method:'POST', headers:H, body:JSON.stringify(createForm)});
         const d = await r.json(); setSaving(false);
         if (!r.ok) return flash('❌ '+d.error);
-        flash('✅ '+d.message);
+        setLastCreated(d.company || {name:createForm.name, slug:createForm.slug});
         setView('list'); loadCompanies();
         setCreateForm({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:''});
       };
@@ -1550,9 +1559,12 @@ tr:hover td{background:var(--surface-variant);}
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'12px'}}>
                   <div>
                     <div style={{fontWeight:700, fontSize:'20px'}}>{selCompany.name}</div>
-                    <div style={{fontSize:'13px', color:'var(--text-muted)', marginTop:'4px'}}>
-                      URL: <code style={{background:'var(--surface-variant)', padding:'2px 8px', borderRadius:'4px', fontSize:'12px'}}>?company={selCompany.slug}</code>
-                      <span style={{marginLeft:'12px', padding:'2px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:700, background:`${planBadge(selCompany.plan)}22`, color:planBadge(selCompany.plan)}}>{selCompany.plan?.toUpperCase()}</span>
+                    <div style={{fontSize:'13px', color:'var(--text-muted)', marginTop:'6px', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap'}}>
+                      <code style={{background:'var(--surface-variant)', padding:'3px 10px', borderRadius:'5px', fontSize:'12px', color:'var(--text-main)'}}>{window.location.origin}?company={selCompany.slug}</code>
+                      <button onClick={()=>copyUrl(selCompany.slug)} style={{padding:'3px 12px', fontSize:'11px', fontWeight:700, background: copiedSlug===selCompany.slug?'#059669':'var(--primary)', color:'white', border:'none', borderRadius:'5px', cursor:'pointer', transition:'background 0.2s', whiteSpace:'nowrap'}}>
+                        {copiedSlug===selCompany.slug ? '✓ Nusxalandi!' : '📋 Nusxalash'}
+                      </button>
+                      <span style={{padding:'2px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:700, background:`${planBadge(selCompany.plan)}22`, color:planBadge(selCompany.plan)}}>{selCompany.plan?.toUpperCase()}</span>
                     </div>
                   </div>
                   <div style={{display:'flex', gap:'8px'}}>
@@ -1617,6 +1629,24 @@ tr:hover td{background:var(--surface-variant);}
             {/* ── LIST VIEW ── */}
             {view === 'list' && (
               <div>
+                {/* ── Last created URL card ── */}
+                {lastCreated && (
+                  <div style={{background:'#ecfdf5', border:'1px solid #6ee7b7', borderRadius:'10px', padding:'14px 18px', marginBottom:'20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap'}}>
+                    <div>
+                      <div style={{fontWeight:700, color:'#065f46', fontSize:'13px', marginBottom:'5px'}}>✅ <b>{lastCreated.name}</b> muvaffaqiyatli yaratildi! Mijozga quyidagi linkni yuboring:</div>
+                      <div style={{display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap'}}>
+                        <code style={{background:'white', border:'1px solid #a7f3d0', borderRadius:'6px', padding:'5px 12px', fontSize:'13px', color:'#065f46', fontWeight:600, letterSpacing:'0.2px'}}>
+                          {window.location.origin}?company={lastCreated.slug}
+                        </code>
+                        <button onClick={()=>copyUrl(lastCreated.slug)} style={{padding:'5px 14px', fontSize:'12px', fontWeight:700, background: copiedSlug===lastCreated.slug?'#059669':'#10b981', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', transition:'background 0.2s', whiteSpace:'nowrap'}}>
+                          {copiedSlug===lastCreated.slug ? '✓ Nusxalandi!' : '📋 Nusxalash'}
+                        </button>
+                      </div>
+                    </div>
+                    <button onClick={()=>setLastCreated(null)} style={{background:'none', border:'none', fontSize:'18px', color:'#6ee7b7', cursor:'pointer', padding:'0 4px', lineHeight:1}}>✕</button>
+                  </div>
+                )}
+
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px'}}>
                   <div style={{fontWeight:700, fontSize:'20px'}}>Kompaniyalar ({companies.length})</div>
                   <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px', width:'400px'}}>
@@ -1651,7 +1681,12 @@ tr:hover td{background:var(--surface-variant);}
                         <div>
                           <div style={{fontWeight:700, fontSize:'15px'}}>{c.name}</div>
                           <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'3px', display:'flex', gap:'12px', flexWrap:'wrap'}}>
-                            <span>🔗 <code style={{background:'var(--surface-variant)', padding:'1px 6px', borderRadius:'4px', fontSize:'11px'}}>?company={c.slug}</code></span>
+                            <span style={{display:'inline-flex', alignItems:'center', gap:'5px'}}>
+                              🔗 <code style={{background:'var(--surface-variant)', padding:'1px 6px', borderRadius:'4px', fontSize:'11px'}}>?company={c.slug}</code>
+                              <button onClick={e=>{e.stopPropagation();copyUrl(c.slug);}} title="Linkni nusxalash" style={{background: copiedSlug===c.slug?'#059669':'var(--surface-variant)', border:'1px solid '+(copiedSlug===c.slug?'#059669':'var(--outline-variant)'), color: copiedSlug===c.slug?'white':'var(--text-muted)', borderRadius:'4px', padding:'1px 7px', fontSize:'10px', cursor:'pointer', fontWeight:700, transition:'all 0.2s', whiteSpace:'nowrap'}}>
+                                {copiedSlug===c.slug ? '✓' : '📋'}
+                              </button>
+                            </span>
                             <span>👥 {c.user_count||0} xodim</span>
                             <span>📋 {c.lead_count||0} lead</span>
                             <span>📞 limit: {c.call_limit}</span>
