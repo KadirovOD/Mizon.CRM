@@ -2724,8 +2724,11 @@ tr:hover td{background:var(--surface-variant);}
         }, 1000);
         return () => clearInterval(iv);
       }, [loginLock?.until]);
-      const [activeTab, setActiveTab] = useState('dashboard');
-      const [settingsActiveTab, setSettingsActiveTab] = useState('users');
+      const [activeTab, setActiveTab] = useState(() => localStorage.getItem('mizon_activeTab') || 'dashboard');
+      const [settingsActiveTab, setSettingsActiveTab] = useState(() => localStorage.getItem('mizon_settingsTab') || 'users');
+
+      useEffect(() => { localStorage.setItem('mizon_activeTab', activeTab); }, [activeTab]);
+      useEffect(() => { localStorage.setItem('mizon_settingsTab', settingsActiveTab); }, [settingsActiveTab]);
       const [pipelines, setPipelines] = useState(() => { const s = localStorage.getItem('mizon_pipelines'); return s ? JSON.parse(s) : initialPipelines; });
       const [columnsMap, setColumnsMap] = useState(() => { const s = localStorage.getItem('mizon_columnsMap'); return s ? JSON.parse(s) : initialColumns; });
       const [leads, setLeads] = useState(() => {
