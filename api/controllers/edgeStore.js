@@ -42,8 +42,11 @@ const fetchJson = (url, opts = {}) => new Promise((resolve, reject) => {
 const ecGet = async (key) => {
   if (!EC_URL) return null;
   try {
-    const url = EC_URL.replace(/\/$/, '') + `/item/${encodeURIComponent(key)}`;
-    const d = await fetchJson(url);
+    // EC_URL: https://edge-config.vercel.com/ecfg_ID?token=TOKEN
+    // Correct item URL: https://edge-config.vercel.com/ecfg_ID/item/KEY?token=TOKEN
+    const u = new URL(EC_URL);
+    const itemUrl = `https://${u.hostname}${u.pathname.replace(/\/$/, '')}/item/${encodeURIComponent(key)}${u.search}`;
+    const d = await fetchJson(itemUrl);
     return d;
   } catch { return null; }
 };
