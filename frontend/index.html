@@ -1985,8 +1985,11 @@ tr:hover td{background:var(--surface-variant);}
 
       const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
 
+      const MAIN_DOMAIN = 'mizon-crm.uz';
+      const companyUrl = (slug) => `https://${slug}.${MAIN_DOMAIN}`;
+
       const copyUrl = (slug) => {
-        const url = `${window.location.origin}?company=${slug}`;
+        const url = companyUrl(slug);
         const done = () => { setCopiedSlug(slug); setTimeout(()=>setCopiedSlug(null), 2200); };
         if (navigator.clipboard) { navigator.clipboard.writeText(url).then(done).catch(done); }
         else { try { const el=document.createElement('textarea'); el.value=url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); } catch{} done(); }
@@ -2092,7 +2095,7 @@ tr:hover td{background:var(--surface-variant);}
                     <span className="label-sm">URL Slug * (lotin harflar, tire)</span>
                     <input className="input-base" placeholder="avtosalon-tashkent" value={createForm.slug}
                       onChange={e=>setCreateForm({...createForm,slug:e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')})} required />
-                    {createForm.slug && <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>Mijoz URL: <b style={{color:'var(--primary)'}}>?company={createForm.slug}</b></div>}
+                    {createForm.slug && <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>Mijoz URL: <b style={{color:'var(--primary)'}}>{createForm.slug}.{MAIN_DOMAIN}</b></div>}
                   </div>
                   <div>
                     <span className="label-sm">Tarif rejasi</span>
@@ -2130,7 +2133,7 @@ tr:hover td{background:var(--surface-variant);}
                   <div>
                     <div style={{fontWeight:700, fontSize:'20px'}}>{selCompany.name}</div>
                     <div style={{fontSize:'13px', color:'var(--text-muted)', marginTop:'6px', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap'}}>
-                      <code style={{background:'var(--surface-variant)', padding:'3px 10px', borderRadius:'5px', fontSize:'12px', color:'var(--text-main)'}}>{window.location.origin}?company={selCompany.slug}</code>
+                      <code style={{background:'var(--surface-variant)', padding:'3px 10px', borderRadius:'5px', fontSize:'12px', color:'var(--text-main)'}}>{companyUrl(selCompany.slug)}</code>
                       <button onClick={()=>copyUrl(selCompany.slug)} style={{padding:'3px 12px', fontSize:'11px', fontWeight:700, background: copiedSlug===selCompany.slug?'#059669':'var(--primary)', color:'white', border:'none', borderRadius:'5px', cursor:'pointer', transition:'background 0.2s', whiteSpace:'nowrap'}}>
                         {copiedSlug===selCompany.slug ? '✓ Nusxalandi!' : '📋 Nusxalash'}
                       </button>
@@ -2206,7 +2209,7 @@ tr:hover td{background:var(--surface-variant);}
                       <div style={{fontWeight:700, color:'#065f46', fontSize:'13px', marginBottom:'5px'}}>✅ <b>{lastCreated.name}</b> muvaffaqiyatli yaratildi! Mijozga quyidagi linkni yuboring:</div>
                       <div style={{display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap'}}>
                         <code style={{background:'white', border:'1px solid #a7f3d0', borderRadius:'6px', padding:'5px 12px', fontSize:'13px', color:'#065f46', fontWeight:600, letterSpacing:'0.2px'}}>
-                          {window.location.origin}?company={lastCreated.slug}
+                          {companyUrl(lastCreated.slug)}
                         </code>
                         <button onClick={()=>copyUrl(lastCreated.slug)} style={{padding:'5px 14px', fontSize:'12px', fontWeight:700, background: copiedSlug===lastCreated.slug?'#059669':'#10b981', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', transition:'background 0.2s', whiteSpace:'nowrap'}}>
                           {copiedSlug===lastCreated.slug ? '✓ Nusxalandi!' : '📋 Nusxalash'}
@@ -2252,7 +2255,7 @@ tr:hover td{background:var(--surface-variant);}
                           <div style={{fontWeight:700, fontSize:'15px'}}>{c.name}</div>
                           <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'3px', display:'flex', gap:'12px', flexWrap:'wrap'}}>
                             <span style={{display:'inline-flex', alignItems:'center', gap:'5px'}}>
-                              🔗 <code style={{background:'var(--surface-variant)', padding:'1px 6px', borderRadius:'4px', fontSize:'11px'}}>?company={c.slug}</code>
+                              🔗 <code style={{background:'var(--surface-variant)', padding:'1px 6px', borderRadius:'4px', fontSize:'11px'}}>{c.slug}.{MAIN_DOMAIN}</code>
                               <button onClick={e=>{e.stopPropagation();copyUrl(c.slug);}} title="Linkni nusxalash" style={{background: copiedSlug===c.slug?'#059669':'var(--surface-variant)', border:'1px solid '+(copiedSlug===c.slug?'#059669':'var(--outline-variant)'), color: copiedSlug===c.slug?'white':'var(--text-muted)', borderRadius:'4px', padding:'1px 7px', fontSize:'10px', cursor:'pointer', fontWeight:700, transition:'all 0.2s', whiteSpace:'nowrap'}}>
                                 {copiedSlug===c.slug ? '✓' : '📋'}
                               </button>
@@ -2289,8 +2292,18 @@ tr:hover td{background:var(--surface-variant);}
       const isFormMode = urlParams.get('leadForm') === 'true';
       const formPipeId = urlParams.get('pipe');
 
-      // ── URL params ───────────────────────────────────────────────
-      const companySlug    = urlParams.get('company')    || '';
+      // ── Company slug: subdomen → ?company= → bo'sh ──────────────
+      // slug.mizon-crm.uz  →  slug
+      // mizon-crm.uz?company=slug  →  slug  (eski havolalar / mahalliy dev)
+      const companySlug = (() => {
+        const host = window.location.hostname;
+        const DOMAIN = 'mizon-crm.uz';
+        if (host !== DOMAIN && host !== 'www.' + DOMAIN && host.endsWith('.' + DOMAIN)) {
+          const sub = host.slice(0, host.length - DOMAIN.length - 1);
+          if (sub && sub !== 'www') return sub;
+        }
+        return urlParams.get('company') || '';
+      })();
       const isSuperAdminMode = urlParams.get('superadmin') === 'true';
 
       // ── Auth state ───────────────────────────────────────────────
@@ -2504,7 +2517,7 @@ tr:hover td{background:var(--surface-variant);}
               </button>
               {companySlug && !isSuperAdminMode && (
                 <div style={{marginTop:'16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
-                  Kompaniya: <b style={{color:'var(--primary)'}}>{companySlug}</b>
+                  🌐 <b style={{color:'var(--primary)'}}>{companySlug}.mizon-crm.uz</b>
                 </div>
               )}
             </form>

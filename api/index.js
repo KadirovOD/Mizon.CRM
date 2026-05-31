@@ -28,9 +28,21 @@ const pool = DB_URL
 app.use((req, res, next) => { req.db = pool; next(); });
 
 app.use(cors({
-  origin: '*',
+  origin: (origin, cb) => {
+    // Allow: no origin (curl, mobile), localhost, mizon-crm.uz + all subdomains
+    if (
+      !origin ||
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      origin === 'https://mizon-crm.uz' ||
+      origin === 'https://www.mizon-crm.uz' ||
+      /^https:\/\/[a-z0-9-]+\.mizon-crm\.uz$/.test(origin)
+    ) return cb(null, true);
+    cb(null, false); // reject unknown origins (not 403 — CORS just won't attach header)
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
 }));
 // Raw body — webhook endpoint uchun HMAC imzoni to'g'ri tekshirish
 app.use('/api/webhook/meta', express.raw({ type: 'application/json' }), (req, _res, next) => {
