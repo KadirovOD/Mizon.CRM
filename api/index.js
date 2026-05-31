@@ -203,8 +203,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
-app.post('/api/auth/login', authController.login);
-app.get('/api/auth/me',     authController.me);
+app.post('/api/auth/login',  authController.login);
+app.get ('/api/auth/me',     authController.me);
+app.get ('/api/company/info', authController.companyInfo);
 
 // ── Super Admin ───────────────────────────────────────────────────────────────
 app.get   ('/api/superadmin/companies',              superAdminController.listCompanies);
@@ -291,16 +292,7 @@ app.delete('/api/api-keys/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Slug check (public) ───────────────────────────────────────────────────────
-app.get('/api/company/info', async (req, res) => {
-  const { slug } = req.query;
-  if (!slug || !req.db) return res.json({ found: false });
-  try {
-    const r = await req.db.query('SELECT name, slug, logo_url, is_active FROM companies WHERE slug=$1', [slug]);
-    if (!r.rows.length) return res.json({ found: false });
-    res.json({ found: true, ...r.rows[0] });
-  } catch { res.json({ found: false }); }
-});
+// (company/info is handled by authController above)
 
 // ── Frontend SPA fallback ─────────────────────────────────────────────────────
 app.get('*', (req, res) => {
