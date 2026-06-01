@@ -27,7 +27,7 @@ exports.addUser = async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const r = await req.db.query(
       'INSERT INTO crm_users (company_id, username, password_hash, role, full_name, email) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, username, email, role, full_name, created_at',
-      [req.user.companyId, username, hash, role || 'MANAGER', full_name || username, email || null]
+      [req.user.companyId, username, hash, role || 'MANAGER', full_name || username, email ? email.toLowerCase().trim() : null]
     );
     res.json(r.rows[0]);
   } catch (e) {

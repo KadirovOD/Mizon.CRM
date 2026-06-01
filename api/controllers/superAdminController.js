@@ -90,7 +90,7 @@ exports.createCompany = async (req, res) => {
       const hash = await bcrypt.hash(admin_password, 10);
       await req.db.query(
         'INSERT INTO crm_users (company_id,username,password_hash,role,full_name,email) VALUES ($1,$2,$3,$4,$5,$6)',
-        [company.id, admin_username, hash, 'CEO', admin_username, admin_email||null]
+        [company.id, admin_username, hash, 'CEO', admin_username, admin_email ? admin_email.toLowerCase().trim() : null]
       );
       await req.db.query(`
         INSERT INTO crm_stage (name,sequence,company_id) VALUES

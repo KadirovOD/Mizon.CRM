@@ -164,8 +164,8 @@ exports.login = async (req, res) => {
       let ur;
       if (isEmail) {
         ur = await req.db.query(
-          'SELECT * FROM crm_users WHERE email=$1 AND is_active=true LIMIT 1',
-          [username.toLowerCase().trim()]
+          'SELECT * FROM crm_users WHERE LOWER(email)=LOWER($1) AND is_active=true LIMIT 1',
+          [username.trim()]
         );
       } else {
         const q = companyId
