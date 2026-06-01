@@ -2082,6 +2082,11 @@ tr:hover td{background:var(--surface-variant);}
       const TRIGGERS = [
         { value: 'lead_created',  label: 'Lead yaratilganda' },
         { value: 'stage_changed', label: 'Bosqich o\'zgarganda' },
+        { value: 'ig_dm',         label: 'Instagram DM kelganda' },
+      ];
+      const ACTION_TYPES = [
+        { value: 'sms',      label: '📱 SMS yuborish (Eskiz.uz)' },
+        { value: 'ig_reply', label: '📸 Instagram javob yuborish' },
       ];
 
       const [tab,          setTab]          = useState('settings'); // settings | templates | rules | logs
@@ -2282,7 +2287,7 @@ tr:hover td{background:var(--surface-variant);}
               <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
                 <div style={{fontWeight:600}}>Qoidalar ({rules.length})</div>
                 <button className="btn-primary" style={{padding:'8px 16px', fontSize:'13px'}}
-                  onClick={()=>setRuleModal({name:'', trigger_type:'lead_created', template_id:'', stage_filter:''})}>+ Yangi qoida</button>
+                  onClick={()=>setRuleModal({name:'', trigger_type:'lead_created', action_type:'sms', template_id:'', stage_filter:''})}>+ Yangi qoida</button>
               </div>
               {rules.length === 0 && <div style={{color:'var(--text-muted)', fontSize:'13px', textAlign:'center', padding:'40px'}}>Hali qoida yo'q</div>}
               {rules.map(r => (
@@ -2297,8 +2302,9 @@ tr:hover td{background:var(--surface-variant);}
                           {r.is_active ? '● Faol' : '○ Nofaol'}
                         </span>
                       </div>
-                      <div style={{fontSize:'12px', color:'var(--text-muted)', display:'flex', gap:'16px'}}>
+                      <div style={{fontSize:'12px', color:'var(--text-muted)', display:'flex', gap:'16px', flexWrap:'wrap'}}>
                         <span>⚡ {TRIGGERS.find(t=>t.value===r.trigger_type)?.label || r.trigger_type}</span>
+                        <span>{ACTION_TYPES.find(a=>a.value===(r.action_type||'sms'))?.label || r.action_type}</span>
                         <span>📝 {r.template_name || '—'}</span>
                         {r.stage_filter && <span>🎯 Bosqich #{r.stage_filter}</span>}
                       </div>
@@ -2308,7 +2314,7 @@ tr:hover td{background:var(--surface-variant);}
                         {r.is_active ? 'O\'chirish' : 'Yoqish'}
                       </button>
                       <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px'}}
-                        onClick={()=>setRuleModal({id:r.id, name:r.name, trigger_type:r.trigger_type, template_id:String(r.template_id||''), stage_filter:r.stage_filter||''})}>
+                        onClick={()=>setRuleModal({id:r.id, name:r.name, trigger_type:r.trigger_type, action_type:r.action_type||'sms', template_id:String(r.template_id||''), stage_filter:r.stage_filter||''})}>
                         Tahrirlash
                       </button>
                       <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px', color:'var(--danger)', borderColor:'var(--danger)'}}
@@ -2412,6 +2418,12 @@ tr:hover td{background:var(--surface-variant);}
                     <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Trigger (qachon ishlaydi)</div>
                     <select style={inputStyle} value={ruleModal.trigger_type} onChange={e=>setRuleModal({...ruleModal,trigger_type:e.target.value})}>
                       {TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Amal (nima qiladi)</div>
+                    <select style={inputStyle} value={ruleModal.action_type||'sms'} onChange={e=>setRuleModal({...ruleModal,action_type:e.target.value})}>
+                      {ACTION_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
                     </select>
                   </div>
                   {ruleModal.trigger_type === 'stage_changed' && (

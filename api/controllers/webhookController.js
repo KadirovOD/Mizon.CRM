@@ -3,6 +3,11 @@
 const https  = require('https');
 const crypto = require('crypto');
 
+// Automation trigger (index.js tomonidan o'rnatiladi)
+let _runTrigger = null;
+exports._setAutomation = (fn) => { _runTrigger = fn; };
+const runTrigger = (...args) => { if (_runTrigger) _runTrigger(...args).catch(()=>{}); };
+
 // ── Meta App Secret signature verification (X-Hub-Signature-256) ────────────
 function verifyMetaSignature(rawBody, signature) {
   const secret = process.env.META_APP_SECRET;
@@ -268,11 +273,11 @@ exports.handleMetaWebhook = async (req, res) => {
             );
             const stageId = stageRes.rows[0]?.id || 1;
 
-            await req.db.query(
+            const newIgLead = await req.db.query(
               `INSERT INTO crm_lead
                  (name, contact_name, phone, email, mizon_source,
                   telegram_chat_id, lead_score, stage_id, company_id, chatlogs)
-               VALUES ($1,$2,$3,$4,'instagram',$5,25,$6,$7,$8)`,
+               VALUES ($1,$2,$3,$4,'instagram',$5,25,$6,$7,$8) RETURNING *`,
               [
                 profileName, profileName, phone, email,
                 igKey, stageId, companyId,
@@ -283,6 +288,10 @@ exports.handleMetaWebhook = async (req, res) => {
               ]
             );
             console.log(`📌 Instagram lead: "${profileName}" (id=${senderId})`);
+            // Avtomatizatsiya triggeri — yangi IG DM
+            if (newIgLead.rows[0]) {
+              runTrigger(req.db, 'ig_dm', newIgLead.rows[0], { senderId });
+            }
           } else if (text) {
             // Append to existing lead's chatlogs
             const logs = existing.rows[0].chatlogs || [];

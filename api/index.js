@@ -214,6 +214,7 @@ async function initDb() {
       ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS extra_config JSONB    DEFAULT '{}';
       ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP DEFAULT NOW();
       ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS company_id  INT;
+      ALTER TABLE automation_rules       ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'sms';
     `);
 
     // ── Seed default company (first run / backward compat) ───────────────────
@@ -270,8 +271,9 @@ const companyController    = require('./controllers/companyController');
 const oauthController      = require('./controllers/oauthController');
 const automationCtrl       = require('./controllers/automationController');
 
-// leadController ga runTrigger uzatish
+// leadController va webhookController ga runTrigger uzatish
 leadController._setAutomation(automationCtrl.runTrigger);
+webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
