@@ -3185,8 +3185,12 @@ tr:hover td{background:var(--surface-variant);}
         return initialLeads;
       });
 
-      const stageIdToFrontend = { 1:'NEW', 2:'CONTACTED', 3:'QUALIFIED', 4:'PROPOSAL', 5:'NEGOTIATION', 6:'WON', 7:'LOST' };
-      const frontendToStageId = { 'NEW':1, 'CONTACTED':2, 'QUALIFIED':3, 'PROPOSAL':4, 'NEGOTIATION':5, 'WON':6, 'LOST':7, 'MEETING':2, 'CONTRACT':3 };
+      // Stage mapping — API dan dinamik yangilanadi (hardcoded ID'lar yangi kompaniyalarda ishlamaydi)
+      const _STAGE_KEYS = ['NEW','CONTACTED','QUALIFIED','PROPOSAL','NEGOTIATION','WON','LOST'];
+      const stageMapRef = React.useRef({
+        toFrontend: { 1:'NEW', 2:'CONTACTED', 3:'QUALIFIED', 4:'PROPOSAL', 5:'NEGOTIATION', 6:'WON', 7:'LOST' },
+        toDbId:     { 'NEW':1, 'CONTACTED':2, 'QUALIFIED':3, 'PROPOSAL':4, 'NEGOTIATION':5, 'WON':6, 'LOST':7, 'MEETING':2, 'CONTRACT':3 }
+      });
 
       // Fetch company info from slug (for branded login page)
       useEffect(() => {
@@ -3202,8 +3206,15 @@ tr:hover td{background:var(--surface-variant);}
         return { 'Content-Type':'application/json', ...(t ? { 'Authorization':'Bearer '+t } : {}) };
       };
 
+      // Kompaniyaga tegishli localStorage kalitlarini tozalash
+      const clearCompanyCache = () => {
+        localStorage.removeItem('mizon_leads');
+        localStorage.removeItem('mizon_pipelines');
+        localStorage.removeItem('mizon_columnsMap');
+      };
       // Markaziy logout helper (token muddati tugaganda ishlatiladi)
       const forceLogout = () => {
+        clearCompanyCache();
         setAuthUser(null);
         localStorage.removeItem('mizon_token');
         localStorage.removeItem('mizon_session');
@@ -3219,8 +3230,28 @@ tr:hover td{background:var(--surface-variant);}
           return res.json();
         }).then(data => {
           if (!data) return;
-          if(data.success && data.leads && data.leads.length > 0) {
-            setLeads(data.leads.map(l => ({
+          if(data.success) {
+            // Dinamik stage mapping — API bosqichlariga asoslangan (yangi kompaniyalar uchun muhim)
+            const apiStages = [...(data.stages || [])].sort((a,b) => a.sequence - b.sequence);
+            if (apiStages.length > 0) {
+              const toFrontend = {}, toDbId = {};
+              apiStages.forEach((s, i) => {
+                const k = _STAGE_KEYS[i] || ('STAGE_' + s.id);
+                toFrontend[s.id] = k;
+                toDbId[k] = s.id;
+              });
+              stageMapRef.current = { toFrontend, toDbId };
+              // Kanban ustunlarini DB bosqich nomlari bilan yangilash
+              setColumnsMap(prev => ({
+                ...prev,
+                p1: apiStages.map((s, i) => ({
+                  id: _STAGE_KEYS[i] || ('STAGE_' + s.id),
+                  title: s.name,
+                }))
+              }));
+            }
+            // 0 lead bo'lsa ham DOIM yangilash (localStorage'dagi eski ma'lumotni tozalash uchun)
+            setLeads((data.leads || []).map(l => ({
               id: l.id,
               pipelineId: l.pipelineid || 'p1',
               name: l.name,
@@ -3228,7 +3259,7 @@ tr:hover td{background:var(--surface-variant);}
               phone: l.phone,
               region: l.region || 'Toshkent',
               source: l.mizon_source || 'manual',
-              status: stageIdToFrontend[l.stage_id] || 'NEW',
+              status: stageMapRef.current.toFrontend[l.stage_id] || 'NEW',
               actualCallAttempts: l.actualcallattempts || 0,
               deadline: l.deadline || null,
               taskDescription: l.taskdescription || null,
@@ -3387,6 +3418,8 @@ tr:hover td{background:var(--surface-variant);}
             setLoginLoading(false); return;
           }
           setLoginLock(null);
+          // Yangi login — eski kompaniya ma'lumotlarini tozalash
+          clearCompanyCache();
           localStorage.setItem('mizon_token', data.token);
           localStorage.setItem('mizon_session', JSON.stringify(data.user));
           if (data.user.callLimit) localStorage.setItem('mizon_callLimit', String(data.user.callLimit));
@@ -3455,6 +3488,7 @@ tr:hover td{background:var(--surface-variant);}
 
       // ── Super Admin — full-screen panel ──────────────────────────
       if (role === 'SUPERADMIN') return <SuperAdminPanel authUser={authUser} onLogout={() => {
+        clearCompanyCache();
         setAuthUser(null);
         localStorage.removeItem('mizon_session');
         localStorage.removeItem('mizon_token');
@@ -3470,7 +3504,7 @@ tr:hover td{background:var(--surface-variant);}
           method:'PUT',
           headers: getAuthHeaders(),
           body:JSON.stringify({
-            status:frontendToStageId[lead.status]||lead.status,
+            status:stageMapRef.current.toDbId[lead.status]||lead.status,
             name:lead.name, phone:lead.phone, region:lead.region, source:lead.source,
             actualCallAttempts:lead.actualCallAttempts, deadline:lead.deadline,
             taskDescription:lead.taskDescription, chatLogs:lead.chatLogs, owner:lead.owner
@@ -3493,7 +3527,7 @@ tr:hover td{background:var(--surface-variant);}
         };
         fetch('/api/leads', {
           method:'POST', headers: getAuthHeaders(),
-          body:JSON.stringify({name:newLeadForm.name, phone:newLeadForm.phone, region:newLeadForm.region, owner:authUser.username, pipelineId:activePipe, status:frontendToStageId[initialStage]||1})
+          body:JSON.stringify({name:newLeadForm.name, phone:newLeadForm.phone, region:newLeadForm.region, owner:authUser.username, pipelineId:activePipe, status:stageMapRef.current.toDbId[initialStage]||1})
         }).then(res=>res.json()).then(data => {
           if(data.success) localLead.id = data.lead.id;
           setLeads(prev=>[...prev,localLead]); setShowAddLead(false); setNewLeadForm({name:'',phone:'',region:''});
@@ -3674,6 +3708,7 @@ tr:hover td{background:var(--surface-variant);}
                 </div>
               </div>
               <div className="nav-item" onClick={()=>{
+                clearCompanyCache();
                 setAuthUser(null);
                 localStorage.removeItem('mizon_session');
                 localStorage.removeItem('mizon_token');
