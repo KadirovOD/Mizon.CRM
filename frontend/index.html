@@ -3925,9 +3925,15 @@ tr:hover td{background:var(--surface-variant);}
                       <span style={{marginLeft:'8px', fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'20px', background:(colColors[selectedLeadData.status]||'#888')+'22', color:colColors[selectedLeadData.status]||'var(--text-muted)'}}>{selectedLeadData.status}</span>
                     </div>
                     {hasUnsavedChanges ? (
-                      <button className="btn-success" onClick={()=>{setSelectedLeadId(null);setShowCompleteModal(false);setHasUnsavedChanges(false);}}><Ico n="save" s={14}/> Saqlash va Yopish</button>
+                      <button className="btn-success" onClick={()=>{
+                        if(selectedLeadData) syncLeadToAPI(selectedLeadData);
+                        setEditingLead(false);
+                        setSelectedLeadId(null);
+                        setShowCompleteModal(false);
+                        setHasUnsavedChanges(false);
+                      }}><Ico n="save" s={14}/> Saqlash va Yopish</button>
                     ) : (
-                      <button className="btn-outline" onClick={()=>{setSelectedLeadId(null);setShowCompleteModal(false);}}><Ico n="x" s={14}/> Yopish</button>
+                      <button className="btn-outline" onClick={()=>{setEditingLead(false);setSelectedLeadId(null);setShowCompleteModal(false);}}><Ico n="x" s={14}/> Yopish</button>
                     )}
                   </div>
 
@@ -3936,7 +3942,13 @@ tr:hover td{background:var(--surface-variant);}
                     <div className="lead-profile-col">
                       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
                         <span className="label-sm" style={{marginBottom:0}}>Mijoz ma'lumotlari</span>
-                        <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={()=>setEditingLead(!editingLead)}>
+                        <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={()=>{
+                          if(editingLead && selectedLeadData){
+                            syncLeadToAPI(selectedLeadData);
+                            setHasUnsavedChanges(false);
+                          }
+                          setEditingLead(!editingLead);
+                        }}>
                           {editingLead ? <><Ico n="check" s={12}/> Saqlash</> : <><Ico n="pencil" s={12}/> Tahrirlash</>}
                         </button>
                       </div>
