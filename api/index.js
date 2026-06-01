@@ -9,6 +9,12 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mizon-dev-secret-2024-change-in-prod';
 
+// ── Muhim: default kalitlar haqida ogohlantirish ─────────────────────────────
+if (!process.env.JWT_SECRET)
+  console.warn('⚠️  JWT_SECRET env o\'zgaruvchisi o\'rnatilmagan — standart kalit ishlatilmoqda! Production uchun XAVFLI!');
+if (!process.env.SUPER_ADMIN_PASS)
+  console.warn('⚠️  SUPER_ADMIN_PASS env o\'zgaruvchisi o\'rnatilmagan — standart parol ishlatilmoqda!');
+
 const app = express();
 
 // ========== DATABASE ==========
@@ -66,6 +72,17 @@ const parseToken = (req, res, next) => {
   next();
 };
 app.use(parseToken);
+
+// ── Auth enforcement: barcha /api/* marshrutlar (ochiq yo'llardan tashqari) JWT talab qiladi ──
+const _PUBLIC_PATHS    = new Set(['/api/health', '/api/auth/login', '/api/auth/me', '/api/company/info']);
+const _PUBLIC_PREFIXES = ['/api/webhook/', '/api/oauth/'];
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  if (_PUBLIC_PATHS.has(req.path)) return next();
+  if (_PUBLIC_PREFIXES.some(p => req.path.startsWith(p))) return next();
+  if (!req.user) return res.status(401).json({ error: 'Tizimga kiring' });
+  next();
+});
 
 // ========== DB INIT ==========
 async function initDb() {
@@ -216,7 +233,21 @@ async function initDb() {
       ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS company_id  INT;
       ALTER TABLE automation_rules       ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'sms';
       ALTER TABLE crm_users              ADD COLUMN IF NOT EXISTS email       VARCHAR(255);
+      ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_won      BOOLEAN DEFAULT false;
+      ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_lost     BOOLEAN DEFAULT false;
     `);
+
+    // ── Mavjud bosqichlarda is_won / is_lost ni yangilash ───────────────────────
+    await client.query("UPDATE crm_stage SET is_won=true  WHERE name='Yutildi'         AND (is_won  IS NULL OR is_won=false)");
+    await client.query("UPDATE crm_stage SET is_lost=true WHERE name='Muvaffaqiyatsiz' AND (is_lost IS NULL OR is_lost=false)");
+
+    // ── Kompaniyasiz (NULL) integratsiya va API kalitlarini birinchi kompaniyaga bog'lash ──
+    const _firstComp = await client.query('SELECT id FROM companies ORDER BY id ASC LIMIT 1');
+    if (_firstComp.rows.length > 0) {
+      const _fid = _firstComp.rows[0].id;
+      await client.query('UPDATE crm_integration_config SET company_id=$1 WHERE company_id IS NULL', [_fid]);
+      await client.query('UPDATE crm_api_keys           SET company_id=$1 WHERE company_id IS NULL', [_fid]);
+    }
 
     // ── Seed default company (first run / backward compat) ───────────────────
     const compCount = await client.query('SELECT COUNT(*) FROM companies');
@@ -244,9 +275,11 @@ async function initDb() {
       const sc = await client.query("SELECT COUNT(*) FROM crm_stage WHERE company_id = $1", [defaultCompId]);
       if (parseInt(sc.rows[0].count) === 0) {
         await client.query(`
-          INSERT INTO crm_stage (name, sequence, company_id) VALUES
-          ('Yangi Lead',1,$1),('Aloqaga chiqildi',2,$1),('Ehtiyoj aniqlandi',3,$1),
-          ('Taklif yuborildi',4,$1),('Muzokaralar',5,$1),('Yutildi',6,$1),('Muvaffaqiyatsiz',7,$1)
+          INSERT INTO crm_stage (name, sequence, company_id, is_won, is_lost) VALUES
+          ('Yangi Lead',1,$1,false,false),('Aloqaga chiqildi',2,$1,false,false),
+          ('Ehtiyoj aniqlandi',3,$1,false,false),('Taklif yuborildi',4,$1,false,false),
+          ('Muzokaralar',5,$1,false,false),('Yutildi',6,$1,true,false),
+          ('Muvaffaqiyatsiz',7,$1,false,true)
         `, [defaultCompId]);
       }
 
@@ -356,7 +389,7 @@ app.get('/api/integrations', async (req, res) => {
     const r = await req.db.query(
       `SELECT id, platform, page_id, form_id, field_mapping, extra_config, created_at
        FROM crm_integration_config
-       WHERE company_id=$1 OR company_id IS NULL
+       WHERE company_id=$1
        ORDER BY id DESC`,
       [cid]
     );
@@ -375,7 +408,7 @@ app.post('/api/integrations', async (req, res) => {
     // Bir nechta ulash: facebook/instagram uchun eskisini o'chirmaymiz
     if (!MULTI_PLATFORMS.includes(platform)) {
       await req.db.query(
-        'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+        'DELETE FROM crm_integration_config WHERE platform=$1 AND company_id=$2',
         [platform, cid]
       );
     }
@@ -403,7 +436,7 @@ app.delete('/api/integrations/id/:id', async (req, res) => {
   const cid = req.user?.companyId || null;
   try {
     await req.db.query(
-      'DELETE FROM crm_integration_config WHERE id=$1 AND (company_id=$2 OR company_id IS NULL)',
+      'DELETE FROM crm_integration_config WHERE id=$1 AND company_id=$2',
       [req.params.id, cid]
     );
     res.json({ success: true });
@@ -416,7 +449,7 @@ app.delete('/api/integrations/:platform', async (req, res) => {
   const cid = req.user?.companyId || null;
   try {
     await req.db.query(
-      'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+      'DELETE FROM crm_integration_config WHERE platform=$1 AND company_id=$2',
       [req.params.platform, cid]
     );
     res.json({ success: true });
@@ -463,7 +496,7 @@ app.post('/api/integrations/telegram/setup', async (req, res) => {
     // Save to DB
     if (req.db) {
       await req.db.query(
-        'DELETE FROM crm_integration_config WHERE platform=$1 AND (company_id=$2 OR company_id IS NULL)',
+        'DELETE FROM crm_integration_config WHERE platform=$1 AND company_id=$2',
         ['telegram', cid]
       );
       await req.db.query(
@@ -489,7 +522,7 @@ app.get('/api/api-keys', async (req, res) => {
   const cid = req.user?.companyId;
   try {
     const r = await req.db.query(
-      'SELECT id,service,label,created_at FROM crm_api_keys WHERE company_id=$1 OR company_id IS NULL ORDER BY created_at DESC',
+      'SELECT id,service,label,created_at FROM crm_api_keys WHERE company_id=$1 ORDER BY created_at DESC',
       [cid]
     );
     res.json(r.rows);
@@ -515,7 +548,7 @@ app.delete('/api/api-keys/:id', async (req, res) => {
   const cid = req.user?.companyId || null;
   try {
     await req.db.query(
-      'DELETE FROM crm_api_keys WHERE id=$1 AND (company_id=$2 OR company_id IS NULL)',
+      'DELETE FROM crm_api_keys WHERE id=$1 AND company_id=$2',
       [req.params.id, cid]
     );
     res.json({ success: true });

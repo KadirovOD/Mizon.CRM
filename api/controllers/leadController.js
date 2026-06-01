@@ -190,8 +190,8 @@ exports.getStats = async (req, res) => {
   const cid = req.user?.companyId;
   try {
     const total    = await req.db.query('SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1', [cid]);
-    const won      = await req.db.query("SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1 AND stage_id = (SELECT id FROM crm_stage WHERE name = 'Yutildi' AND company_id=$1 LIMIT 1)", [cid]);
-    const lost     = await req.db.query("SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1 AND stage_id = (SELECT id FROM crm_stage WHERE name = 'Muvaffaqiyatsiz' AND company_id=$1 LIMIT 1)", [cid]);
+    const won      = await req.db.query("SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1 AND stage_id IN (SELECT id FROM crm_stage WHERE company_id=$1 AND is_won=true)", [cid]);
+    const lost     = await req.db.query("SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1 AND stage_id IN (SELECT id FROM crm_stage WHERE company_id=$1 AND is_lost=true)", [cid]);
     const overdue  = await req.db.query('SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1 AND deadline < NOW() AND deadline IS NOT NULL', [cid]);
     const activeTasks = await req.db.query('SELECT COUNT(*) as count FROM crm_lead WHERE company_id=$1 AND taskdescription IS NOT NULL AND deadline > NOW()', [cid]);
 

@@ -185,8 +185,11 @@ exports.getSmsSettings = async (req, res) => {
   if (!req.db) return res.json({ eskiz_email: '', hasPassword: false });
   const cid = req.user?.companyId;
   try {
-    const r = await req.db.query('SELECT eskiz_email FROM automation_sms_settings WHERE company_id=$1', [cid]);
-    res.json(r.rows[0] || { eskiz_email: '', hasPassword: false });
+    const r = await req.db.query(
+      "SELECT eskiz_email, (eskiz_password IS NOT NULL AND eskiz_password <> '') AS has_password FROM automation_sms_settings WHERE company_id=$1",
+      [cid]
+    );
+    res.json(r.rows[0] || { eskiz_email: '', has_password: false });
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
@@ -297,6 +300,13 @@ exports.createRule = async (req, res) => {
   const { name, trigger_type, template_id, stage_filter, action_type } = req.body;
   if (!name || !trigger_type || !template_id) return res.status(400).json({ error: 'Nom, trigger va shablon majburiy' });
   try {
+    // template_id kompaniyaga tegishliligini tekshirish
+    const tmpl = await req.db.query(
+      'SELECT id FROM automation_templates WHERE id=$1 AND company_id=$2',
+      [template_id, cid]
+    );
+    if (!tmpl.rows.length) return res.status(400).json({ error: 'Shablon topilmadi yoki ruxsat yo\'q' });
+
     const r = await req.db.query(
       'INSERT INTO automation_rules (company_id, name, trigger_type, template_id, stage_filter, action_type) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
       [cid, name, trigger_type, template_id, stage_filter||null, action_type||'sms']
@@ -311,6 +321,15 @@ exports.updateRule = async (req, res) => {
   const cid = req.user?.companyId;
   const { name, trigger_type, template_id, stage_filter, is_active, action_type } = req.body;
   try {
+    // Yangi template berilgan bo'lsa — kompaniyaga tegishliligini tekshirish
+    if (template_id != null) {
+      const tmpl = await req.db.query(
+        'SELECT id FROM automation_templates WHERE id=$1 AND company_id=$2',
+        [template_id, cid]
+      );
+      if (!tmpl.rows.length) return res.status(400).json({ error: 'Shablon topilmadi yoki ruxsat yo\'q' });
+    }
+
     const r = await req.db.query(
       `UPDATE automation_rules
        SET name=COALESCE($1,name), trigger_type=COALESCE($2,trigger_type),

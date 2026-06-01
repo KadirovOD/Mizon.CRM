@@ -93,9 +93,11 @@ exports.createCompany = async (req, res) => {
         [company.id, admin_username, hash, 'CEO', admin_username, admin_email ? admin_email.toLowerCase().trim() : null]
       );
       await req.db.query(`
-        INSERT INTO crm_stage (name,sequence,company_id) VALUES
-        ('Yangi Lead',1,$1),('Aloqaga chiqildi',2,$1),('Ehtiyoj aniqlandi',3,$1),
-        ('Taklif yuborildi',4,$1),('Muzokaralar',5,$1),('Yutildi',6,$1),('Muvaffaqiyatsiz',7,$1)
+        INSERT INTO crm_stage (name,sequence,company_id,is_won,is_lost) VALUES
+        ('Yangi Lead',1,$1,false,false),('Aloqaga chiqildi',2,$1,false,false),
+        ('Ehtiyoj aniqlandi',3,$1,false,false),('Taklif yuborildi',4,$1,false,false),
+        ('Muzokaralar',5,$1,false,false),('Yutildi',6,$1,true,false),
+        ('Muvaffaqiyatsiz',7,$1,false,true)
       `, [company.id]);
       return res.json({ success: true, company, login_url: `?company=${cleanSlug}`, message: `Muvaffaqiyatli yaratildi! URL: ?company=${cleanSlug}` });
     }
@@ -226,7 +228,8 @@ exports.addUser = async (req, res) => {
 // ── PUT /api/superadmin/users/:userId ─────────────────────────────────────────
 exports.updateUser = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { username, password, role, full_name } = req.body || {};
+  const { username, password, role, full_name, email } = req.body || {};
+  const cleanEmail = email ? email.toLowerCase().trim() : undefined;
   try {
     if (ec.isAvailable()) {
       const users = await ec.getUsers();
@@ -238,10 +241,11 @@ exports.updateUser = async (req, res) => {
         return res.status(400).json({ error: 'Bu username allaqachon mavjud' });
 
       const updated = { ...users[idx] };
-      if (username)   updated.username   = username;
-      if (role)       updated.role       = role;
-      if (full_name)  updated.full_name  = full_name;
-      if (password)   updated.password_hash = await bcrypt.hash(password, 10);
+      if (username)             updated.username      = username;
+      if (role)                 updated.role          = role;
+      if (full_name)            updated.full_name     = full_name;
+      if (password)             updated.password_hash = await bcrypt.hash(password, 10);
+      if (cleanEmail !== undefined) updated.email     = cleanEmail;
 
       users[idx] = updated;
       await ec.saveUsers(users);
@@ -252,21 +256,23 @@ exports.updateUser = async (req, res) => {
         const hash = await bcrypt.hash(password, 10);
         await req.db.query(
           `UPDATE crm_users
-             SET username   = COALESCE($1, username),
+             SET username      = COALESCE($1, username),
                  password_hash = $2,
-                 role       = COALESCE($3, role),
-                 full_name  = COALESCE($4, full_name)
-           WHERE id = $5`,
-          [username || null, hash, role || null, full_name || null, req.params.userId]
+                 role          = COALESCE($3, role),
+                 full_name     = COALESCE($4, full_name),
+                 email         = COALESCE($5, email)
+           WHERE id = $6`,
+          [username || null, hash, role || null, full_name || null, cleanEmail || null, req.params.userId]
         );
       } else {
         await req.db.query(
           `UPDATE crm_users
              SET username  = COALESCE($1, username),
                  role      = COALESCE($2, role),
-                 full_name = COALESCE($3, full_name)
-           WHERE id = $4`,
-          [username || null, role || null, full_name || null, req.params.userId]
+                 full_name = COALESCE($3, full_name),
+                 email     = COALESCE($4, email)
+           WHERE id = $5`,
+          [username || null, role || null, full_name || null, cleanEmail || null, req.params.userId]
         );
       }
       return res.json({ success: true });

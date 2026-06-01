@@ -3202,14 +3202,23 @@ tr:hover td{background:var(--surface-variant);}
         return { 'Content-Type':'application/json', ...(t ? { 'Authorization':'Bearer '+t } : {}) };
       };
 
+      // Markaziy logout helper (token muddati tugaganda ishlatiladi)
+      const forceLogout = () => {
+        setAuthUser(null);
+        localStorage.removeItem('mizon_token');
+        localStorage.removeItem('mizon_session');
+      };
+
       useEffect(() => {
         const headers = {};
         const t = localStorage.getItem('mizon_token');
         if (t) headers['Authorization'] = 'Bearer ' + t;
         fetch('/api/leads', { headers }).then(res => {
+          if (res.status === 401) { forceLogout(); return null; }
           if(!res.ok) throw new Error('API mavjud emas');
           return res.json();
         }).then(data => {
+          if (!data) return;
           if(data.success && data.leads && data.leads.length > 0) {
             setLeads(data.leads.map(l => ({
               id: l.id,
@@ -3466,6 +3475,8 @@ tr:hover td{background:var(--surface-variant);}
             actualCallAttempts:lead.actualCallAttempts, deadline:lead.deadline,
             taskDescription:lead.taskDescription, chatLogs:lead.chatLogs, owner:lead.owner
           })
+        }).then(res => {
+          if (res.status === 401) forceLogout();
         }).catch(err=>console.log('Sinxronlashda xato', err));
       };
 

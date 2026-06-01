@@ -60,17 +60,18 @@ exports.updateUser = async (req, res) => {
   if (!req.db) return res.status(500).json({ error: 'DB ulangan emas' });
 
   const { password, role, full_name, email } = req.body || {};
+  const cleanEmail = email ? email.toLowerCase().trim() : null;
   try {
     if (password) {
       const hash = await bcrypt.hash(password, 10);
       await req.db.query(
         'UPDATE crm_users SET password_hash=$1, role=COALESCE($2,role), full_name=COALESCE($3,full_name), email=COALESCE($4,email) WHERE id=$5 AND company_id=$6',
-        [hash, role, full_name, email||null, req.params.id, req.user.companyId]
+        [hash, role, full_name, cleanEmail, req.params.id, req.user.companyId]
       );
     } else {
       await req.db.query(
         'UPDATE crm_users SET role=COALESCE($1,role), full_name=COALESCE($2,full_name), email=COALESCE($3,email) WHERE id=$4 AND company_id=$5',
-        [role, full_name, email||null, req.params.id, req.user.companyId]
+        [role, full_name, cleanEmail, req.params.id, req.user.companyId]
       );
     }
     res.json({ success: true });
