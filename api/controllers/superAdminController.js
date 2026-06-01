@@ -37,7 +37,7 @@ exports.listCompanies = async (req, res) => {
 // ── POST /api/superadmin/companies ────────────────────────────────────────────
 exports.createCompany = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { name, slug, plan, call_limit, admin_username, admin_password } = req.body || {};
+  const { name, slug, plan, call_limit, admin_username, admin_password, admin_email } = req.body || {};
   if (!name || !slug || !admin_username || !admin_password)
     return res.status(400).json({ error: 'name, slug, admin_username, admin_password majburiy' });
 
@@ -63,6 +63,7 @@ exports.createCompany = async (req, res) => {
         id: 'user_' + Date.now(), company_id: compId,
         username: admin_username, password_hash: hash,
         role: 'CEO', full_name: admin_username, is_active: true,
+        email: admin_email || null,
         created_at: new Date().toISOString(),
       };
 
@@ -88,8 +89,8 @@ exports.createCompany = async (req, res) => {
       const company = cr.rows[0];
       const hash = await bcrypt.hash(admin_password, 10);
       await req.db.query(
-        'INSERT INTO crm_users (company_id,username,password_hash,role,full_name) VALUES ($1,$2,$3,$4,$5)',
-        [company.id, admin_username, hash, 'CEO', admin_username]
+        'INSERT INTO crm_users (company_id,username,password_hash,role,full_name,email) VALUES ($1,$2,$3,$4,$5,$6)',
+        [company.id, admin_username, hash, 'CEO', admin_username, admin_email||null]
       );
       await req.db.query(`
         INSERT INTO crm_stage (name,sequence,company_id) VALUES
@@ -144,7 +145,7 @@ exports.getCompany = async (req, res) => {
     if (req.db) {
       const cr = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
       if (!cr.rows.length) return res.status(404).json({ error: 'Topilmadi' });
-      const ur = await req.db.query('SELECT id,username,role,full_name,is_active,created_at FROM crm_users WHERE company_id=$1', [req.params.id]);
+      const ur = await req.db.query('SELECT id,username,email,role,full_name,is_active,created_at FROM crm_users WHERE company_id=$1', [req.params.id]);
       return res.json({ ...cr.rows[0], users: ur.rows });
     }
     return res.json({});
@@ -180,7 +181,7 @@ exports.listUsers = async (req, res) => {
       return res.json(users.filter(u => u.company_id === req.params.id).map(u => ({ ...u, password_hash: undefined })));
     }
     if (req.db) {
-      const r = await req.db.query('SELECT id,username,role,full_name,is_active,created_at FROM crm_users WHERE company_id=$1', [req.params.id]);
+      const r = await req.db.query('SELECT id,username,email,role,full_name,is_active,created_at FROM crm_users WHERE company_id=$1', [req.params.id]);
       return res.json(r.rows);
     }
     return res.json([]);
@@ -190,7 +191,7 @@ exports.listUsers = async (req, res) => {
 // ── POST /api/superadmin/companies/:id/users ──────────────────────────────────
 exports.addUser = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { username, password, role, full_name } = req.body || {};
+  const { username, password, role, full_name, email } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username va password majburiy' });
   try {
     if (ec.isAvailable()) {
@@ -201,14 +202,18 @@ exports.addUser = async (req, res) => {
       const newUser = {
         id: 'user_' + Date.now(), company_id: req.params.id,
         username, password_hash: hash, role: role||'MANAGER',
-        full_name: full_name||username, is_active: true, created_at: new Date().toISOString(),
+        full_name: full_name||username, email: email||null,
+        is_active: true, created_at: new Date().toISOString(),
       };
       await ec.saveUsers([...users, newUser]);
       return res.json({ ...newUser, password_hash: undefined });
     }
     if (req.db) {
       const hash = await bcrypt.hash(password, 10);
-      const r = await req.db.query('INSERT INTO crm_users (company_id,username,password_hash,role,full_name) VALUES ($1,$2,$3,$4,$5) RETURNING id,username,role,full_name,created_at', [req.params.id, username, hash, role||'MANAGER', full_name||username]);
+      const r = await req.db.query(
+        'INSERT INTO crm_users (company_id,username,password_hash,role,full_name,email) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id,username,email,role,full_name,created_at',
+        [req.params.id, username, hash, role||'MANAGER', full_name||username, email||null]
+      );
       return res.json(r.rows[0]);
     }
     return res.status(500).json({ error: 'Storage ulangan emas' });

@@ -111,9 +111,12 @@ exports.login = async (req, res) => {
         if (!company.is_active) return res.status(403).json({ error: 'Kompaniya vaqtincha bloklangan' });
       }
 
-      const user = company_slug
-        ? users.find(u => u.username === username && u.company_id === company?.id && u.is_active !== false)
-        : users.find(u => u.username === username && u.is_active !== false);
+      const isEmailEC = username.includes('@');
+      const user = isEmailEC
+        ? users.find(u => u.email && u.email.toLowerCase() === username.toLowerCase() && u.is_active !== false)
+        : company_slug
+          ? users.find(u => u.username === username && u.company_id === company?.id && u.is_active !== false)
+          : users.find(u => u.username === username && u.is_active !== false);
 
       if (!user) return failReply(res);
 
@@ -155,10 +158,21 @@ exports.login = async (req, res) => {
         if (!cr.rows[0].is_active) return res.status(403).json({ error: 'Kompaniya bloklangan' });
         companyId = cr.rows[0].id; companyInfo = cr.rows[0];
       }
-      const q = companyId
-        ? 'SELECT * FROM crm_users WHERE username=$1 AND company_id=$2 AND is_active=true'
-        : 'SELECT * FROM crm_users WHERE username=$1 AND is_active=true LIMIT 1';
-      const ur = await req.db.query(q, companyId ? [username, companyId] : [username]);
+
+      // Email orqali kirish: '@' belgisi bo'lsa — email qidirish (hamma kompaniyada noyob)
+      const isEmail = username.includes('@');
+      let ur;
+      if (isEmail) {
+        ur = await req.db.query(
+          'SELECT * FROM crm_users WHERE email=$1 AND is_active=true LIMIT 1',
+          [username.toLowerCase().trim()]
+        );
+      } else {
+        const q = companyId
+          ? 'SELECT * FROM crm_users WHERE username=$1 AND company_id=$2 AND is_active=true'
+          : 'SELECT * FROM crm_users WHERE username=$1 AND is_active=true LIMIT 1';
+        ur = await req.db.query(q, companyId ? [username, companyId] : [username]);
+      }
       if (!ur.rows.length) return failReply(res);
 
       const u = ur.rows[0];

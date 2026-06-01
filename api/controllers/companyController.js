@@ -6,7 +6,7 @@ exports.listUsers = async (req, res) => {
   if (!req.db) return res.json([]);
   try {
     const r = await req.db.query(
-      'SELECT id, username, role, full_name, is_active, created_at FROM crm_users WHERE company_id = $1 ORDER BY created_at',
+      'SELECT id, username, email, role, full_name, is_active, created_at FROM crm_users WHERE company_id = $1 ORDER BY created_at',
       [req.user.companyId]
     );
     res.json(r.rows);
@@ -20,14 +20,14 @@ exports.addUser = async (req, res) => {
     return res.status(403).json({ error: 'Faqat CEO xodim qo\'sha oladi' });
   if (!req.db) return res.status(500).json({ error: 'DB ulangan emas' });
 
-  const { username, password, role, full_name } = req.body || {};
+  const { username, password, role, full_name, email } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username va password majburiy' });
 
   try {
     const hash = await bcrypt.hash(password, 10);
     const r = await req.db.query(
-      'INSERT INTO crm_users (company_id, username, password_hash, role, full_name) VALUES ($1,$2,$3,$4,$5) RETURNING id, username, role, full_name, created_at',
-      [req.user.companyId, username, hash, role || 'MANAGER', full_name || username]
+      'INSERT INTO crm_users (company_id, username, password_hash, role, full_name, email) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, username, email, role, full_name, created_at',
+      [req.user.companyId, username, hash, role || 'MANAGER', full_name || username, email || null]
     );
     res.json(r.rows[0]);
   } catch (e) {
@@ -59,18 +59,18 @@ exports.updateUser = async (req, res) => {
     return res.status(403).json({ error: 'Faqat CEO o\'zgartira oladi' });
   if (!req.db) return res.status(500).json({ error: 'DB ulangan emas' });
 
-  const { password, role, full_name } = req.body || {};
+  const { password, role, full_name, email } = req.body || {};
   try {
     if (password) {
       const hash = await bcrypt.hash(password, 10);
       await req.db.query(
-        'UPDATE crm_users SET password_hash=$1, role=COALESCE($2,role), full_name=COALESCE($3,full_name) WHERE id=$4 AND company_id=$5',
-        [hash, role, full_name, req.params.id, req.user.companyId]
+        'UPDATE crm_users SET password_hash=$1, role=COALESCE($2,role), full_name=COALESCE($3,full_name), email=COALESCE($4,email) WHERE id=$5 AND company_id=$6',
+        [hash, role, full_name, email||null, req.params.id, req.user.companyId]
       );
     } else {
       await req.db.query(
-        'UPDATE crm_users SET role=COALESCE($1,role), full_name=COALESCE($2,full_name) WHERE id=$3 AND company_id=$4',
-        [role, full_name, req.params.id, req.user.companyId]
+        'UPDATE crm_users SET role=COALESCE($1,role), full_name=COALESCE($2,full_name), email=COALESCE($3,email) WHERE id=$4 AND company_id=$5',
+        [role, full_name, email||null, req.params.id, req.user.companyId]
       );
     }
     res.json({ success: true });

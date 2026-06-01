@@ -215,6 +215,7 @@ async function initDb() {
       ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP DEFAULT NOW();
       ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS company_id  INT;
       ALTER TABLE automation_rules       ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'sms';
+      ALTER TABLE crm_users              ADD COLUMN IF NOT EXISTS email       VARCHAR(255);
     `);
 
     // ── Seed default company (first run / backward compat) ───────────────────

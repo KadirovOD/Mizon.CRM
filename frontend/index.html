@@ -543,7 +543,7 @@ tr:hover td{background:var(--surface-variant);}
     const UserManagement = ({ users, setUsers }) => {
       const [isAdding, setIsAdding] = useState(false);
       const [editId,   setEditId]   = useState(null);
-      const [form,     setForm]     = useState({username:'', password:'', role:'MANAGER'});
+      const [form,     setForm]     = useState({username:'', password:'', role:'MANAGER', email:''});
       const [apiUsers, setApiUsers] = useState(null); // null = not fetched yet
       const [saving,   setSaving]   = useState(false);
       const token = localStorage.getItem('mizon_token');
@@ -619,7 +619,7 @@ tr:hover td{background:var(--surface-variant);}
                     <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px'}}>{u.username[0].toUpperCase()}</div>
                     <div>
                       <div style={{fontWeight:600, color:'var(--accent)'}}>{u.username}</div>
-                      <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{u.role}{u.full_name && u.full_name!==u.username ? ' · '+u.full_name : ''}</div>
+                      <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{u.role}{u.full_name && u.full_name!==u.username ? ' · '+u.full_name : ''}{u.email ? ' · '+u.email : ''}</div>
                     </div>
                   </div>
                   <div style={{display:'flex', gap:'8px'}}>
@@ -634,6 +634,7 @@ tr:hover td{background:var(--surface-variant);}
             <div style={{padding:'16px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px', marginTop:'14px', display:'flex', flexDirection:'column', gap:'6px'}}>
               <span className="label-sm">Yangi Xodim Ma'lumotlari</span>
               <input className="input-base" placeholder="Login (username)" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} />
+              <input className="input-base" placeholder="Email (login uchun)" type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})} />
               <input className="input-base" placeholder="Maxfiy parol" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
               <select className="input-base" value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                 <option value="MANAGER">MANAGER (Sotuvchi)</option>
@@ -645,7 +646,7 @@ tr:hover td{background:var(--surface-variant);}
               </div>
             </div>
           ) : (
-            <button className="btn-outline" style={{marginTop:'14px'}} onClick={()=>{setForm({username:'',password:'',role:'MANAGER'});setIsAdding(true);}}>+ Yangi xodim qo'shish</button>
+            <button className="btn-outline" style={{marginTop:'14px'}} onClick={()=>{setForm({username:'',password:'',role:'MANAGER',email:''});setIsAdding(true);}}>+ Yangi xodim qo'shish</button>
           )}
         </div>
       );
@@ -2667,8 +2668,8 @@ tr:hover td{background:var(--surface-variant);}
       const [selCompany,   setSelCompany]   = useState(null);
       const [compUsers,    setCompUsers]    = useState([]);
       const [showAddUser,  setShowAddUser]  = useState(false);
-      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:''});
-      const [userForm,     setUserForm]     = useState({username:'', password:'', role:'MANAGER', full_name:''});
+      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
+      const [userForm,     setUserForm]     = useState({username:'', password:'', role:'MANAGER', full_name:'', email:''});
       const [msg,          setMsg]          = useState('');
       const [saving,       setSaving]       = useState(false);
       const [lastCreated,  setLastCreated]  = useState(null);
@@ -2770,7 +2771,7 @@ tr:hover td{background:var(--surface-variant);}
         if (!r.ok) return flash('❌ '+d.error);
         setLastCreated(d.company || {name:createForm.name, slug:createForm.slug});
         setView('list'); loadCompanies();
-        setCreateForm({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:''});
+        setCreateForm({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
       };
 
       const toggleActive = async (comp) => {
@@ -2887,6 +2888,10 @@ tr:hover td{background:var(--surface-variant);}
                     <span className="label-sm">CEO paroli *</span>
                     <input className="input-base" type="password" placeholder="Xavfsiz parol" value={createForm.admin_password} onChange={e=>setCreateForm({...createForm,admin_password:e.target.value})} required />
                   </div>
+                  <div>
+                    <span className="label-sm">CEO Email (ixtiyoriy — email orqali login)</span>
+                    <input className="input-base" type="email" placeholder="ceo@kompaniya.uz" value={createForm.admin_email||''} onChange={e=>setCreateForm({...createForm,admin_email:e.target.value})} />
+                  </div>
                   <div style={{gridColumn:'1/-1', display:'flex', gap:'10px', marginTop:'6px'}}>
                     <button className="btn-primary" type="submit" disabled={saving} style={{padding:'10px 24px'}}>{saving?'Yaratilmoqda...':'Kompaniya yaratish'}</button>
                     <button className="btn-outline" type="button" onClick={()=>setView('list')} style={{padding:'10px 24px'}}>Bekor qilish</button>
@@ -2938,8 +2943,9 @@ tr:hover td{background:var(--surface-variant);}
                     <button className="btn-primary" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setShowAddUser(!showAddUser)}>+ Xodim qo'shish</button>
                   </div>
                   {showAddUser && (
-                    <form onSubmit={addUser} style={{padding:'16px 20px', background:'rgba(1,167,80,0.04)', borderBottom:'1px solid var(--outline-variant)', display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:'10px', alignItems:'end'}}>
+                    <form onSubmit={addUser} style={{padding:'16px 20px', background:'rgba(1,167,80,0.04)', borderBottom:'1px solid var(--outline-variant)', display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr auto', gap:'10px', alignItems:'end'}}>
                       <div><span className="label-sm">Username *</span><input className="input-base" style={{marginBottom:0}} placeholder="menejer_2" value={userForm.username} onChange={e=>setUserForm({...userForm,username:e.target.value})} required /></div>
+                      <div><span className="label-sm">Email (login uchun)</span><input className="input-base" style={{marginBottom:0}} type="email" placeholder="user@mail.uz" value={userForm.email||''} onChange={e=>setUserForm({...userForm,email:e.target.value})} /></div>
                       <div><span className="label-sm">Parol *</span><input className="input-base" style={{marginBottom:0}} type="password" placeholder="••••••" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})} required /></div>
                       <div><span className="label-sm">Rol</span>
                         <select className="input-base" style={{marginBottom:0}} value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
@@ -2952,11 +2958,12 @@ tr:hover td{background:var(--surface-variant);}
                       </div>
                     </form>
                   )}
-                  <table><thead><tr><th>Username</th><th>Rol</th><th>Qo'shilgan</th><th></th></tr></thead>
+                  <table><thead><tr><th>Username</th><th>Email</th><th>Rol</th><th>Qo'shilgan</th><th></th></tr></thead>
                     <tbody>
                       {compUsers.map(u => (
                         <tr key={u.id}>
                           <td style={{fontWeight:600}}><span className="avatar" style={{width:'24px',height:'24px',fontSize:'10px',display:'inline-flex',marginRight:'8px'}}>{u.username[0].toUpperCase()}</span>{u.username}{u.full_name&&u.full_name!==u.username&&<span style={{fontSize:'11px',color:'var(--text-muted)',marginLeft:'6px'}}>({u.full_name})</span>}</td>
+                          <td style={{fontSize:'12px',color:'var(--text-muted)'}}>{u.email||<span style={{opacity:0.4}}>—</span>}</td>
                           <td><span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:u.role==='CEO'?'rgba(1,167,80,0.12)':'var(--surface-variant)',color:u.role==='CEO'?'#01a750':'var(--text-secondary)'}}>{u.role}</span></td>
                           <td style={{fontSize:'11px',color:'var(--text-muted)'}}>{new Date(u.created_at).toLocaleDateString()}</td>
                           <td style={{display:'flex',gap:'6px'}}>
@@ -3408,14 +3415,17 @@ tr:hover td{background:var(--surface-variant);}
                   {loginError}
                 </div>
               )}
-              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus disabled={!!(loginLock && loginLock.secsLeft > 0)} />
+              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Email yoki login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus disabled={!!(loginLock && loginLock.secsLeft > 0)} />
               <input className="input-base" type="password" placeholder="Parol" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} disabled={!!(loginLock && loginLock.secsLeft > 0)} />
               <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px', opacity:(loginLoading||(loginLock&&loginLock.secsLeft>0))?0.5:1}} type="submit" disabled={loginLoading||(loginLock&&loginLock.secsLeft>0)}>
                 {loginLoading ? 'Tekshirilmoqda...' : (loginLock&&loginLock.secsLeft>0 ? `🔒 Bloklangan (${Math.ceil(loginLock.secsLeft/60)} daq)` : 'Tizimga Kirish')}
               </button>
-              {companySlug && !isSuperAdminMode && (
+              {!isSuperAdminMode && (
                 <div style={{marginTop:'16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
-                  🌐 <b style={{color:'var(--primary)'}}>{companySlug}.mizon-crm.uz</b>
+                  {companySlug
+                    ? <span>🌐 <b style={{color:'var(--primary)'}}>{companySlug}.mizon-crm.uz</b></span>
+                    : <span>💡 Email yoki login va parolni kiriting</span>
+                  }
                 </div>
               )}
             </form>
