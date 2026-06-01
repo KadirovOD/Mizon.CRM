@@ -91,4 +91,8 @@ exports.saveUsers = async (users) => {
 };
 
 // Check if Edge Config is available
-exports.isAvailable = () => !!(EC_URL && EC_ID && V_TOKEN);
+// PostgreSQL (Railway/Supabase) ulangan bo'lsa — Edge Config'ni chetlab o'tish
+exports.isAvailable = () => {
+  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) return false;
+  return !!(EC_URL && EC_ID && V_TOKEN);
+};
