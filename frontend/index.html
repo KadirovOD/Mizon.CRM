@@ -2590,45 +2590,78 @@ tr:hover td{background:var(--surface-variant);}
 
     // ===== MARKETING ANALYTICS MODULE (fully functional, localStorage) =====
     const MarketingModule = () => {
-      const defaultCampaigns = [
-        {id:'c1', name:"Asosiy savdo kampaniyasi", status:'active', budget:2500000, spent:1840000, leads:47, cpl:39100, reach:28400},
-        {id:'c2', name:"Retargeting – Veb sayt", status:'active', budget:800000, spent:620000, leads:18, cpl:34400, reach:9200},
-        {id:'c3', name:"Brand Awareness – Toshkent", status:'paused', budget:1200000, spent:1200000, leads:31, cpl:38700, reach:45600},
-      ];
+      // Kompaniya ID ni sessiyadan olamiz — localStorage kalitini izolyatsiya qilish uchun
+      const _mktSession = (() => { try { return JSON.parse(localStorage.getItem('mizon_session')||'{}'); } catch{return {};} })();
+      const _cid = _mktSession.companyId || 'local';
+      const CAMP_KEY = `mizon_campaigns_${_cid}`;
+      const TG_KEY   = `mizon_tg_${_cid}`;
+
+      // ── Facebook kampaniyalar ──────────────────────────────────────────────────
       const [campaigns, setCampaigns] = useState(() => {
-        const s = localStorage.getItem('mizon_campaigns');
-        return s ? JSON.parse(s) : defaultCampaigns;
+        try { return JSON.parse(localStorage.getItem(CAMP_KEY)||'[]'); } catch{return [];}
       });
-      const tgChannels = [
-        {id:'t1', name:'@mizon_uz', subscribers:12480, posts:42, reach:38200, clicks:1840, joinRate:'+240 bu oy'},
-        {id:'t2', name:'@mizon_yangiliklar', subscribers:5320, posts:18, reach:14100, clicks:620, joinRate:'+89 bu oy'},
-      ];
-      const [showNew, setShowNew] = useState(false);
-      const [editBudget, setEditBudget] = useState(null);
+      useEffect(() => { localStorage.setItem(CAMP_KEY, JSON.stringify(campaigns)); }, [campaigns]);
+
+      const [showNew,    setShowNew]    = useState(false);
+      const [editBudget, setEditBudget] = useState(null); // {id, val}
+      const [editSpent,  setEditSpent]  = useState(null); // {id, val}
+      const [editLeads,  setEditLeads]  = useState(null); // {id, val}
       const [newC, setNewC] = useState({name:'', budget:'', reach:''});
 
-      useEffect(() => { localStorage.setItem('mizon_campaigns', JSON.stringify(campaigns)); }, [campaigns]);
-
-      const toggleStatus = (id) => setCampaigns(prev => prev.map(c => c.id===id ? {...c, status:c.status==='active'?'paused':'active'} : c));
-      const deleteCamp = (id) => { if(window.confirm("Kampaniyani o'chirishni tasdiqlaysizmi?")) setCampaigns(prev => prev.filter(c => c.id!==id)); };
-      const saveBudget = () => {
-        if(!editBudget) return;
-        setCampaigns(prev => prev.map(c => c.id===editBudget.id ? {...c, budget:Number(editBudget.val)||c.budget} : c));
-        setEditBudget(null);
-      };
-      const addCampaign = () => {
-        if(!newC.name || !newC.budget) return alert("Kampaniya nomi va byudjetni kiriting!");
-        setCampaigns(prev => [...prev, {id:'c_'+Date.now(), name:newC.name, status:'active', budget:Number(newC.budget), spent:0, leads:0, cpl:0, reach:Number(newC.reach)||0}]);
-        setNewC({name:'', budget:'', reach:''}); setShowNew(false);
+      const toggleStatus = (id) => setCampaigns(prev => prev.map(c => c.id===id?{...c,status:c.status==='active'?'paused':'active'}:c));
+      const deleteCamp   = (id) => { if(window.confirm("Kampaniyani o'chirishni tasdiqlaysizmi?")) setCampaigns(prev=>prev.filter(c=>c.id!==id)); };
+      const saveBudget   = () => { if(!editBudget) return; setCampaigns(prev=>prev.map(c=>c.id===editBudget.id?{...c,budget:Number(editBudget.val)||c.budget}:c)); setEditBudget(null); };
+      const saveSpent    = () => { if(!editSpent)  return; setCampaigns(prev=>prev.map(c=>{ if(c.id!==editSpent.id) return c; const spent=Number(editSpent.val)||0; return {...c,spent,cpl:c.leads?Math.round(spent/c.leads):0}; })); setEditSpent(null); };
+      const saveLeads    = () => { if(!editLeads)  return; setCampaigns(prev=>prev.map(c=>{ if(c.id!==editLeads.id) return c; const leads=Number(editLeads.val)||0; return {...c,leads,cpl:leads?Math.round(c.spent/leads):0}; })); setEditLeads(null); };
+      const addCampaign  = () => {
+        if(!newC.name||!newC.budget) return alert("Kampaniya nomi va byudjetni kiriting!");
+        setCampaigns(prev=>[...prev,{id:'c_'+Date.now(),name:newC.name,status:'active',budget:Number(newC.budget),spent:0,leads:0,cpl:0,reach:Number(newC.reach)||0}]);
+        setNewC({name:'',budget:'',reach:''}); setShowNew(false);
       };
 
-      const fmt = n => n>=1000000?(n/1000000).toFixed(1)+'M':n>=1000?(n/1000).toFixed(0)+'K':String(n);
+      // ── Telegram kanallar ─────────────────────────────────────────────────────
+      const [tgChannels, setTgChannels] = useState(() => {
+        try { return JSON.parse(localStorage.getItem(TG_KEY)||'[]'); } catch{return [];}
+      });
+      useEffect(() => { localStorage.setItem(TG_KEY, JSON.stringify(tgChannels)); }, [tgChannels]);
+
+      const [showNewTg, setShowNewTg] = useState(false);
+      const [newTg, setNewTg] = useState({name:'', subscribers:'', posts:'', reach:'', clicks:'', joinRate:''});
+      const [editTg, setEditTg] = useState(null); // full channel object being edited
+
+      const addTgChannel = () => {
+        if(!newTg.name) return alert("Kanal nomini kiriting!");
+        setTgChannels(prev=>[...prev,{id:'t_'+Date.now(),name:newTg.name,subscribers:Number(newTg.subscribers)||0,posts:Number(newTg.posts)||0,reach:Number(newTg.reach)||0,clicks:Number(newTg.clicks)||0,joinRate:newTg.joinRate||''}]);
+        setNewTg({name:'',subscribers:'',posts:'',reach:'',clicks:'',joinRate:''}); setShowNewTg(false);
+      };
+      const saveTgEdit = () => {
+        if(!editTg) return;
+        setTgChannels(prev=>prev.map(ch=>ch.id===editTg.id?{...editTg,subscribers:Number(editTg.subscribers)||0,posts:Number(editTg.posts)||0,reach:Number(editTg.reach)||0,clicks:Number(editTg.clicks)||0}:ch));
+        setEditTg(null);
+      };
+      const deleteTg = (id) => { if(window.confirm("Kanalni o'chirishni tasdiqlaysizmi?")) setTgChannels(prev=>prev.filter(ch=>ch.id!==id)); };
+
+      // ── Hisoblar ──────────────────────────────────────────────────────────────
+      const fmt    = n => n>=1000000?(n/1000000).toFixed(1)+'M':n>=1000?(n/1000).toFixed(0)+'K':String(n);
       const fmtSum = n => new Intl.NumberFormat('ru-RU').format(n)+" so'm";
 
       const totLeads = campaigns.reduce((s,c)=>s+c.leads,0);
       const totSpent = campaigns.reduce((s,c)=>s+c.spent,0);
       const avgCPL   = totLeads ? Math.round(totSpent/totLeads) : 0;
       const actCount = campaigns.filter(c=>c.status==='active').length;
+
+      // ── Inline editor helper ──────────────────────────────────────────────────
+      const InlineEdit = ({editState, setEdit, onSave, label}) => editState ? (
+        <span>
+          <input type="number" autoFocus style={{background:'var(--surface-variant)',border:'1px solid var(--border-hover)',borderRadius:'4px',padding:'1px 6px',color:'var(--text-main)',fontSize:'11px',width:'100px'}}
+            value={editState.val} onChange={e=>setEdit({...editState,val:e.target.value})}
+            onKeyDown={e=>{if(e.key==='Enter')onSave();if(e.key==='Escape')setEdit(null);}} />
+          <button onClick={onSave} style={{marginLeft:'4px',fontSize:'11px',background:'var(--primary-container)',color:'#fff',border:'none',borderRadius:'4px',padding:'2px 7px',cursor:'pointer'}}>✓</button>
+          <button onClick={()=>setEdit(null)} style={{marginLeft:'3px',fontSize:'11px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
+        </span>
+      ) : (
+        <span>{label} <button onClick={()=>setEdit({id:editState?.id, val:''})} style={{fontSize:'10px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:'0 3px',verticalAlign:'middle'}}>✎</button></span>
+      );
 
       return (
         <div>
@@ -2640,6 +2673,7 @@ tr:hover td{background:var(--surface-variant);}
             <button className="btn-primary" onClick={()=>setShowNew(!showNew)}><Ico n="plus" s={14}/> Yangi Kampaniya</button>
           </div>
 
+          {/* Yangi kampaniya formasi */}
           {showNew && (
             <div className="card" style={{marginBottom:'16px', background:'rgba(24,119,242,0.04)', border:'1px solid rgba(24,119,242,0.25)'}}>
               <div style={{fontWeight:600, fontSize:'14px', marginBottom:'14px', color:'#1877F2'}}>Yangi Facebook Kampaniya</div>
@@ -2664,12 +2698,13 @@ tr:hover td{background:var(--surface-variant);}
             </div>
           )}
 
+          {/* Umumiy statistika */}
           <div className="stat-mini-grid">
             {[
-              {label:"Faol kampaniyalar", val:actCount, color:'#01a750'},
-              {label:"Jami leadlar", val:totLeads, color:'var(--text-main)'},
-              {label:"Sarflandi", val:fmtSum(totSpent), color:'#f59e0b'},
-              {label:"O'rtacha CPL", val:fmtSum(avgCPL), color:'#3b82f6'},
+              {label:"Faol kampaniyalar", val:actCount,         color:'#01a750'},
+              {label:"Jami leadlar",       val:totLeads,         color:'var(--text-main)'},
+              {label:"Sarflandi",          val:fmtSum(totSpent), color:'#f59e0b'},
+              {label:"O'rtacha CPL",       val:fmtSum(avgCPL),  color:'#3b82f6'},
             ].map((m,i) => (
               <div key={i} className="stat-mini">
                 <div className="stat-mini-label">{m.label}</div>
@@ -2678,6 +2713,7 @@ tr:hover td{background:var(--surface-variant);}
             ))}
           </div>
 
+          {/* ── Facebook Ads ── */}
           <div style={{marginBottom:'24px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px'}}>
               <div style={{width:'32px', height:'32px', background:'#1877F2', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center'}}>
@@ -2686,108 +2722,222 @@ tr:hover td{background:var(--surface-variant);}
               <h3 style={{fontSize:'15px', fontWeight:700}}>Facebook Ads Kampaniyalar</h3>
               <span style={{fontSize:'11px', color:'var(--text-muted)', marginLeft:'auto'}}>{campaigns.length} ta kampaniya</span>
             </div>
-            {campaigns.length === 0 && (
+
+            {campaigns.length === 0 ? (
               <div className="card" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
-                Kampaniya yo'q. Yuqoridagi "Yangi Kampaniya" tugmasini bosing.
+                <span className="material-symbols-outlined" style={{fontSize:'40px', opacity:0.3, display:'block', marginBottom:'10px'}}>campaign</span>
+                Kampaniya yo'q. "Yangi Kampaniya" tugmasini bosing.
+              </div>
+            ) : (
+              <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                {campaigns.map(c => {
+                  const pct = c.budget > 0 ? Math.min(100, Math.round(c.spent/c.budget*100)) : 0;
+                  return (
+                    <div key={c.id} className="card" style={{padding:'16px 20px'}}>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px'}}>
+                        <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                          <span style={{fontWeight:700, fontSize:'14px'}}>{c.name}</span>
+                          <span style={{padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
+                            background:c.status==='active'?'rgba(1,167,80,0.12)':'rgba(245,158,11,0.1)',
+                            color:c.status==='active'?'#01a750':'#f59e0b',
+                            border:`1px solid ${c.status==='active'?'rgba(1,167,80,0.3)':'rgba(245,158,11,0.3)'}`}}>
+                            {c.status==='active'?'Faol':"To'xtatildi"}
+                          </span>
+                        </div>
+                        <div style={{display:'flex', gap:'6px'}}>
+                          <button className="btn-outline" style={{padding:'5px 12px', fontSize:'11px'}} onClick={()=>toggleStatus(c.id)}>
+                            {c.status==='active'?"To'xtatish":'Ishga tushirish'}
+                          </button>
+                          <button className="btn-danger" style={{padding:'5px 9px', fontSize:'12px'}} onClick={()=>deleteCamp(c.id)}>✕</button>
+                        </div>
+                      </div>
+
+                      {/* Metrikalar */}
+                      <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px', marginBottom:'12px'}}>
+                        {[
+                          {label:'Leadlar',  val:c.leads,           color:'var(--accent)'},
+                          {label:'CPL',      val:fmtSum(c.cpl),     color:'var(--text-main)'},
+                          {label:'Qamrov',   val:fmt(c.reach),      color:'#3b82f6'},
+                          {label:'Byudjet %',val:pct+'%',           color:pct>=90?'#ef4444':pct>=70?'#f59e0b':'#01a750'},
+                        ].map((s,i) => (
+                          <div key={i} style={{textAlign:'center', padding:'9px', background:'var(--bg-base)', borderRadius:'7px', border:'1px solid var(--border-light)'}}>
+                            <div style={{fontSize:'16px', fontWeight:700, color:s.color}}>{s.val}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Byudjet va sarfni inline tahrirlash */}
+                      <div>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px', flexWrap:'wrap', gap:'4px'}}>
+                          <span style={{fontSize:'11px', color:'var(--text-muted)'}}>
+                            Sarflandi:{' '}
+                            {editSpent?.id===c.id ? (
+                              <span>
+                                <input type="number" autoFocus style={{background:'var(--surface-variant)',border:'1px solid var(--border-hover)',borderRadius:'4px',padding:'1px 6px',color:'var(--text-main)',fontSize:'11px',width:'100px'}}
+                                  value={editSpent.val} onChange={e=>setEditSpent({...editSpent,val:e.target.value})}
+                                  onKeyDown={e=>{if(e.key==='Enter')saveSpent();if(e.key==='Escape')setEditSpent(null);}} />
+                                <button onClick={saveSpent} style={{marginLeft:'4px',fontSize:'11px',background:'var(--primary-container)',color:'#fff',border:'none',borderRadius:'4px',padding:'2px 7px',cursor:'pointer'}}>✓</button>
+                                <button onClick={()=>setEditSpent(null)} style={{marginLeft:'3px',fontSize:'11px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
+                              </span>
+                            ) : (
+                              <span>{fmtSum(c.spent)} <button onClick={()=>setEditSpent({id:c.id,val:c.spent})} style={{fontSize:'10px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:'0 3px',verticalAlign:'middle'}}>✎</button></span>
+                            )}
+                            {' / '}
+                            {editBudget?.id===c.id ? (
+                              <span>
+                                <input type="number" autoFocus style={{background:'var(--surface-variant)',border:'1px solid var(--border-hover)',borderRadius:'4px',padding:'1px 6px',color:'var(--text-main)',fontSize:'11px',width:'100px'}}
+                                  value={editBudget.val} onChange={e=>setEditBudget({...editBudget,val:e.target.value})}
+                                  onKeyDown={e=>{if(e.key==='Enter')saveBudget();if(e.key==='Escape')setEditBudget(null);}} />
+                                <button onClick={saveBudget} style={{marginLeft:'4px',fontSize:'11px',background:'var(--primary-container)',color:'#fff',border:'none',borderRadius:'4px',padding:'2px 7px',cursor:'pointer'}}>✓</button>
+                                <button onClick={()=>setEditBudget(null)} style={{marginLeft:'3px',fontSize:'11px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
+                              </span>
+                            ) : (
+                              <span>{fmtSum(c.budget)} <button onClick={()=>setEditBudget({id:c.id,val:c.budget})} style={{fontSize:'10px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:'0 3px',verticalAlign:'middle'}}>✎</button></span>
+                            )}
+                            {' | Leadlar: '}
+                            {editLeads?.id===c.id ? (
+                              <span>
+                                <input type="number" autoFocus style={{background:'var(--surface-variant)',border:'1px solid var(--border-hover)',borderRadius:'4px',padding:'1px 6px',color:'var(--text-main)',fontSize:'11px',width:'70px'}}
+                                  value={editLeads.val} onChange={e=>setEditLeads({...editLeads,val:e.target.value})}
+                                  onKeyDown={e=>{if(e.key==='Enter')saveLeads();if(e.key==='Escape')setEditLeads(null);}} />
+                                <button onClick={saveLeads} style={{marginLeft:'4px',fontSize:'11px',background:'var(--primary-container)',color:'#fff',border:'none',borderRadius:'4px',padding:'2px 7px',cursor:'pointer'}}>✓</button>
+                                <button onClick={()=>setEditLeads(null)} style={{marginLeft:'3px',fontSize:'11px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
+                              </span>
+                            ) : (
+                              <span>{c.leads} <button onClick={()=>setEditLeads({id:c.id,val:c.leads})} style={{fontSize:'10px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:'0 3px',verticalAlign:'middle'}}>✎</button></span>
+                            )}
+                          </span>
+                          <span style={{fontSize:'11px', fontWeight:700, color:pct>=90?'#ef4444':pct>=70?'#f59e0b':'var(--text-muted)'}}>{pct}%</span>
+                        </div>
+                        <div className="budget-bar" style={{height:'6px'}}>
+                          <div className="budget-bar-fill" style={{width:pct+'%', background:pct>=90?'#ef4444':pct>=70?'#f59e0b':'#1877F2', transition:'width 0.4s ease'}}></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
-            <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-              {campaigns.map(c => {
-                const pct = c.budget > 0 ? Math.min(100, Math.round(c.spent/c.budget*100)) : 0;
-                const isEditingBudget = editBudget?.id === c.id;
-                return (
-                  <div key={c.id} className="card" style={{padding:'16px 20px'}}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px'}}>
-                      <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                        <span style={{fontWeight:700, fontSize:'14px'}}>{c.name}</span>
-                        <span style={{padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
-                          background:c.status==='active'?'rgba(1,167,80,0.12)':'rgba(245,158,11,0.1)',
-                          color:c.status==='active'?'#01a750':'#f59e0b',
-                          border:`1px solid ${c.status==='active'?'rgba(1,167,80,0.3)':'rgba(245,158,11,0.3)'}`}}>
-                          {c.status==='active'?'Faol':"To'xtatildi"}
-                        </span>
-                      </div>
-                      <div style={{display:'flex', gap:'6px'}}>
-                        <button className="btn-outline" style={{padding:'5px 12px', fontSize:'11px'}} onClick={()=>toggleStatus(c.id)}>
-                          {c.status==='active'?"To'xtatish":'Ishga tushirish'}
-                        </button>
-                        <button className="btn-danger" style={{padding:'5px 9px', fontSize:'12px'}} onClick={()=>deleteCamp(c.id)}>✕</button>
-                      </div>
-                    </div>
-                    <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'10px', marginBottom:'12px'}}>
-                      {[
-                        {label:'Leadlar', val:c.leads, color:'var(--accent)'},
-                        {label:'CPL', val:fmtSum(c.cpl), color:'var(--text-main)'},
-                        {label:'Qamrov', val:fmt(c.reach), color:'#3b82f6'},
-                        {label:'Byudjet %', val:pct+'%', color:pct>=90?'#ef4444':pct>=70?'#f59e0b':'#01a750'},
-                      ].map((s,i) => (
-                        <div key={i} style={{textAlign:'center', padding:'9px', background:'var(--bg-base)', borderRadius:'7px', border:'1px solid var(--border-light)'}}>
-                          <div style={{fontSize:'16px', fontWeight:700, color:s.color}}>{s.val}</div>
-                          <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
-                        <span style={{fontSize:'11px', color:'var(--text-muted)'}}>
-                          Sarflandi: {fmtSum(c.spent)} / {isEditingBudget ? (
-                            <span>
-                              <input type="number" style={{background:'var(--surface-variant)',border:'1px solid var(--border-hover)',borderRadius:'4px',padding:'1px 6px',color:'var(--text-main)',fontSize:'11px',width:'110px'}} value={editBudget.val} onChange={e=>setEditBudget({...editBudget,val:e.target.value})} onKeyDown={e=>{if(e.key==='Enter')saveBudget();if(e.key==='Escape')setEditBudget(null);}} autoFocus />
-                              <button onClick={saveBudget} style={{marginLeft:'4px',fontSize:'11px',background:'var(--primary-container)',color:'#fff',border:'none',borderRadius:'4px',padding:'2px 7px',cursor:'pointer'}}>✓</button>
-                              <button onClick={()=>setEditBudget(null)} style={{marginLeft:'3px',fontSize:'11px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
-                            </span>
-                          ) : (
-                            <span>{fmtSum(c.budget)} <button onClick={()=>setEditBudget({id:c.id,val:c.budget})} style={{fontSize:'10px',background:'transparent',border:'none',color:'var(--text-muted)',cursor:'pointer',padding:'0 3px',verticalAlign:'middle'}}>✎</button></span>
-                          )}
-                        </span>
-                        <span style={{fontSize:'11px', fontWeight:700, color:pct>=90?'#ef4444':pct>=70?'#f59e0b':'var(--text-muted)'}}>{pct}%</span>
-                      </div>
-                      <div className="budget-bar" style={{height:'6px'}}>
-                        <div className="budget-bar-fill" style={{width:pct+'%', background:pct>=90?'#ef4444':pct>=70?'#f59e0b':'#1877F2', transition:'width 0.4s ease'}}></div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
+          {/* ── Telegram Kanallar ── */}
           <div>
             <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px'}}>
               <div style={{width:'32px', height:'32px', background:'#0088cc', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center'}}>
                 <span className="material-symbols-outlined" style={{fontSize:'16px', color:'#fff'}}>send</span>
               </div>
               <h3 style={{fontSize:'15px', fontWeight:700}}>Telegram Kanallar</h3>
+              <button className="btn-outline" style={{marginLeft:'auto', padding:'5px 12px', fontSize:'12px'}} onClick={()=>setShowNewTg(!showNewTg)}>
+                <Ico n="plus" s={13}/> Kanal qo'shish
+              </button>
             </div>
-            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px'}}>
-              {tgChannels.map(ch => (
-                <div key={ch.id} className="card">
-                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'16px'}}>
-                    <div>
-                      <div style={{fontWeight:700, fontSize:'15px', color:'#0088cc'}}>{ch.name}</div>
-                      <div style={{fontSize:'11px', color:'#01a750', marginTop:'3px', fontWeight:600}}>{ch.joinRate}</div>
-                    </div>
-                    <span style={{background:'rgba(0,136,204,0.12)', color:'#0088cc', padding:'3px 10px', borderRadius:'20px', fontSize:'10px', fontWeight:700, border:'1px solid rgba(0,136,204,0.3)'}}>FAOL</span>
+
+            {/* Yangi kanal formasi */}
+            {showNewTg && (
+              <div className="card" style={{marginBottom:'14px', background:'rgba(0,136,204,0.04)', border:'1px solid rgba(0,136,204,0.25)'}}>
+                <div style={{fontWeight:600, fontSize:'13px', marginBottom:'12px', color:'#0088cc'}}>Yangi Telegram Kanal</div>
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'10px'}}>
+                  <div>
+                    <span className="label-sm">Kanal nomi</span>
+                    <input className="input-base" style={{marginBottom:0}} placeholder="@kompaniya_uz" value={newTg.name} onChange={e=>setNewTg({...newTg,name:e.target.value})} />
                   </div>
-                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
+                  <div>
+                    <span className="label-sm">Obunachi soni</span>
+                    <input type="number" className="input-base" style={{marginBottom:0}} placeholder="5000" value={newTg.subscribers} onChange={e=>setNewTg({...newTg,subscribers:e.target.value})} />
+                  </div>
+                  <div>
+                    <span className="label-sm">Bu oy qo'shildi</span>
+                    <input className="input-base" style={{marginBottom:0}} placeholder="+120 bu oy" value={newTg.joinRate} onChange={e=>setNewTg({...newTg,joinRate:e.target.value})} />
+                  </div>
+                  <div>
+                    <span className="label-sm">Postlar soni</span>
+                    <input type="number" className="input-base" style={{marginBottom:0}} placeholder="20" value={newTg.posts} onChange={e=>setNewTg({...newTg,posts:e.target.value})} />
+                  </div>
+                  <div>
+                    <span className="label-sm">Qamrov</span>
+                    <input type="number" className="input-base" style={{marginBottom:0}} placeholder="15000" value={newTg.reach} onChange={e=>setNewTg({...newTg,reach:e.target.value})} />
+                  </div>
+                  <div>
+                    <span className="label-sm">Kliklar</span>
+                    <input type="number" className="input-base" style={{marginBottom:0}} placeholder="800" value={newTg.clicks} onChange={e=>setNewTg({...newTg,clicks:e.target.value})} />
+                  </div>
+                </div>
+                <div style={{display:'flex', gap:'8px'}}>
+                  <button className="btn-primary" onClick={addTgChannel}>Saqlash</button>
+                  <button className="btn-outline" onClick={()=>setShowNewTg(false)}>Bekor</button>
+                </div>
+              </div>
+            )}
+
+            {/* Tahrirlash modali */}
+            {editTg && (
+              <div className="login-overlay">
+                <div className="modal-box" style={{maxWidth:'480px'}}>
+                  <div style={{fontWeight:700, fontSize:'15px', marginBottom:'16px'}}>Kanalni tahrirlash</div>
+                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'14px'}}>
                     {[
-                      {label:'Obunachi', val:fmt(ch.subscribers), color:'var(--text-main)', icon:'group'},
-                      {label:'Postlar', val:ch.posts, color:'var(--text-main)', icon:'article'},
-                      {label:'Qamrov', val:fmt(ch.reach), color:'#0088cc', icon:'visibility'},
-                      {label:'Kliklar', val:fmt(ch.clicks), color:'#01a750', icon:'ads_click'},
-                    ].map((s,i) => (
-                      <div key={i} style={{padding:'12px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', display:'flex', alignItems:'center', gap:'10px'}}>
-                        <span className="material-symbols-outlined" style={{fontSize:'18px', color:s.color, opacity:0.7}}>{s.icon}</span>
-                        <div>
-                          <div style={{fontSize:'18px', fontWeight:700, color:s.color, lineHeight:1}}>{s.val}</div>
-                          <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
-                        </div>
+                      {label:'Kanal nomi',    key:'name',        type:'text',   ph:'@kanal_uz'},
+                      {label:'Obunachi',      key:'subscribers', type:'number', ph:'5000'},
+                      {label:'Bu oy (+/-)',   key:'joinRate',    type:'text',   ph:'+120 bu oy'},
+                      {label:'Postlar',       key:'posts',       type:'number', ph:'20'},
+                      {label:'Qamrov',        key:'reach',       type:'number', ph:'15000'},
+                      {label:'Kliklar',       key:'clicks',      type:'number', ph:'800'},
+                    ].map(f=>(
+                      <div key={f.key}>
+                        <span className="label-sm">{f.label}</span>
+                        <input type={f.type} className="input-base" style={{marginBottom:0}} placeholder={f.ph} value={editTg[f.key]||''} onChange={e=>setEditTg({...editTg,[f.key]:e.target.value})} />
                       </div>
                     ))}
                   </div>
+                  <div style={{display:'flex', gap:'8px'}}>
+                    <button className="btn-primary" onClick={saveTgEdit}>Saqlash</button>
+                    <button className="btn-outline" onClick={()=>setEditTg(null)}>Bekor</button>
+                  </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {tgChannels.length === 0 ? (
+              <div className="card" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
+                <span className="material-symbols-outlined" style={{fontSize:'40px', opacity:0.3, display:'block', marginBottom:'10px'}}>send</span>
+                Telegram kanal qo'shilmagan. "Kanal qo'shish" tugmasini bosing.
+              </div>
+            ) : (
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px'}}>
+                {tgChannels.map(ch => (
+                  <div key={ch.id} className="card">
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'16px'}}>
+                      <div>
+                        <div style={{fontWeight:700, fontSize:'15px', color:'#0088cc'}}>{ch.name}</div>
+                        {ch.joinRate && <div style={{fontSize:'11px', color:'#01a750', marginTop:'3px', fontWeight:600}}>{ch.joinRate}</div>}
+                      </div>
+                      <div style={{display:'flex', gap:'6px', alignItems:'center'}}>
+                        <span style={{background:'rgba(0,136,204,0.12)', color:'#0088cc', padding:'3px 10px', borderRadius:'20px', fontSize:'10px', fontWeight:700, border:'1px solid rgba(0,136,204,0.3)'}}>FAOL</span>
+                        <button className="btn-outline" style={{padding:'4px 8px', fontSize:'11px'}} onClick={()=>setEditTg({...ch})}>✎</button>
+                        <button className="btn-danger" style={{padding:'4px 8px', fontSize:'11px'}} onClick={()=>deleteTg(ch.id)}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
+                      {[
+                        {label:'Obunachi', val:fmt(ch.subscribers), color:'var(--text-main)', icon:'group'},
+                        {label:'Postlar',  val:ch.posts,            color:'var(--text-main)', icon:'article'},
+                        {label:'Qamrov',   val:fmt(ch.reach),       color:'#0088cc',          icon:'visibility'},
+                        {label:'Kliklar',  val:fmt(ch.clicks),      color:'#01a750',          icon:'ads_click'},
+                      ].map((s,i) => (
+                        <div key={i} style={{padding:'12px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', display:'flex', alignItems:'center', gap:'10px'}}>
+                          <span className="material-symbols-outlined" style={{fontSize:'18px', color:s.color, opacity:0.7}}>{s.icon}</span>
+                          <div>
+                            <div style={{fontSize:'18px', fontWeight:700, color:s.color, lineHeight:1}}>{s.val}</div>
+                            <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'2px', textTransform:'uppercase', letterSpacing:'0.05em'}}>{s.label}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       );
