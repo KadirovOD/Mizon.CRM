@@ -1764,31 +1764,46 @@ tr:hover td{background:var(--surface-variant);}
     };
 
     // ===== CALL CENTER MODULE (fully functional) =====
-    const CallCenterModule = ({ leads, setLeads, globalCallLimit, setSelectedLeadId }) => {
-      const [filterOp, setFilterOp] = useState('all');
-      const [filterSt, setFilterSt] = useState('all');
-      const [showAdd, setShowAdd] = useState(false);
-      const [selLead, setSelLead] = useState('');
-      const [callNote, setCallNote] = useState('');
+    const CallCenterModule = ({ leads, setLeads, globalCallLimit, setSelectedLeadId, syncLeadToAPI, addNotif, voipConfigured }) => {
+      const [filterOp,  setFilterOp]  = useState('all');
+      const [filterSt,  setFilterSt]  = useState('all');
+      const [filterDir, setFilterDir] = useState('all'); // 'all' | 'in' | 'out'
+      const [showAdd,   setShowAdd]   = useState(false);
+      const [selLead,   setSelLead]   = useState('');
+      const [callNote,  setCallNote]  = useState('');
       const [drillDown, setDrillDown] = useState(null);
 
+      // chatLogs ichidan barcha qo'ng'iroq yozuvlarini chiqarish
       const allCalls = [];
       leads.forEach(lead => {
-        lead.chatLogs.forEach(log => {
-          if(log.text && (log.text.includes("Qo'ng'iroq") || log.text.includes('📞') || log.text.includes('⛔'))) {
-            allCalls.push({
-              leadId: String(lead.id), leadName: lead.name, phone: lead.phone,
-              operator: lead.owner, date: log.date, note: log.text,
-              status: log.text.includes('⛔') ? 'missed' : 'answered'
-            });
-          }
+        (lead.chatLogs || []).forEach(log => {
+          if (!log.text) return;
+          const isCallEntry = log.type === 'call'
+            || log.text.includes('📞')
+            || log.text.includes('⛔');
+          if (!isCallEntry) return;
+          const isIn      = log.direction === 'in' || log.text.includes('Kiruvchi');
+          const isMissed  = log.text.includes('⛔')
+            || /missed|no.?answer/i.test(log.text);
+          allCalls.push({
+            leadId:    String(lead.id),
+            leadName:  lead.name,
+            phone:     lead.phone,
+            operator:  lead.owner,
+            date:      log.date,
+            note:      log.text,
+            direction: isIn ? 'in' : 'out',
+            status:    isMissed ? 'missed' : 'answered',
+            recordUrl: log.record_url || null,
+          });
         });
       });
       allCalls.sort((a, b) => new Date(b.date) - new Date(a.date));
 
       const filtered = allCalls.filter(c => {
-        if(filterOp !== 'all' && c.operator !== filterOp) return false;
-        if(filterSt !== 'all' && c.status !== filterSt) return false;
+        if (filterOp  !== 'all' && c.operator  !== filterOp)  return false;
+        if (filterSt  !== 'all' && c.status    !== filterSt)  return false;
+        if (filterDir !== 'all' && c.direction !== filterDir) return false;
         return true;
       });
 
@@ -1810,20 +1825,34 @@ tr:hover td{background:var(--surface-variant);}
       });
 
       const logCall = () => {
-        if(!selLead) return alert("Mijozni tanlang!");
+        if (!selLead) return alert("Mijozni tanlang!");
         const lead = leads.find(l => String(l.id) === selLead);
-        if(!lead) return;
+        if (!lead) return;
         const attempts = (lead.actualCallAttempts || 0) + 1;
-        const isLost = attempts >= globalCallLimit;
-        const logText = isLost
-          ? `⛔ Call Center dan chaqirildi. Limit tugadi (${globalCallLimit} urinish). → LOST`
-          : `📞 Call Center: Qo'ng'iroq #${attempts} / Limit ${globalCallLimit}${callNote ? ' — ' + callNote : ''}`;
+        const isLost   = attempts >= globalCallLimit;
+        const logText  = isLost
+          ? `⛔ Qo'ng'iroq limiti tugadi (${globalCallLimit} urinish) — mijoz LOST ga o'tdi`
+          : `📞 Chiquvchi qo'ng'iroq: ${lead.phone || '—'}${callNote ? ' — ' + callNote : ''}`;
         const updatedLead = {
-          ...lead, actualCallAttempts: attempts,
-          status: isLost ? 'LOST' : lead.status,
-          chatLogs: [...lead.chatLogs, { type:'sys', date: new Date().toISOString(), text: logText }]
+          ...lead,
+          actualCallAttempts: attempts,
+          status:   isLost ? 'LOST' : lead.status,
+          chatLogs: [...lead.chatLogs, {
+            type: 'call', date: new Date().toISOString(),
+            text: logText, direction: 'out',
+          }],
         };
         setLeads(prev => prev.map(l => String(l.id) === selLead ? updatedLead : l));
+        // API ga saqlash
+        syncLeadToAPI(updatedLead);
+        // Bildirishnoma
+        if (isLost) {
+          addNotif('call_limit', "📵 Qo'ng'iroq limiti tugadi",
+            `${lead.name} — ${globalCallLimit} ta urinishdan keyin LOST`, lead.id);
+        } else {
+          addNotif('call_logged', "📞 Qo'ng'iroq qayd etildi",
+            `${lead.name}${callNote ? ' — ' + callNote : ''}`, lead.id);
+        }
         setSelLead(''); setCallNote(''); setShowAdd(false);
       };
 
@@ -1918,13 +1947,26 @@ tr:hover td{background:var(--surface-variant);}
 
             <div className="card" style={{display:'flex', flexDirection:'column', gap:'10px'}}>
               <div style={{fontWeight:600, fontSize:'14px'}}>VoIP Tizim</div>
-              <div style={{flex:1, padding:'16px', background:'var(--bg-hover)', borderRadius:'10px', border:'1px solid var(--border-light)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'10px', textAlign:'center'}}>
-                <div style={{width:'56px', height:'56px', borderRadius:'50%', background:'rgba(1,167,80,0.1)', border:'2px solid rgba(1,167,80,0.4)', display:'flex', alignItems:'center', justifyContent:'center'}}>
-                  <span className="material-symbols-outlined" style={{fontSize:'26px', color:'#01a750'}}>call</span>
+              <div style={{flex:1, padding:'16px', background:'var(--bg-hover)', borderRadius:'10px',
+                border:`1px solid ${voipConfigured ? 'rgba(1,167,80,0.35)' : 'rgba(239,68,68,0.25)'}`,
+                display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'10px', textAlign:'center'}}>
+                <div style={{width:'56px', height:'56px', borderRadius:'50%',
+                  background: voipConfigured ? 'rgba(1,167,80,0.1)' : 'rgba(239,68,68,0.08)',
+                  border:`2px solid ${voipConfigured ? 'rgba(1,167,80,0.4)' : 'rgba(239,68,68,0.3)'}`,
+                  display:'flex', alignItems:'center', justifyContent:'center'}}>
+                  <span className="material-symbols-outlined" style={{fontSize:'26px', color: voipConfigured ? '#01a750' : '#ef4444'}}>
+                    {voipConfigured ? 'call' : 'call_end'}
+                  </span>
                 </div>
                 <div>
-                  <div style={{fontSize:'13px', fontWeight:700, color:'#01a750'}}>Moizvonki Faol</div>
-                  <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>VoIP tizim ulangan</div>
+                  <div style={{fontSize:'13px', fontWeight:700, color: voipConfigured ? '#01a750' : '#ef4444'}}>
+                    {voipConfigured ? 'Moizvonki Faol' : 'VoIP Ulangan emas'}
+                  </div>
+                  <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>
+                    {voipConfigured
+                      ? "Kiruvchi / chiquvchi qo'ng'iroqlar faol"
+                      : "Integratsiyalar bo'limidan sozlang"}
+                  </div>
                 </div>
                 <code style={{fontSize:'10px', color:'var(--text-muted)', background:'var(--surface-variant)', padding:'4px 10px', borderRadius:'5px', display:'block', width:'100%'}}>POST /api/webhook/moizvonki</code>
               </div>
@@ -1952,6 +1994,11 @@ tr:hover td{background:var(--surface-variant);}
                   <option value="all">Barcha operator</option>
                   {operatorNames.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
+                <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterDir} onChange={e=>setFilterDir(e.target.value)}>
+                  <option value="all">Barcha yo'nalish</option>
+                  <option value="in">Kiruvchi</option>
+                  <option value="out">Chiquvchi</option>
+                </select>
                 <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterSt} onChange={e=>setFilterSt(e.target.value)}>
                   <option value="all">Barcha holat</option>
                   <option value="answered">Javob berildi</option>
@@ -1960,28 +2007,52 @@ tr:hover td{background:var(--surface-variant);}
               </div>
             </div>
             <table>
-              <thead><tr><th>Vaqt</th><th>Mijoz</th><th>Telefon</th><th>Operator</th><th>Holat</th><th>Izoh</th></tr></thead>
+              <thead><tr><th>Vaqt</th><th>Yo'nalish</th><th>Mijoz</th><th>Telefon</th><th>Operator</th><th>Holat</th><th>Izoh / Yozuv</th></tr></thead>
               <tbody>
                 {filtered.length === 0 && (
-                  <tr><td colSpan="6" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
-                    {allCalls.length === 0 ? "Hozircha qo'ng'iroqlar mavjud emas. Yuqoridagi tugma orqali qo'ng'iroq qayd eting." : "Filtr bo'yicha natija topilmadi."}
+                  <tr><td colSpan="7" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
+                    {allCalls.length === 0
+                      ? "Hozircha qo'ng'iroqlar mavjud emas. Yuqoridagi tugma orqali qo'ng'iroq qayd eting."
+                      : "Filtr bo'yicha natija topilmadi."}
                   </td></tr>
                 )}
-                {filtered.slice(0, 80).map((c, i) => (
+                {filtered.slice(0, 100).map((c, i) => (
                   <tr key={i}>
-                    <td style={{fontSize:'11px', color:'var(--text-muted)', whiteSpace:'nowrap'}}>{new Date(c.date).toLocaleString()}</td>
+                    <td style={{fontSize:'11px', color:'var(--text-muted)', whiteSpace:'nowrap'}}>
+                      {new Date(c.date).toLocaleString()}
+                    </td>
+                    <td>
+                      <span style={{
+                        padding:'2px 8px', borderRadius:'10px', fontSize:'10px', fontWeight:700,
+                        background: c.direction==='in' ? 'rgba(59,130,246,0.12)' : 'rgba(90,223,129,0.1)',
+                        color:      c.direction==='in' ? '#3b82f6' : 'var(--primary)',
+                        border:`1px solid ${c.direction==='in' ? 'rgba(59,130,246,0.3)' : 'rgba(90,223,129,0.25)'}`,
+                      }}>
+                        {c.direction==='in' ? '⬇ Kiruvchi' : '⬆ Chiquvchi'}
+                      </span>
+                    </td>
                     <td style={{fontWeight:600}}>{c.leadName}</td>
                     <td style={{color:'var(--text-muted)', fontSize:'12px'}}>{c.phone}</td>
-                    <td><span style={{background:'var(--surface-variant)', padding:'2px 8px', borderRadius:'10px', fontSize:'11px'}}>{c.operator}</span></td>
                     <td>
-                      <span style={{padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
-                        background: c.status==='answered'?'rgba(1,167,80,0.12)':'rgba(239,68,68,0.1)',
-                        color: c.status==='answered'?'#01a750':'#ef4444',
-                        border:`1px solid ${c.status==='answered'?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`}}>
+                      <span style={{background:'var(--surface-variant)', padding:'2px 8px', borderRadius:'10px', fontSize:'11px'}}>
+                        {c.operator}
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{
+                        padding:'3px 9px', borderRadius:'20px', fontSize:'10px', fontWeight:700, textTransform:'uppercase',
+                        background: c.status==='answered' ? 'rgba(1,167,80,0.12)' : 'rgba(239,68,68,0.1)',
+                        color:      c.status==='answered' ? '#01a750' : '#ef4444',
+                        border:`1px solid ${c.status==='answered' ? 'rgba(1,167,80,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                      }}>
                         {c.status==='answered' ? 'Javob' : "O'tkazildi"}
                       </span>
                     </td>
-                    <td style={{fontSize:'11px', color:'var(--text-muted)', maxWidth:'220px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{c.note}</td>
+                    <td style={{fontSize:'11px', color:'var(--text-muted)', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                      {c.recordUrl
+                        ? <a href={c.recordUrl} target="_blank" rel="noreferrer" style={{color:'var(--primary)', textDecoration:'none'}}>🎙 Yozuv tinglash</a>
+                        : c.note}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -3585,10 +3656,7 @@ tr:hover td{background:var(--surface-variant);}
       const isSuperAdminMode = urlParams.get('superadmin') === 'true';
 
       // ── Auth state ───────────────────────────────────────────────
-      const [users, setUsers] = useState([
-        { username: 'ceo',       password: '123', role: 'CEO' },
-        { username: 'menejer_1', password: '123', role: 'MANAGER' }
-      ]);
+      const [users, setUsers] = useState([]); // API dan yuklanadi (login dan keyin)
       const [authUser, setAuthUser] = useState(() => {
         try { const s = localStorage.getItem('mizon_session'); return s ? JSON.parse(s) : null; } catch(e) { return null; }
       });
@@ -3797,6 +3865,27 @@ tr:hover td{background:var(--surface-variant);}
         } catch(e){alert('❌ Server xatosi');}
         setFormSettingsSaving(false);
       };
+
+      // VoIP holat — Integratsiyalar bo'limidan sozlanganmi?
+      const [voipConfigured, setVoipConfigured] = useState(false);
+      useEffect(() => {
+        const t = localStorage.getItem('mizon_token');
+        if (!t || !authUser) return;
+        fetch('/api/voip/config', { headers: { 'Authorization': 'Bearer ' + t } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d) setVoipConfigured(d.configured === true); })
+          .catch(() => {});
+      }, [authUser?.companyId]);
+
+      // Xodimlar ro'yxatini API dan yuklash (lead karta "Mas'ul xodim" dropdown + loglar)
+      useEffect(() => {
+        const t = localStorage.getItem('mizon_token');
+        if (!t || !authUser) return;
+        fetch('/api/company/users', { headers: { 'Authorization': 'Bearer ' + t } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d) && d.length > 0) setUsers(d); })
+          .catch(() => {});
+      }, [authUser?.companyId]);
 
       const [editingLead, setEditingLead] = useState(false);
       const [searchQuery, setSearchQuery] = useState('');
@@ -4034,7 +4123,7 @@ tr:hover td{background:var(--surface-variant);}
       const selectedLeadData = leads.find(l => l.id == selectedLeadId);
 
       // ── Bildirishnoma yordamchi funksiyalari ─────────────────────────────────
-      const _notifTypes = { sla_danger:'🔴', sla_warning:'🟡', new_lead:'🆕', stage_changed:'🔄', call_limit:'📵', ext_lead:'🌐' };
+      const _notifTypes = { sla_danger:'🔴', sla_warning:'🟡', new_lead:'🆕', stage_changed:'🔄', call_limit:'📵', call_logged:'📞', voip_incoming:'📲', ext_lead:'🌐' };
       const notifIcon = (type) => _notifTypes[type] || '🔔';
       const timeAgo   = (iso)  => {
         const d = Date.now() - new Date(iso).getTime();
@@ -4082,6 +4171,30 @@ tr:hover td{background:var(--surface-variant);}
         const iv = setInterval(check, 300000); // har 5 daqiqa
         return () => clearInterval(iv);
       }, [leads, authUser]);
+
+      // Kiruvchi qo'ng'iroqlar — har 5 sek polling (Moizvonki webhook orqali keladiganlar)
+      useEffect(() => {
+        if (!authUser) return;
+        const poll = async () => {
+          try {
+            const r = await fetch('/api/calls/recent', { headers: getAuthHeaders() });
+            if (!r.ok) return;
+            const { events } = await r.json();
+            if (!events?.length) return;
+            events.forEach(ev => {
+              const isNew  = ev.is_new_lead;
+              const title  = ev.type === 'incoming' ? '📲 Kiruvchi qo\'ng\'iroq' : '📞 VoIP qo\'ng\'iroq';
+              const body   = isNew
+                ? `${ev.phone} — yangi mijoz avtomatik qo'shildi`
+                : `${ev.phone}${ev.lead_name ? ' — ' + ev.lead_name : ''}`;
+              addNotif('voip_incoming', title, body, ev.lead_id || null);
+            });
+            reloadLeadsFromApi(); // yangi/yangilangan leadlarni ko'rsatish
+          } catch { /* server yo'q — skip */ }
+        };
+        const iv = setInterval(poll, 5000);
+        return () => clearInterval(iv);
+      }, [authUser, addNotif]);
 
       const syncLeadToAPI = (lead) => {
         if(String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
@@ -4660,7 +4773,7 @@ tr:hover td{background:var(--surface-variant);}
               {/* TAB CONTENT */}
               {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} />}
 
-              {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} />}
+              {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} syncLeadToAPI={syncLeadToAPI} addNotif={addNotif} voipConfigured={voipConfigured} />}
 
               {activeTab === 'reports' && role === 'CEO' && <HisobotlarModule leads={leads} columnsMap={columnsMap} pipelines={pipelines} setSelectedLeadId={setSelectedLeadId} />}
 

@@ -1,6 +1,26 @@
 // ========== VOIP CONTROLLER (Moi Zvonki / МойЗвонки) ==========
 const https = require('https');
 
+// ── In-memory call event queue (per company) ──────────────────────────────────
+// Key: String(companyId)  →  [{id, type, phone, lead_id, lead_name, is_new_lead, date}]
+const _callEvents = new Map();
+const QUEUE_MAX   = 30; // har kompaniya uchun maksimal yozuv
+
+function _pushEvent(companyId, event) {
+  const key = String(companyId || 'default');
+  const arr  = _callEvents.get(key) || [];
+  arr.push({ ...event, id: `ev_${Date.now()}_${Math.random().toString(36).slice(2,7)}` });
+  _callEvents.set(key, arr.slice(-QUEUE_MAX)); // eski yozuvlarni chiqarib tashlash
+}
+
+// GET /api/calls/recent — frontend polling uchun (o'qigandan keyin tozalanadi)
+exports.getRecentEvents = (req, res) => {
+  const key    = String(req.user?.companyId || 'default');
+  const events = _callEvents.get(key) || [];
+  _callEvents.set(key, []); // bir marta o'qilsa — tozalash
+  res.json({ events });
+};
+
 // GET /api/voip/config — return config (without secret token)
 exports.getConfig = async (req, res) => {
   if (!req.db) return res.json({ configured: false });
@@ -120,7 +140,8 @@ exports.handleWebhook = async (req, res) => {
       const attempts     = (lead.rows[0].actualcallattempts || 0) + 1;
       existingLogs.push({
         type: 'call', date: new Date().toISOString(),
-        text: logText, call_id: callId, duration, record_url: recordUrl
+        text: logText, call_id: callId, duration, record_url: recordUrl,
+        direction: isIncomingCall(callType) ? 'in' : 'out',
       });
       await req.db.query(
         companyId
@@ -131,8 +152,29 @@ exports.handleWebhook = async (req, res) => {
           : [JSON.stringify(existingLogs), attempts, lead.rows[0].id]
       );
       console.log(`📞 Call logged to lead #${lead.rows[0].id}: ${logText}`);
+
+      // Kiruvchi qo'ng'iroq hodisasini queue ga qo'shish
+      if (isIncomingCall(callType)) {
+        // Lead nomini DB dan olish
+        let leadName = null;
+        try {
+          const nm = await req.db.query('SELECT name FROM crm_lead WHERE id=$1 LIMIT 1', [lead.rows[0].id]);
+          leadName = nm.rows[0]?.name || null;
+        } catch {}
+        _pushEvent(companyId, {
+          type:         'incoming',
+          phone,
+          lead_id:      lead.rows[0].id,
+          lead_name:    leadName,
+          is_new_lead:  false,
+          call_id:      callId,
+          duration,
+          record_url:   recordUrl,
+          date:         new Date().toISOString(),
+        });
+      }
     } else if (phone && isIncomingCall(callType)) {
-      // Create new lead from unknown incoming call
+      // Noma'lum raqamdan kiruvchi qo'ng'iroq → yangi lead yaratish
       const stageRes = await req.db.query(
         companyId
           ? 'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence LIMIT 1'
@@ -140,16 +182,29 @@ exports.handleWebhook = async (req, res) => {
         companyId ? [companyId] : []
       );
       const stageId = stageRes.rows.length > 0 ? stageRes.rows[0].id : 1;
-      await req.db.query(
+      const inserted = await req.db.query(
         `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
-         VALUES ($1,$2,'voip_incoming',25,$3,1,$4,$5)`,
+         VALUES ($1,$2,'voip_incoming',25,$3,1,$4,$5) RETURNING id`,
         [
           `Noma'lum (+${cleanPhone})`, phone, stageId,
-          JSON.stringify([{ type:'call', date:new Date().toISOString(), text:logText, call_id:callId }]),
+          JSON.stringify([{
+            type: 'call', date: new Date().toISOString(),
+            text: logText, call_id: callId, direction: 'in',
+          }]),
           companyId
         ]
       );
       console.log(`📌 New lead from incoming call: ${phone}`);
+
+      _pushEvent(companyId, {
+        type:        'incoming',
+        phone,
+        lead_id:     inserted.rows[0]?.id || null,
+        lead_name:   null,
+        is_new_lead: true,
+        call_id:     callId,
+        date:        new Date().toISOString(),
+      });
     }
 
     res.sendStatus(200);

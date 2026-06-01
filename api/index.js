@@ -361,9 +361,10 @@ app.post('/api/webhook/telegram',  webhookController.handleTelegramWebhook);
 app.post('/api/webhook/moizvonki', voipController.handleWebhook);
 
 // ── VoIP ─────────────────────────────────────────────────────────────────────
-app.get ('/api/voip/config', voipController.getConfig);
-app.post('/api/voip/config', voipController.saveConfig);
-app.post('/api/call',        voipController.initiateCall);
+app.get ('/api/voip/config',    voipController.getConfig);
+app.post('/api/voip/config',    voipController.saveConfig);
+app.post('/api/call',           voipController.initiateCall);
+app.get ('/api/calls/recent',   voipController.getRecentEvents); // frontend polling uchun
 
 // ── Automation ───────────────────────────────────────────────────────────────
 app.get   ('/api/automation/sms-settings',       automationCtrl.getSmsSettings);
