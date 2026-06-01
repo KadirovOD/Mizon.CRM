@@ -1,5 +1,9 @@
 // ========== LEAD CONTROLLER ==========
 
+let _runTrigger = null;
+exports._setAutomation = (fn) => { _runTrigger = fn; };
+const runTrigger = (...args) => { if (_runTrigger) _runTrigger(...args); };
+
 // GET /api/leads — fetch all leads with stage data
 exports.getLeads = async (req, res) => {
   if (!req.db) return res.json({ success: true, leads: [], stages: [], mode: 'demo' });
@@ -77,7 +81,9 @@ exports.createLead = async (req, res) => {
         JSON.stringify([{type:'sys', date: new Date().toISOString(), text: `Sistemaga qo'shildi (${source})`}])
       ]
     );
-    res.status(201).json({ success: true, lead: newLead.rows[0] });
+    const lead = newLead.rows[0];
+    runTrigger(req.db, 'lead_created', lead, {});
+    res.status(201).json({ success: true, lead });
   } catch (err) {
     console.error('createLead error:', err.message);
     res.status(500).json({ error: 'Server error', details: err.message });
@@ -122,7 +128,14 @@ exports.updateLeadFull = async (req, res) => {
       ]
     );
     if (!updated.rows.length) return res.status(404).json({ error: 'Lead not found' });
-    res.json({ success: true, lead: updated.rows[0] });
+    const updLead = updated.rows[0];
+    // Bosqich o'zgargan bo'lsa trigger
+    if (status && !isNaN(parseInt(status))) {
+      const stageRow = await req.db.query('SELECT name FROM crm_stage WHERE id=$1', [parseInt(status)]);
+      const stageName = stageRow.rows[0]?.name || '';
+      runTrigger(req.db, 'stage_changed', updLead, { stageId: parseInt(status), stageName });
+    }
+    res.json({ success: true, lead: updLead });
   } catch (err) {
     console.error('updateLead error:', err.message);
     res.status(500).json({ error: 'Server error', details: err.message });

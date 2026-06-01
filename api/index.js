@@ -154,6 +154,46 @@ async function initDb() {
         company_id INT REFERENCES companies(id) ON DELETE CASCADE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+
+      CREATE TABLE IF NOT EXISTS automation_sms_settings (
+        id              SERIAL PRIMARY KEY,
+        company_id      INT UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
+        eskiz_email     VARCHAR(255),
+        eskiz_password  TEXT,
+        updated_at      TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS automation_templates (
+        id         SERIAL PRIMARY KEY,
+        company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+        name       VARCHAR(255) NOT NULL,
+        message    TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS automation_rules (
+        id           SERIAL PRIMARY KEY,
+        company_id   INT REFERENCES companies(id) ON DELETE CASCADE,
+        name         VARCHAR(255) NOT NULL,
+        trigger_type VARCHAR(50) NOT NULL,
+        template_id  INT REFERENCES automation_templates(id) ON DELETE SET NULL,
+        stage_filter INT,
+        is_active    BOOLEAN DEFAULT true,
+        created_at   TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS automation_logs (
+        id         SERIAL PRIMARY KEY,
+        company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+        rule_id    INT REFERENCES automation_rules(id) ON DELETE SET NULL,
+        lead_id    INT,
+        lead_name  VARCHAR(255),
+        phone      VARCHAR(50),
+        message    TEXT,
+        status     VARCHAR(20) DEFAULT 'sent',
+        error_msg  TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
 
     // ── Migrations for existing tables ───────────────────────────────────────
@@ -228,6 +268,10 @@ const authController       = require('./controllers/authController');
 const superAdminController = require('./controllers/superAdminController');
 const companyController    = require('./controllers/companyController');
 const oauthController      = require('./controllers/oauthController');
+const automationCtrl       = require('./controllers/automationController');
+
+// leadController ga runTrigger uzatish
+leadController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -275,6 +319,20 @@ app.post('/api/webhook/moizvonki', voipController.handleWebhook);
 app.get ('/api/voip/config', voipController.getConfig);
 app.post('/api/voip/config', voipController.saveConfig);
 app.post('/api/call',        voipController.initiateCall);
+
+// ── Automation ───────────────────────────────────────────────────────────────
+app.get   ('/api/automation/sms-settings',       automationCtrl.getSmsSettings);
+app.post  ('/api/automation/sms-settings',       automationCtrl.saveSmsSettings);
+app.post  ('/api/automation/sms-settings/test',  automationCtrl.testSmsSettings);
+app.get   ('/api/automation/templates',          automationCtrl.getTemplates);
+app.post  ('/api/automation/templates',          automationCtrl.createTemplate);
+app.put   ('/api/automation/templates/:id',      automationCtrl.updateTemplate);
+app.delete('/api/automation/templates/:id',      automationCtrl.deleteTemplate);
+app.get   ('/api/automation/rules',              automationCtrl.getRules);
+app.post  ('/api/automation/rules',              automationCtrl.createRule);
+app.put   ('/api/automation/rules/:id',          automationCtrl.updateRule);
+app.delete('/api/automation/rules/:id',          automationCtrl.deleteRule);
+app.get   ('/api/automation/logs',               automationCtrl.getLogs);
 
 // ── OAuth ─────────────────────────────────────────────────────────────────────
 app.get('/api/oauth/facebook/init',      oauthController.fbInit);

@@ -2077,6 +2077,371 @@ tr:hover td{background:var(--surface-variant);}
       );
     };
 
+    // ===== AUTOMATION MODULE =====
+    const AutomationModule = ({ getAuthHeaders }) => {
+      const TRIGGERS = [
+        { value: 'lead_created',  label: 'Lead yaratilganda' },
+        { value: 'stage_changed', label: 'Bosqich o\'zgarganda' },
+      ];
+
+      const [tab,          setTab]          = useState('settings'); // settings | templates | rules | logs
+      const [smsSettings,  setSmsSettings]  = useState({ eskiz_email: '' });
+      const [smsForm,      setSmsForm]      = useState({ eskiz_email: '', eskiz_password: '' });
+      const [smsTesting,   setSmsTesting]   = useState(false);
+      const [smsSaving,    setSmsSaving]    = useState(false);
+      const [templates,    setTemplates]    = useState([]);
+      const [rules,        setRules]        = useState([]);
+      const [logs,         setLogs]         = useState([]);
+      const [stages,       setStages]       = useState([]);
+      const [msg,          setMsg]          = useState('');
+      const [tplModal,     setTplModal]     = useState(null); // null | {} | {id,...}
+      const [ruleModal,    setRuleModal]    = useState(null);
+      const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
+
+      const H = () => ({ ...getAuthHeaders(), 'Content-Type': 'application/json' });
+      const api = async (method, path, body) => {
+        const r = await fetch(path, { method, headers: H(), body: body ? JSON.stringify(body) : undefined });
+        return r.json();
+      };
+
+      useEffect(() => {
+        fetch('/api/automation/sms-settings', { headers: H() }).then(r=>r.json()).then(d => {
+          setSmsSettings(d); setSmsForm({ eskiz_email: d.eskiz_email||'', eskiz_password: '' });
+        });
+        fetch('/api/automation/templates', { headers: H() }).then(r=>r.json()).then(setTemplates);
+        fetch('/api/automation/rules',     { headers: H() }).then(r=>r.json()).then(setRules);
+        fetch('/api/stages',               { headers: H() }).then(r=>r.json()).then(d => setStages(d.stages||[]));
+      }, []);
+
+      useEffect(() => {
+        if (tab === 'logs') fetch('/api/automation/logs', { headers: H() }).then(r=>r.json()).then(setLogs);
+      }, [tab]);
+
+      const saveSms = async (e) => {
+        e.preventDefault(); setSmsSaving(true);
+        const d = await api('POST', '/api/automation/sms-settings', smsForm);
+        setSmsSaving(false);
+        if (d.success) flash('✅ SMS sozlamalari saqlandi');
+        else flash('❌ ' + (d.error||'Xato'));
+      };
+
+      const testSms = async () => {
+        setSmsTesting(true);
+        const d = await api('POST', '/api/automation/sms-settings/test');
+        setSmsTesting(false);
+        flash(d.success ? '✅ ' + d.message : '❌ ' + (d.error||'Xato'));
+      };
+
+      const saveTpl = async (e) => {
+        e.preventDefault();
+        const { id, ...body } = tplModal;
+        const d = id
+          ? await api('PUT',  `/api/automation/templates/${id}`, body)
+          : await api('POST', '/api/automation/templates', body);
+        if (d.error) return flash('❌ ' + d.error);
+        setTplModal(null);
+        fetch('/api/automation/templates', { headers: H() }).then(r=>r.json()).then(setTemplates);
+        flash('✅ Shablon saqlandi');
+      };
+
+      const deleteTpl = async (id) => {
+        if (!window.confirm('Shablonni o\'chirish?')) return;
+        await api('DELETE', `/api/automation/templates/${id}`);
+        setTemplates(prev => prev.filter(t => t.id !== id));
+      };
+
+      const saveRule = async (e) => {
+        e.preventDefault();
+        const { id, ...body } = ruleModal;
+        const d = id
+          ? await api('PUT',  `/api/automation/rules/${id}`, body)
+          : await api('POST', '/api/automation/rules', body);
+        if (d.error) return flash('❌ ' + d.error);
+        setRuleModal(null);
+        fetch('/api/automation/rules', { headers: H() }).then(r=>r.json()).then(setRules);
+        flash('✅ Qoida saqlandi');
+      };
+
+      const toggleRule = async (rule) => {
+        await api('PUT', `/api/automation/rules/${rule.id}`, { is_active: !rule.is_active });
+        setRules(prev => prev.map(r => r.id === rule.id ? {...r, is_active: !r.is_active} : r));
+      };
+
+      const deleteRule = async (id) => {
+        if (!window.confirm('Qoidani o\'chirish?')) return;
+        await api('DELETE', `/api/automation/rules/${id}`);
+        setRules(prev => prev.filter(r => r.id !== id));
+      };
+
+      const VARS = ['{ism}','{telefon}','{menejer}','{bosqich}','{region}','{sana}'];
+
+      const cardStyle = { background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px', padding:'20px', marginBottom:'14px' };
+      const tabStyle  = (active) => ({
+        padding:'8px 18px', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:600,
+        background: active ? 'var(--primary-container)' : 'transparent',
+        color: active ? '#fff' : 'var(--text-secondary)',
+        border: 'none'
+      });
+      const inputStyle = { width:'100%', padding:'9px 12px', borderRadius:'8px', border:'1px solid var(--outline-variant)', background:'var(--bg-base)', color:'var(--text-main)', fontSize:'13px', boxSizing:'border-box' };
+
+      return (
+        <div style={{padding:'24px', maxWidth:'900px'}}>
+          <h2 style={{fontSize:'20px', fontWeight:700, marginBottom:'4px'}}>Avtomatizatsiya</h2>
+          <p style={{color:'var(--text-muted)', fontSize:'13px', marginBottom:'20px'}}>SMS avtomatik yuborish qoidalari va shablonlari</p>
+
+          {msg && (
+            <div style={{padding:'10px 16px', borderRadius:'8px', marginBottom:'16px', fontSize:'13px',
+              background: msg.startsWith('✅') ? 'rgba(90,223,129,0.1)' : 'rgba(255,80,80,0.1)',
+              color: msg.startsWith('✅') ? 'var(--success)' : 'var(--danger)',
+              border: `1px solid ${msg.startsWith('✅') ? 'rgba(90,223,129,0.3)' : 'rgba(255,80,80,0.3)'}`
+            }}>{msg}</div>
+          )}
+
+          {/* Tabs */}
+          <div style={{display:'flex', gap:'6px', marginBottom:'20px', background:'var(--bg-surface)', padding:'6px', borderRadius:'10px', width:'fit-content', border:'1px solid var(--outline-variant)'}}>
+            {[['settings','settings','SMS Sozlamalar'],['templates','description','Shablonlar'],['rules','rule','Qoidalar'],['logs','history','Loglar']].map(([v,ic,label]) => (
+              <button key={v} style={tabStyle(tab===v)} onClick={()=>setTab(v)}>
+                <span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>{ic}</span>{label}
+              </button>
+            ))}
+          </div>
+
+          {/* ── SMS Settings ── */}
+          {tab === 'settings' && (
+            <div>
+              <div style={cardStyle}>
+                <div style={{fontWeight:600, marginBottom:'16px', fontSize:'15px'}}>📱 Eskiz.uz SMS Hisob</div>
+                <form onSubmit={saveSms}>
+                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'14px'}}>
+                    <div>
+                      <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Email</div>
+                      <input style={inputStyle} type="email" placeholder="eskiz@example.com"
+                        value={smsForm.eskiz_email} onChange={e=>setSmsForm({...smsForm,eskiz_email:e.target.value})} required />
+                    </div>
+                    <div>
+                      <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Parol</div>
+                      <input style={inputStyle} type="password" placeholder={smsSettings.eskiz_email ? '••••• (o\'zgartirish uchun kiriting)' : 'Parol'}
+                        value={smsForm.eskiz_password} onChange={e=>setSmsForm({...smsForm,eskiz_password:e.target.value})} />
+                    </div>
+                  </div>
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <button type="submit" className="btn-primary" style={{padding:'9px 20px'}} disabled={smsSaving}>
+                      {smsSaving ? 'Saqlanmoqda...' : '💾 Saqlash'}
+                    </button>
+                    <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={testSms} disabled={smsTesting}>
+                      {smsTesting ? 'Tekshirilmoqda...' : '🔌 Ulanishni tekshirish'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+              <div style={{...cardStyle, background:'rgba(90,223,129,0.05)', border:'1px solid rgba(90,223,129,0.2)'}}>
+                <div style={{fontWeight:600, marginBottom:'10px', fontSize:'13px'}}>📝 Shablon o'zgaruvchilari</div>
+                <div style={{display:'flex', flexWrap:'wrap', gap:'8px'}}>
+                  {VARS.map(v => (
+                    <code key={v} style={{background:'var(--surface-variant)', padding:'4px 10px', borderRadius:'6px', fontSize:'12px', color:'var(--primary)'}}>{v}</code>
+                  ))}
+                </div>
+                <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'8px'}}>
+                  Shablon xabarlarida ushbu o'zgaruvchilardan foydalaning — yuborishda avtomatik almashtiriladi.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Templates ── */}
+          {tab === 'templates' && (
+            <div>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
+                <div style={{fontWeight:600}}>Shablonlar ({templates.length})</div>
+                <button className="btn-primary" style={{padding:'8px 16px', fontSize:'13px'}}
+                  onClick={()=>setTplModal({name:'', message:''})}>+ Yangi shablon</button>
+              </div>
+              {templates.length === 0 && <div style={{color:'var(--text-muted)', fontSize:'13px', textAlign:'center', padding:'40px'}}>Hali shablon yo'q</div>}
+              {templates.map(t => (
+                <div key={t.id} style={cardStyle}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                    <div>
+                      <div style={{fontWeight:600, marginBottom:'6px'}}>{t.name}</div>
+                      <div style={{fontSize:'13px', color:'var(--text-secondary)', whiteSpace:'pre-wrap', lineHeight:1.5}}>{t.message}</div>
+                    </div>
+                    <div style={{display:'flex', gap:'8px', flexShrink:0, marginLeft:'12px'}}>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px'}}
+                        onClick={()=>setTplModal({id:t.id, name:t.name, message:t.message})}>Tahrirlash</button>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px', color:'var(--danger)', borderColor:'var(--danger)'}}
+                        onClick={()=>deleteTpl(t.id)}>O'chirish</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Rules ── */}
+          {tab === 'rules' && (
+            <div>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
+                <div style={{fontWeight:600}}>Qoidalar ({rules.length})</div>
+                <button className="btn-primary" style={{padding:'8px 16px', fontSize:'13px'}}
+                  onClick={()=>setRuleModal({name:'', trigger_type:'lead_created', template_id:'', stage_filter:''})}>+ Yangi qoida</button>
+              </div>
+              {rules.length === 0 && <div style={{color:'var(--text-muted)', fontSize:'13px', textAlign:'center', padding:'40px'}}>Hali qoida yo'q</div>}
+              {rules.map(r => (
+                <div key={r.id} style={{...cardStyle, opacity: r.is_active ? 1 : 0.55}}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'6px'}}>
+                        <span style={{fontWeight:600}}>{r.name}</span>
+                        <span style={{fontSize:'11px', padding:'2px 8px', borderRadius:'20px',
+                          background: r.is_active ? 'rgba(90,223,129,0.15)' : 'var(--surface-variant)',
+                          color: r.is_active ? 'var(--success)' : 'var(--text-muted)'}}>
+                          {r.is_active ? '● Faol' : '○ Nofaol'}
+                        </span>
+                      </div>
+                      <div style={{fontSize:'12px', color:'var(--text-muted)', display:'flex', gap:'16px'}}>
+                        <span>⚡ {TRIGGERS.find(t=>t.value===r.trigger_type)?.label || r.trigger_type}</span>
+                        <span>📝 {r.template_name || '—'}</span>
+                        {r.stage_filter && <span>🎯 Bosqich #{r.stage_filter}</span>}
+                      </div>
+                    </div>
+                    <div style={{display:'flex', gap:'8px'}}>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px'}} onClick={()=>toggleRule(r)}>
+                        {r.is_active ? 'O\'chirish' : 'Yoqish'}
+                      </button>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px'}}
+                        onClick={()=>setRuleModal({id:r.id, name:r.name, trigger_type:r.trigger_type, template_id:String(r.template_id||''), stage_filter:r.stage_filter||''})}>
+                        Tahrirlash
+                      </button>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'12px', color:'var(--danger)', borderColor:'var(--danger)'}}
+                        onClick={()=>deleteRule(r.id)}>O'chirish</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Logs ── */}
+          {tab === 'logs' && (
+            <div>
+              <div style={{fontWeight:600, marginBottom:'16px'}}>SMS Tarixi ({logs.length})</div>
+              {logs.length === 0 && <div style={{color:'var(--text-muted)', fontSize:'13px', textAlign:'center', padding:'40px'}}>Hali log yo'q</div>}
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
+                  <thead>
+                    <tr style={{borderBottom:'1px solid var(--outline-variant)', color:'var(--text-muted)'}}>
+                      <th style={{padding:'8px 12px', textAlign:'left', fontWeight:600}}>Vaqt</th>
+                      <th style={{padding:'8px 12px', textAlign:'left', fontWeight:600}}>Lead</th>
+                      <th style={{padding:'8px 12px', textAlign:'left', fontWeight:600}}>Telefon</th>
+                      <th style={{padding:'8px 12px', textAlign:'left', fontWeight:600}}>Qoida</th>
+                      <th style={{padding:'8px 12px', textAlign:'left', fontWeight:600}}>Holat</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map(l => (
+                      <tr key={l.id} style={{borderBottom:'1px solid var(--outline-variant)'}}>
+                        <td style={{padding:'8px 12px', color:'var(--text-muted)', whiteSpace:'nowrap'}}>
+                          {new Date(l.created_at).toLocaleString('uz-UZ')}
+                        </td>
+                        <td style={{padding:'8px 12px'}}>{l.lead_name||'—'}</td>
+                        <td style={{padding:'8px 12px'}}>{l.phone}</td>
+                        <td style={{padding:'8px 12px', color:'var(--text-secondary)'}}>{l.rule_name||'—'}</td>
+                        <td style={{padding:'8px 12px'}}>
+                          <span style={{padding:'2px 8px', borderRadius:'20px', fontSize:'11px',
+                            background: l.status==='sent' ? 'rgba(90,223,129,0.15)' : 'rgba(255,80,80,0.15)',
+                            color: l.status==='sent' ? 'var(--success)' : 'var(--danger)'}}>
+                            {l.status==='sent' ? '✓ Yuborildi' : '✗ Xato'}
+                          </span>
+                          {l.error_msg && <div style={{fontSize:'11px', color:'var(--danger)', marginTop:'2px'}}>{l.error_msg}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── Template Modal ── */}
+          {tplModal && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+              onClick={e=>{if(e.target===e.currentTarget)setTplModal(null);}}>
+              <div style={{background:'var(--bg-surface)',borderRadius:'14px',padding:'24px',width:'100%',maxWidth:'520px',border:'1px solid var(--outline-variant)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'18px'}}>
+                  <div style={{fontWeight:700,fontSize:'16px'}}>{tplModal.id ? 'Shablonni tahrirlash' : 'Yangi shablon'}</div>
+                  <button onClick={()=>setTplModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)'}}>✕</button>
+                </div>
+                <form onSubmit={saveTpl}>
+                  <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Shablon nomi</div>
+                    <input style={inputStyle} placeholder="Masalan: Yangi lead SMS" value={tplModal.name}
+                      onChange={e=>setTplModal({...tplModal,name:e.target.value})} required />
+                  </div>
+                  <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Xabar matni</div>
+                    <textarea style={{...inputStyle,height:'120px',resize:'vertical'}} placeholder="Salom {ism}! Sizning arizangiz qabul qilindi."
+                      value={tplModal.message} onChange={e=>setTplModal({...tplModal,message:e.target.value})} required />
+                    <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'4px'}}>
+                      O'zgaruvchilar: {VARS.join(' ')}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:'10px',justifyContent:'flex-end'}}>
+                    <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={()=>setTplModal(null)}>Bekor</button>
+                    <button type="submit" className="btn-primary" style={{padding:'9px 20px'}}>Saqlash</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ── Rule Modal ── */}
+          {ruleModal && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+              onClick={e=>{if(e.target===e.currentTarget)setRuleModal(null);}}>
+              <div style={{background:'var(--bg-surface)',borderRadius:'14px',padding:'24px',width:'100%',maxWidth:'480px',border:'1px solid var(--outline-variant)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'18px'}}>
+                  <div style={{fontWeight:700,fontSize:'16px'}}>{ruleModal.id ? 'Qoidani tahrirlash' : 'Yangi qoida'}</div>
+                  <button onClick={()=>setRuleModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)'}}>✕</button>
+                </div>
+                <form onSubmit={saveRule}>
+                  <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Qoida nomi</div>
+                    <input style={inputStyle} placeholder="Masalan: Yangi lead SMS yuborish" value={ruleModal.name}
+                      onChange={e=>setRuleModal({...ruleModal,name:e.target.value})} required />
+                  </div>
+                  <div style={{marginBottom:'12px'}}>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Trigger (qachon ishlaydi)</div>
+                    <select style={inputStyle} value={ruleModal.trigger_type} onChange={e=>setRuleModal({...ruleModal,trigger_type:e.target.value})}>
+                      {TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  {ruleModal.trigger_type === 'stage_changed' && (
+                    <div style={{marginBottom:'12px'}}>
+                      <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Bosqich filtri (ixtiyoriy)</div>
+                      <select style={inputStyle} value={ruleModal.stage_filter||''} onChange={e=>setRuleModal({...ruleModal,stage_filter:e.target.value})}>
+                        <option value="">Barcha bosqichlar</option>
+                        {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div style={{marginBottom:'16px'}}>
+                    <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>SMS Shablon</div>
+                    <select style={inputStyle} value={ruleModal.template_id} onChange={e=>setRuleModal({...ruleModal,template_id:e.target.value})} required>
+                      <option value="">— Shablon tanlang —</option>
+                      {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',gap:'10px',justifyContent:'flex-end'}}>
+                    <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={()=>setRuleModal(null)}>Bekor</button>
+                    <button type="submit" className="btn-primary" style={{padding:'9px 20px'}}>Saqlash</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     // ===== MARKETING ANALYTICS MODULE (fully functional, localStorage) =====
     const MarketingModule = () => {
       const defaultCampaigns = [
@@ -3245,6 +3610,9 @@ tr:hover td{background:var(--surface-variant);}
                     <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>campaign</span> Marketing
                   </div>
                   <span className="nav-section-label" style={{marginTop:'8px'}}>Boshqaruv</span>
+                  <div className={`nav-item ${activeTab==='automation'?'active':''}`} onClick={()=>{setActiveTab('automation');setSelectedLeadId(null);}}>
+                    <span className="material-symbols-outlined" style={{fontSize:'18px',lineHeight:1,flexShrink:0}}>smart_toy</span> Avtomatizatsiya
+                  </div>
                   <div className={`nav-item ${activeTab==='integrations'?'active':''}`} onClick={()=>{setActiveTab('integrations');setSelectedLeadId(null);}}>
                     <Ico n="plug" s={17}/> Integratsiyalar
                   </div>
@@ -3525,6 +3893,7 @@ tr:hover td{background:var(--surface-variant);}
 
               {activeTab === 'reports' && role === 'CEO' && <HisobotlarModule leads={leads} columnsMap={columnsMap} pipelines={pipelines} setSelectedLeadId={setSelectedLeadId} />}
 
+              {activeTab === 'automation' && role === 'CEO' && <AutomationModule getAuthHeaders={getAuthHeaders} />}
               {activeTab === 'marketing' && role === 'CEO' && <MarketingModule />}
 
               {activeTab === 'integrations' && <IntegrationsModule />}
