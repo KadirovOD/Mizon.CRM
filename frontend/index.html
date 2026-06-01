@@ -275,7 +275,7 @@ tr:hover td{background:var(--surface-variant);}
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // ===== ICON COMPONENT (Material Symbols Outlined) =====
     const Ico = ({ n, s = 16, c = {} }) => {
@@ -2852,18 +2852,60 @@ tr:hover td{background:var(--surface-variant);}
       useEffect(() => { const iv = setInterval(()=>setTick(t=>t+1), 60000); return ()=>clearInterval(iv); }, []);
       const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
+      // ── Refs: back-button handler uchun joriy state ni saqlash ──
+      const stateRefs = useRef({ selectedLeadId: null, showAddLead: false, showCompleteModal: false, activeTab: 'dashboard' });
+      useEffect(() => {
+        stateRefs.current = { selectedLeadId, showAddLead, showCompleteModal, activeTab };
+      }, [selectedLeadId, showAddLead, showCompleteModal, activeTab]);
+
+      // ── Orqaga tugmasi (touchpad swipe / browser back) ──────────
+      useEffect(() => {
+        if (!authUser) return;
+        // Ilovadan chiqib ketmaslik uchun history ga bir qadam qo'shamiz
+        history.pushState({ mizonCRM: true }, '', window.location.href);
+        const handlePopState = () => {
+          // Darhol yangi state push qilib, brauzer orqaga ketishini to'xamiz
+          history.pushState({ mizonCRM: true }, '', window.location.href);
+          const s = stateRefs.current;
+          if (s.selectedLeadId) {
+            setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);
+          } else if (s.showCompleteModal) {
+            setShowCompleteModal(false);
+          } else if (s.showAddLead) {
+            setShowAddLead(false);
+          } else if (s.activeTab !== 'dashboard') {
+            setActiveTab('dashboard');
+          }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+      }, [authUser]);
+
+      // ── Klaviatura: ESC va Enter ─────────────────────────────────
       useEffect(() => {
         const handleKeyDown = (e) => {
-          if(e.key==='Enter' && selectedLeadId) {
-            if(e.target.id==='chatMessageInputBox') return;
-            if(e.target.tagName!=='INPUT' && e.target.tagName!=='TEXTAREA') {
+          // ESC: ochiq modal / panel ni yopish
+          if (e.key === 'Escape') {
+            if (selectedLeadId) {
+              setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);
+            } else if (showCompleteModal) {
+              setShowCompleteModal(false);
+            } else if (showAddLead) {
+              setShowAddLead(false);
+            }
+            return;
+          }
+          // Enter: lead detail panelni yopish
+          if (e.key === 'Enter' && selectedLeadId) {
+            if (e.target.id === 'chatMessageInputBox') return;
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
               setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);
             }
           }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [selectedLeadId]);
+      }, [selectedLeadId, showCompleteModal, showAddLead]);
 
       const handleLogin = async (e) => {
         e.preventDefault();
