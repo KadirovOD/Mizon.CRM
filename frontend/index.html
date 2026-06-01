@@ -2286,7 +2286,7 @@ tr:hover td{background:var(--surface-variant);}
     const SuperAdminPanel = ({ authUser, onLogout }) => {
       const [companies,    setCompanies]    = useState([]);
       const [loading,      setLoading]      = useState(true);
-      const [view,         setView]         = useState('list'); // 'list' | 'create' | 'detail'
+      const [view,         setView]         = useState(() => localStorage.getItem('sa_view') || 'list');
       const [selCompany,   setSelCompany]   = useState(null);
       const [compUsers,    setCompUsers]    = useState([]);
       const [showAddUser,  setShowAddUser]  = useState(false);
@@ -2296,7 +2296,7 @@ tr:hover td{background:var(--surface-variant);}
       const [saving,       setSaving]       = useState(false);
       const [lastCreated,  setLastCreated]  = useState(null);
       const [copiedSlug,   setCopiedSlug]   = useState(null);
-      const [editUserModal, setEditUserModal] = useState(null); // null | user object
+      const [editUserModal, setEditUserModal] = useState(null);
       const [editUserForm,  setEditUserForm]  = useState({username:'', password:'', role:'MANAGER', full_name:''});
 
       const token = localStorage.getItem('mizon_token');
@@ -2314,22 +2314,77 @@ tr:hover td{background:var(--surface-variant);}
         else { try { const el=document.createElement('textarea'); el.value=url; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); } catch{} done(); }
       };
 
-      const loadCompanies = async () => {
-        setLoading(true);
-        try {
-          const r = await fetch('/api/superadmin/companies', {headers:H});
-          const d = await r.json();
-          setCompanies(Array.isArray(d) ? d : []);
-        } catch(e) { flash('Xato: '+e.message); }
-        setLoading(false);
-      };
+      // view va selCompany ni localStorage ga saqlash
+      useEffect(() => {
+        localStorage.setItem('sa_view', view);
+        if (view === 'list') localStorage.removeItem('sa_selCompanyId');
+      }, [view]);
+      useEffect(() => {
+        if (selCompany?.id) localStorage.setItem('sa_selCompanyId', String(selCompany.id));
+      }, [selCompany]);
 
       const loadCompanyUsers = async (comp) => {
         const r = await fetch(`/api/superadmin/companies/${comp.id}/users`, {headers:H});
         setCompUsers(await r.json());
       };
 
-      useEffect(() => { loadCompanies(); }, []);
+      const loadCompanies = async (restoreState = false) => {
+        setLoading(true);
+        try {
+          const r = await fetch('/api/superadmin/companies', {headers:H});
+          const d = await r.json();
+          const list = Array.isArray(d) ? d : [];
+          setCompanies(list);
+          // Refresh dan keyin oldingi view ni tiklash
+          if (restoreState) {
+            const savedView = localStorage.getItem('sa_view') || 'list';
+            const savedId   = localStorage.getItem('sa_selCompanyId');
+            if (savedView === 'detail' && savedId) {
+              const comp = list.find(c => String(c.id) === savedId);
+              if (comp) {
+                setSelCompany(comp); setView('detail');
+                const ru = await fetch(`/api/superadmin/companies/${comp.id}/users`, {headers:H});
+                setCompUsers(await ru.json());
+              } else { setView('list'); }
+            } else if (savedView === 'create') {
+              setView('create');
+            }
+          }
+        } catch(e) { flash('Xato: '+e.message); }
+        setLoading(false);
+      };
+
+      useEffect(() => { loadCompanies(true); }, []);
+
+      // ── Refs: ESC / back-button uchun joriy state ────────────────
+      const saRefs = useRef({ view: 'list', showAddUser: false, editUserModal: null });
+      useEffect(() => { saRefs.current = { view, showAddUser, editUserModal }; }, [view, showAddUser, editUserModal]);
+
+      // ── Orqaga tugmasi ───────────────────────────────────────────
+      useEffect(() => {
+        history.pushState({ mizonSA: true }, '', window.location.href);
+        const onPop = () => {
+          history.pushState({ mizonSA: true }, '', window.location.href);
+          const s = saRefs.current;
+          if (s.editUserModal)  { setEditUserModal(null); }
+          else if (s.showAddUser) { setShowAddUser(false); }
+          else if (s.view !== 'list') { setView('list'); }
+        };
+        window.addEventListener('popstate', onPop);
+        return () => window.removeEventListener('popstate', onPop);
+      }, []);
+
+      // ── ESC tugmasi ──────────────────────────────────────────────
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.key !== 'Escape') return;
+          if (editUserModal)  { setEditUserModal(null); return; }
+          if (showAddUser)    { setShowAddUser(false);  return; }
+          if (view !== 'list') { setView('list');       return; }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, [view, showAddUser, editUserModal]);
 
       const createCompany = async (e) => {
         e.preventDefault(); setSaving(true);
