@@ -400,8 +400,12 @@ app.post('/api/integrations', async (req, res) => {
 // DELETE /api/integrations/id/:id — specific row (facebook/instagram multi-entry)
 app.delete('/api/integrations/id/:id', async (req, res) => {
   if (!req.db) return res.status(500).json({ error: 'DB disabled' });
+  const cid = req.user?.companyId || null;
   try {
-    await req.db.query('DELETE FROM crm_integration_config WHERE id=$1', [req.params.id]);
+    await req.db.query(
+      'DELETE FROM crm_integration_config WHERE id=$1 AND (company_id=$2 OR company_id IS NULL)',
+      [req.params.id, cid]
+    );
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -508,8 +512,12 @@ app.post('/api/api-keys', async (req, res) => {
 
 app.delete('/api/api-keys/:id', async (req, res) => {
   if (!req.db) return res.status(500).json({ error: 'DB disabled' });
+  const cid = req.user?.companyId || null;
   try {
-    await req.db.query('DELETE FROM crm_api_keys WHERE id=$1', [req.params.id]);
+    await req.db.query(
+      'DELETE FROM crm_api_keys WHERE id=$1 AND (company_id=$2 OR company_id IS NULL)',
+      [req.params.id, cid]
+    );
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

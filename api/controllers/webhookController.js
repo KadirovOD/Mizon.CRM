@@ -249,8 +249,10 @@ exports.handleMetaWebhook = async (req, res) => {
 
           // Check for existing lead by IG sender ID (stored in telegram_chat_id column)
           const existing = await req.db.query(
-            'SELECT id, chatlogs FROM crm_lead WHERE telegram_chat_id=$1 LIMIT 1',
-            [igKey]
+            companyId
+              ? 'SELECT id, chatlogs FROM crm_lead WHERE telegram_chat_id=$1 AND company_id=$2 LIMIT 1'
+              : 'SELECT id, chatlogs FROM crm_lead WHERE telegram_chat_id=$1 LIMIT 1',
+            companyId ? [igKey, companyId] : [igKey]
           );
 
           if (existing.rows.length === 0) {
@@ -297,10 +299,10 @@ exports.handleMetaWebhook = async (req, res) => {
             const logs = existing.rows[0].chatlogs || [];
             const phone = extractPhone(text);
             const email = extractEmail(text);
-            if (phone) await req.db.query('UPDATE crm_lead SET phone=COALESCE(phone,$1) WHERE id=$2', [phone, existing.rows[0].id]);
-            if (email) await req.db.query('UPDATE crm_lead SET email=COALESCE(email,$1) WHERE id=$2', [email, existing.rows[0].id]);
+            if (phone) await req.db.query('UPDATE crm_lead SET phone=COALESCE(phone,$1) WHERE id=$2' + (companyId ? ' AND company_id=$3' : ''), companyId ? [phone, existing.rows[0].id, companyId] : [phone, existing.rows[0].id]);
+            if (email) await req.db.query('UPDATE crm_lead SET email=COALESCE(email,$1) WHERE id=$2' + (companyId ? ' AND company_id=$3' : ''), companyId ? [email, existing.rows[0].id, companyId] : [email, existing.rows[0].id]);
             logs.push({ type: 'instagram', date: new Date().toISOString(), text: `[Instagram] ${text}` });
-            await req.db.query('UPDATE crm_lead SET chatlogs=$1 WHERE id=$2', [JSON.stringify(logs), existing.rows[0].id]);
+            await req.db.query('UPDATE crm_lead SET chatlogs=$1 WHERE id=$2' + (companyId ? ' AND company_id=$3' : ''), companyId ? [JSON.stringify(logs), existing.rows[0].id, companyId] : [JSON.stringify(logs), existing.rows[0].id]);
           }
         }
       }
@@ -335,7 +337,9 @@ exports.handleTelegramWebhook = async (req, res) => {
     const lastName  = message.from?.last_name  || '';
     const username  = message.from?.username   || '';
     const fullName  = [firstName, lastName].filter(Boolean).join(' ');
-    const token     = await getTelegramToken(req.db);
+    const tgCfg     = await getTelegramConfig(req.db);
+    const token     = tgCfg.token;
+    const tgCompanyId = tgCfg.companyId;
 
     if (!req.db) return;
 
@@ -343,8 +347,10 @@ exports.handleTelegramWebhook = async (req, res) => {
     if (message.contact) {
       const contactPhone = message.contact.phone_number;
       await req.db.query(
-        'UPDATE crm_lead SET phone=$1 WHERE telegram_chat_id=$2',
-        [contactPhone, String(chatId)]
+        tgCompanyId
+          ? 'UPDATE crm_lead SET phone=$1 WHERE telegram_chat_id=$2 AND company_id=$3'
+          : 'UPDATE crm_lead SET phone=$1 WHERE telegram_chat_id=$2',
+        tgCompanyId ? [contactPhone, String(chatId), tgCompanyId] : [contactPhone, String(chatId)]
       );
       await sendTelegramMsg(token, chatId,
         `✅ Telefon raqamingiz saqlandi: ${contactPhone}\n\nMenejerimiz tez orada aloqaga chiqadi! 👍`,
@@ -356,21 +362,27 @@ exports.handleTelegramWebhook = async (req, res) => {
     // ── Commands ─────────────────────────────────────────────────────────────
     if (text.startsWith('/phone ')) {
       const phone = text.replace('/phone', '').trim();
-      await req.db.query('UPDATE crm_lead SET phone=$1 WHERE telegram_chat_id=$2', [phone, String(chatId)]);
+      await req.db.query(
+        tgCompanyId ? 'UPDATE crm_lead SET phone=$1 WHERE telegram_chat_id=$2 AND company_id=$3' : 'UPDATE crm_lead SET phone=$1 WHERE telegram_chat_id=$2',
+        tgCompanyId ? [phone, String(chatId), tgCompanyId] : [phone, String(chatId)]
+      );
       await sendTelegramMsg(token, chatId, `✅ Telefon saqlandi: ${phone}`);
       return;
     }
     if (text.startsWith('/email ')) {
       const email = text.replace('/email', '').trim();
-      await req.db.query('UPDATE crm_lead SET email=$1 WHERE telegram_chat_id=$2', [email, String(chatId)]);
+      await req.db.query(
+        tgCompanyId ? 'UPDATE crm_lead SET email=$1 WHERE telegram_chat_id=$2 AND company_id=$3' : 'UPDATE crm_lead SET email=$1 WHERE telegram_chat_id=$2',
+        tgCompanyId ? [email, String(chatId), tgCompanyId] : [email, String(chatId)]
+      );
       await sendTelegramMsg(token, chatId, `✅ Email saqlandi: ${email}`);
       return;
     }
     if (text.startsWith('/name ')) {
       const name = text.replace('/name', '').trim();
       await req.db.query(
-        'UPDATE crm_lead SET name=$1, contact_name=$1 WHERE telegram_chat_id=$2',
-        [name, String(chatId)]
+        tgCompanyId ? 'UPDATE crm_lead SET name=$1, contact_name=$1 WHERE telegram_chat_id=$2 AND company_id=$3' : 'UPDATE crm_lead SET name=$1, contact_name=$1 WHERE telegram_chat_id=$2',
+        tgCompanyId ? [name, String(chatId), tgCompanyId] : [name, String(chatId)]
       );
       await sendTelegramMsg(token, chatId, `✅ Ismingiz yangilandi: ${name}`);
       return;
@@ -378,8 +390,10 @@ exports.handleTelegramWebhook = async (req, res) => {
 
     // ── Check existing lead ──────────────────────────────────────────────────
     const existing = await req.db.query(
-      'SELECT id, chatlogs FROM crm_lead WHERE telegram_chat_id=$1 LIMIT 1',
-      [String(chatId)]
+      tgCompanyId
+        ? 'SELECT id, chatlogs FROM crm_lead WHERE telegram_chat_id=$1 AND company_id=$2 LIMIT 1'
+        : 'SELECT id, chatlogs FROM crm_lead WHERE telegram_chat_id=$1 LIMIT 1',
+      tgCompanyId ? [String(chatId), tgCompanyId] : [String(chatId)]
     );
 
     if (existing.rows.length === 0) {
@@ -387,16 +401,21 @@ exports.handleTelegramWebhook = async (req, res) => {
       const phone = extractPhone(text);
       const email = extractEmail(text);
 
-      const stageRes = await req.db.query('SELECT id FROM crm_stage ORDER BY sequence ASC LIMIT 1');
-      const stageId  = stageRes.rows[0]?.id || 1;
+      const stageRes = await req.db.query(
+        tgCompanyId
+          ? 'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence ASC LIMIT 1'
+          : 'SELECT id FROM crm_stage ORDER BY sequence ASC LIMIT 1',
+        tgCompanyId ? [tgCompanyId] : []
+      );
+      const stageId = stageRes.rows[0]?.id || 1;
 
       await req.db.query(
         `INSERT INTO crm_lead
            (name, contact_name, phone, email, mizon_source,
-            telegram_chat_id, lead_score, stage_id, chatlogs)
-         VALUES ($1,$2,$3,$4,'telegram_bot',$5,20,$6,$7)`,
+            telegram_chat_id, lead_score, stage_id, company_id, chatlogs)
+         VALUES ($1,$2,$3,$4,'telegram_bot',$5,20,$6,$7,$8)`,
         [
-          fullName, fullName, phone, email, String(chatId), stageId,
+          fullName, fullName, phone, email, String(chatId), stageId, tgCompanyId,
           JSON.stringify([
             { type: 'sys',      date: new Date().toISOString(), text: `✈️ Telegram bot orqali keldi (@${username || chatId})` },
             ...(text && text !== '/start'
@@ -429,11 +448,11 @@ exports.handleTelegramWebhook = async (req, res) => {
         const email = extractEmail(text);
 
         // Auto-fill phone/email if not yet saved
-        if (phone) await req.db.query('UPDATE crm_lead SET phone=COALESCE(phone,$1) WHERE id=$2', [phone, existing.rows[0].id]);
-        if (email) await req.db.query('UPDATE crm_lead SET email=COALESCE(email,$1) WHERE id=$2', [email, existing.rows[0].id]);
+        if (phone) await req.db.query(tgCompanyId ? 'UPDATE crm_lead SET phone=COALESCE(phone,$1) WHERE id=$2 AND company_id=$3' : 'UPDATE crm_lead SET phone=COALESCE(phone,$1) WHERE id=$2', tgCompanyId ? [phone, existing.rows[0].id, tgCompanyId] : [phone, existing.rows[0].id]);
+        if (email) await req.db.query(tgCompanyId ? 'UPDATE crm_lead SET email=COALESCE(email,$1) WHERE id=$2 AND company_id=$3' : 'UPDATE crm_lead SET email=COALESCE(email,$1) WHERE id=$2', tgCompanyId ? [email, existing.rows[0].id, tgCompanyId] : [email, existing.rows[0].id]);
 
         logs.push({ type: 'telegram', date: new Date().toISOString(), text: `[Telegram] ${fullName}: ${text}` });
-        await req.db.query('UPDATE crm_lead SET chatlogs=$1 WHERE id=$2', [JSON.stringify(logs), existing.rows[0].id]);
+        await req.db.query(tgCompanyId ? 'UPDATE crm_lead SET chatlogs=$1 WHERE id=$2 AND company_id=$3' : 'UPDATE crm_lead SET chatlogs=$1 WHERE id=$2', tgCompanyId ? [JSON.stringify(logs), existing.rows[0].id, tgCompanyId] : [JSON.stringify(logs), existing.rows[0].id]);
       } else if (text === '/start') {
         await sendTelegramMsg(token, chatId,
           `${firstName}, siz allaqachon ro'yxatdan o'tgansiz! ✅\nMenejerimiz tez orada aloqaga chiqadi.`
@@ -465,17 +484,25 @@ function parseJson(val, fallback) {
   try { return JSON.parse(val); } catch { return fallback; }
 }
 
-// Load Telegram bot token: env var first, then DB
-async function getTelegramToken(db) {
-  const envToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (envToken && envToken !== 'YOUR_BOT_TOKEN') return envToken;
-  if (!db) return null;
+// Load Telegram config: token + company_id
+async function getTelegramConfig(db) {
+  if (!db) return { token: null, companyId: null };
   try {
     const r = await db.query(
-      "SELECT access_token FROM crm_integration_config WHERE platform='telegram' ORDER BY id DESC LIMIT 1"
+      "SELECT access_token, company_id FROM crm_integration_config WHERE platform='telegram' ORDER BY id DESC LIMIT 1"
     );
-    return r.rows[0]?.access_token || null;
-  } catch { return null; }
+    const row = r.rows[0] || {};
+    const envToken = process.env.TELEGRAM_BOT_TOKEN;
+    return {
+      token:     (envToken && envToken !== 'YOUR_BOT_TOKEN') ? envToken : (row.access_token || null),
+      companyId: row.company_id || null,
+    };
+  } catch { return { token: null, companyId: null }; }
+}
+// Backward compat shim
+async function getTelegramToken(db) {
+  const cfg = await getTelegramConfig(db);
+  return cfg.token;
 }
 
 // Send Telegram message with optional extra params (keyboard, etc.)
