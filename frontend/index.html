@@ -319,19 +319,8 @@ tr:hover td{background:var(--surface-variant);}
       ]
     };
 
-    const futureDate = new Date(); futureDate.setHours(futureDate.getHours() + 1);
-    const warningDate = new Date(); warningDate.setHours(warningDate.getHours() + 1, warningDate.getMinutes() + 30);
-    const dangerDate = new Date(); dangerDate.setHours(dangerDate.getHours() - 1);
-
-    const initialLeads = [
-      { id: '1', pipelineId: 'p1', name: 'Alisher Boymatov', owner: 'menejer_1', phone: '+998 90 123 4567', region: 'Toshkent', source: 'meta_fb_ads', status: 'NEW', actualCallAttempts: 0, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: "Sistemaga qo'shildi (Facebook Lead Ads)"}] },
-      { id: '2', pipelineId: 'p1', name: 'Sardor Odilov', owner: 'ceo', phone: '+998 71 222 3344', region: 'Samarqand', source: 'telegram_bot', status: 'CONTACTED', actualCallAttempts: 1, deadline: futureDate.toISOString(), taskDescription: 'Shartnoma narxini kelishish uchun aloqaga chiqish', chatLogs: [{type:'sys', date: futureDate.toISOString(), text: 'Menejer vazifa belgiladi'}] },
-      { id: '3', pipelineId: 'p1', name: 'Odiljon Qodirov', owner: 'menejer_1', phone: '+998 93 456 7890', region: 'Buxoro', source: 'phone_call', status: 'NEGOTIATION', actualCallAttempts: 3, deadline: dangerDate.toISOString(), taskDescription: 'Uchrashuv: kafolat shartlarini muhokama qilish.', chatLogs: [{type:'sys', date: dangerDate.toISOString(), text: 'Muzokaralar uchun uchrashuv yozildi.'}] },
-      { id: '4', pipelineId: 'p1', name: 'Nilufar Karimova', owner: 'menejer_1', phone: '+998 97 111 2233', region: 'Namangan', source: 'referral', status: 'QUALIFIED', actualCallAttempts: 2, deadline: warningDate.toISOString(), taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: 'Tavsiya orqali keldi'}] },
-      { id: '5', pipelineId: 'p1', name: 'Akmal Tursunov', owner: 'ceo', phone: '+998 90 987 6543', region: 'Toshkent', source: 'website', status: 'PROPOSAL', actualCallAttempts: 4, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: 'Veb-sayt formasi orqali keldi'}] },
-      { id: '6', pipelineId: 'p1', name: 'Dilshod Rahimov', owner: 'ceo', phone: '+998 91 333 4455', region: 'Farg\'ona', source: 'manual', status: 'CONTACTED', actualCallAttempts: 0, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: "Qo'lda kiritildi"}] },
-      { id: '7', pipelineId: 'p2', name: 'LLC TechnoPlus', owner: 'ceo', phone: '+998 71 555 6677', region: 'Toshkent', source: 'referral', status: 'NEW', actualCallAttempts: 0, deadline: null, taskDescription: null, chatLogs: [{type:'sys', date: new Date().toISOString(), text: 'B2B Hamkorlik uchun tavsiya'}] },
-    ];
+    // Demo lead ma'lumotlari olib tashlandi — har bir kompaniya null holatdan boshlanadi
+    const initialLeads = [];
 
     // ===== HELPERS =====
     const getInitials = (name) => {
@@ -472,18 +461,57 @@ tr:hover td{background:var(--surface-variant);}
     };
 
     // ===== PIPELINE EDITOR =====
-    const PipelineEditor = ({ pipelines, setPipelines, columnsMap, setColumnsMap }) => {
+    const PipelineEditor = ({ pipelines, setPipelines, columnsMap, setColumnsMap, stageMapRef, onStagesUpdated }) => {
       const [pId, setPId] = useState(pipelines[0]?.id);
       const pipe = pipelines.find(p => p.id === pId);
       const [localCols, setLocalCols] = useState(columnsMap[pId] || []);
       const [isAddingPipe, setIsAddingPipe] = useState(false);
       const [newPipeName, setNewPipeName] = useState('');
+      const [saving, setSaving] = useState(false);
       useEffect(() => { setLocalCols(columnsMap[pId] || []); }, [pId, columnsMap]);
       if(!pipe) return null;
       const addCol = () => setLocalCols([...localCols, {id:'STAGE_'+Date.now(), title:'Yangi bosqich'}]);
       const updateColTitle = (id, val) => setLocalCols(localCols.map(c => c.id===id?{...c,title:val}:c));
-      const removeCol = (id) => setLocalCols(localCols.filter(c => c.id!==id));
-      const savePipe = () => { setColumnsMap({...columnsMap,[pId]:localCols}); alert("Pipeline saqlandi."); };
+      const removeCol = (id) => {
+        if(localCols.length <= 1) return alert("Kamida 1 bosqich bo'lishi shart!");
+        setLocalCols(localCols.filter(c => c.id!==id));
+      };
+      const savePipe = async () => {
+        setSaving(true);
+        // 1. Lokalga saqlash
+        setColumnsMap({...columnsMap,[pId]:localCols});
+        // 2. DB ga saqlash (faqat asosiy pipeline p1)
+        const token = localStorage.getItem('mizon_token');
+        if (token) {
+          try {
+            // Har bir col uchun: agar stageMapRef.current.toDbId[col.id] mavjud bo'lsa — mavjud bosqich (DB ID bilan)
+            const toDbId = stageMapRef?.current?.toDbId || {};
+            const stageData = localCols.map((col, i) => {
+              const dbId = toDbId[col.id]; // undefined → yangi bosqich
+              return {
+                ...(dbId != null ? { id: dbId } : {}),
+                name: col.title,
+                sequence: i + 1,
+                is_won: col.id === 'WON',
+                is_lost: col.id === 'LOST',
+              };
+            });
+            const r = await fetch('/api/stages/sync', {
+              method: 'PUT',
+              headers: {'Content-Type':'application/json','Authorization':'Bearer '+token},
+              body: JSON.stringify({ stages: stageData }),
+            });
+            const d = await r.json();
+            if (d.success && onStagesUpdated) onStagesUpdated(d.stages);
+            alert(d.success ? "✅ Bosqichlar saqlandi!" : "❌ " + (d.error || 'Xato'));
+          } catch(e) {
+            alert("❌ Server xatosi: " + e.message);
+          }
+        } else {
+          alert("Bosqichlar lokal saqlandi.");
+        }
+        setSaving(false);
+      };
       const updateName = (e) => setPipelines(pipelines.map(p => p.id===pId?{...p,name:e.target.value}:p));
       const deletePipe = () => {
         if(pipelines.length<=1) return alert("Ohirgi quvurni o'chira olmaysiz!");
@@ -519,7 +547,7 @@ tr:hover td{background:var(--surface-variant);}
               <button className="btn-outline" onClick={addCol}>+ Bosqich Qo'shish</button>
             </div>
             <div style={{display:'flex', justifyContent:'space-between', borderTop:'1px solid var(--border-light)', paddingTop:'14px'}}>
-              <button className="btn-primary" onClick={savePipe}>Saqlash</button>
+              <button className="btn-primary" onClick={savePipe} disabled={saving}>{saving?'Saqlanmoqda...':'Saqlash'}</button>
               <button className="btn-danger" onClick={deletePipe}>Quvurni O'chirish</button>
             </div>
           </div>
@@ -673,6 +701,18 @@ tr:hover td{background:var(--surface-variant);}
     const IntegrationsModule = () => {
       const [configs,     setConfigs]     = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_integrations')||'{}'); } catch{return {};} });
       const [apiKeys,     setApiKeys]     = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_api_keys_local')||'[]'); } catch{return [];} });
+      // Pipelines list (for webform link generation)
+      const [intgPipelines] = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_pipelines')||'[]'); } catch{return [];} });
+      // Company slug (for building links that include the company)
+      const intgCompanySlug = (() => {
+        const host = window.location.hostname;
+        const DOMAIN = 'mizon-crm.uz';
+        if (host !== DOMAIN && host !== 'www.'+DOMAIN && host.endsWith('.'+DOMAIN)) {
+          const sub = host.slice(0, host.length - DOMAIN.length - 1);
+          if (sub && sub !== 'www') return sub;
+        }
+        return new URLSearchParams(window.location.search).get('company') || '';
+      })();
       const [activeModal, setActiveModal] = useState(null);
       const [formData,    setFormData]    = useState({});
       const [copiedItem,  setCopiedItem]  = useState(null);
@@ -1006,6 +1046,21 @@ tr:hover td{background:var(--surface-variant);}
                   {apiKeys.length} ta kalit
                 </span>
                 <span style={{fontSize:'12px',color:'#f59e0b',fontWeight:600}}>Boshqarish →</span>
+              </div>
+            </div>
+
+            {/* Veb Forma Havolasi card */}
+            <div onClick={()=>setActiveModal('webformlink')} style={{background:'var(--bg-surface)',border:'1px solid var(--outline-variant)',borderRadius:'13px',padding:'18px',cursor:'pointer',transition:'border-color 0.18s,box-shadow 0.18s'}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(139,92,246,0.6)';e.currentTarget.style.boxShadow='0 4px 18px rgba(139,92,246,0.15)';}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.boxShadow='none';}}>
+              <div style={{width:'46px',height:'46px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',marginBottom:'12px'}}>🔗</div>
+              <div style={{fontWeight:700,fontSize:'14px',marginBottom:'5px'}}>Tashqi Havola</div>
+              <div style={{fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.55',marginBottom:'14px',minHeight:'36px'}}>Mijozlar to'ldirishi uchun tashqi ro'yxatdan o'tish havolasini yarating</div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span style={{fontSize:'10px',fontWeight:700,padding:'3px 9px',borderRadius:'20px',background:'rgba(139,92,246,0.12)',color:'#8b5cf6',border:'1px solid rgba(139,92,246,0.3)'}}>
+                  Veb Forma
+                </span>
+                <span style={{fontSize:'12px',color:'#8b5cf6',fontWeight:600}}>Havola olish →</span>
               </div>
             </div>
           </div>
@@ -1463,6 +1518,57 @@ tr:hover td{background:var(--surface-variant);}
               </div>
             </div>
           )}
+
+          {/* ── WEB FORM LINK MODAL ────────────────────────────── */}
+          {activeModal === 'webformlink' && (() => {
+            const [wfPipe, setWfPipe] = useState(intgPipelines[0]?.id || '');
+            const [wfLink, setWfLink] = useState('');
+            const [wfCopied, setWfCopied] = useState(false);
+            const generateLink = () => {
+              if (!wfPipe) return alert('Avval quvurni tanlang!');
+              const base = window.location.origin + window.location.pathname;
+              // company slug ni URLga qo'shamiz agar subdomain bo'lmasa
+              const slugParam = intgCompanySlug && !window.location.hostname.endsWith('.mizon-crm.uz') ? `&company=${intgCompanySlug}` : '';
+              const link = `${base}?leadForm=true&pipe=${wfPipe}${slugParam}`;
+              setWfLink(link);
+              navigator.clipboard?.writeText(link).catch(()=>{});
+              setWfCopied(true); setTimeout(()=>setWfCopied(false), 2500);
+            };
+            return (
+              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
+                <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:'500px',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
+                  <div style={{padding:'20px 22px 16px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)'}}>
+                    <div style={{width:'42px',height:'42px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>🔗</div>
+                    <div style={{flex:1}}><div style={{fontWeight:700,fontSize:'16px'}}>Tashqi Havola</div><div style={{fontSize:'11px',color:'var(--text-muted)'}}>Mijoz ro'yxatdan o'tish formasi URL si</div></div>
+                    <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1}}>✕</button>
+                  </div>
+                  <div style={{padding:'20px 22px'}}>
+                    <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'16px',lineHeight:'1.6'}}>
+                      Havolani ijtimoiy tarmoqlarda, saytda yoki WhatsApp da ulashing. Mijoz bosib kirsa, ro'yxatdan o'tish formasi ochiladi va lead avtomatik CRM ga tushadi.
+                    </p>
+                    <span className="label-sm">Quvurni tanlang</span>
+                    <select className="input-base" value={wfPipe} onChange={e=>setWfPipe(e.target.value)}>
+                      <option value="" disabled>Quvurni tanlang...</option>
+                      {intgPipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    {intgPipelines.length === 0 && <div style={{fontSize:'12px',color:'var(--warning)',marginBottom:'10px'}}>⚠️ Quvur topilmadi. Avval Sozlamalar → Varonkalar bo'limida quvur yarating.</div>}
+                    <button className="btn-primary" style={{width:'100%',marginBottom:'14px'}} onClick={generateLink} disabled={!wfPipe}>
+                      🔗 Havola Yaratish va Nusxalash
+                    </button>
+                    {wfLink && (
+                      <div style={{display:'flex',gap:'8px',alignItems:'center',padding:'10px 12px',background:'var(--bg-base)',border:`1px solid ${wfCopied?'rgba(1,167,80,0.4)':'var(--border-light)'}`,borderRadius:'8px',transition:'border-color 0.3s'}}>
+                        <code style={{flex:1,fontSize:'11px',color:'var(--success)',wordBreak:'break-all'}}>{wfLink}</code>
+                        <span style={{fontSize:'11px',color:'var(--success)',fontWeight:700,whiteSpace:'nowrap'}}>{wfCopied?'✓ Nusxalandi!':''}</span>
+                      </div>
+                    )}
+                    <p style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'12px',lineHeight:'1.6'}}>
+                      💡 Forma dizayni va savollarini <b>Sozlamalar → Veb Shakl</b> bo'limida o'zgartiring.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       );
     };
@@ -3181,8 +3287,8 @@ tr:hover td{background:var(--surface-variant);}
       const [columnsMap, setColumnsMap] = useState(() => { const s = localStorage.getItem('mizon_columnsMap'); return s ? JSON.parse(s) : initialColumns; });
       const [leads, setLeads] = useState(() => {
         const s = localStorage.getItem('mizon_leads');
-        if(s) { try { const p = JSON.parse(s); if(p.length > 0) return p; } catch(e) {} }
-        return initialLeads;
+        if (s) { try { return JSON.parse(s); } catch(e) {} }
+        return [];
       });
 
       // Stage mapping — API dan dinamik yangilanadi (hardcoded ID'lar yangi kompaniyalarda ishlamaydi)
@@ -3206,11 +3312,13 @@ tr:hover td{background:var(--surface-variant);}
         return { 'Content-Type':'application/json', ...(t ? { 'Authorization':'Bearer '+t } : {}) };
       };
 
-      // Kompaniyaga tegishli localStorage kalitlarini tozalash
+      // Kompaniyaga tegishli BARCHA localStorage kalitlarini tozalash
+      // (boshqa kompaniyaning ma'lumotlari aralashmasligi uchun)
       const clearCompanyCache = () => {
-        localStorage.removeItem('mizon_leads');
-        localStorage.removeItem('mizon_pipelines');
-        localStorage.removeItem('mizon_columnsMap');
+        const KEEP = new Set(['mizon_session','mizon_token','mizon_theme','mizon_callLimit','mizon_activeTab','mizon_settingsTab']);
+        Object.keys(localStorage)
+          .filter(k => k.startsWith('mizon_') && !KEEP.has(k))
+          .forEach(k => localStorage.removeItem(k));
       };
       // Markaziy logout helper (token muddati tugaganda ishlatiladi)
       const forceLogout = () => {
@@ -3220,7 +3328,8 @@ tr:hover td{background:var(--surface-variant);}
         localStorage.removeItem('mizon_session');
       };
 
-      useEffect(() => {
+      // Leads + bosqichlarni API dan qayta yuklash (PipelineEditor saqlagandan keyin ham chaqiriladi)
+      const reloadLeadsFromApi = React.useCallback(() => {
         const headers = {};
         const t = localStorage.getItem('mizon_token');
         if (t) headers['Authorization'] = 'Bearer ' + t;
@@ -3247,6 +3356,8 @@ tr:hover td{background:var(--surface-variant);}
                 p1: apiStages.map((s, i) => ({
                   id: _STAGE_KEYS[i] || ('STAGE_' + s.id),
                   title: s.name,
+                  is_won: s.is_won || false,
+                  is_lost: s.is_lost || false,
                 }))
               }));
             }
@@ -3263,11 +3374,14 @@ tr:hover td{background:var(--surface-variant);}
               actualCallAttempts: l.actualcallattempts || 0,
               deadline: l.deadline || null,
               taskDescription: l.taskdescription || null,
+              customData: (typeof l.custom_data === 'string' ? JSON.parse(l.custom_data) : l.custom_data) || {},
               chatLogs: typeof l.chatlogs === 'string' ? JSON.parse(l.chatlogs) : (l.chatlogs || [{type:'sys', date:l.created_at, text:"Tizimga qo'shildi"}])
             })));
           }
         }).catch(err => console.log('Offline/Demo rejim faol.', err.message));
       }, []);
+
+      useEffect(() => { reloadLeadsFromApi(); }, []);
 
       const [globalCallLimit, setGlobalCallLimit] = useState(5);
       useEffect(() => { localStorage.setItem('mizon_pipelines', JSON.stringify(pipelines)); }, [pipelines]);
@@ -3292,45 +3406,101 @@ tr:hover td{background:var(--surface-variant);}
         ];
       });
       useEffect(() => { localStorage.setItem('mizon_formFields', JSON.stringify(formFields)); }, [formFields]);
+
+      // Mijoz kartasidagi qo'shimcha (custom) maydonlar
+      const [cardFields, setCardFields] = useState(() => {
+        const s = localStorage.getItem('mizon_cardFields');
+        return s ? JSON.parse(s) : [];
+      });
+      useEffect(() => { localStorage.setItem('mizon_cardFields', JSON.stringify(cardFields)); }, [cardFields]);
+
+      // Forma sarlavhasi va qo'shimcha matn (Veb Shakl sozlamalari)
+      const [formSettings, setFormSettings] = useState({ form_title:'', form_subtitle:'' });
+      const [formSettingsSaving, setFormSettingsSaving] = useState(false);
+      useEffect(() => {
+        const t = localStorage.getItem('mizon_token');
+        if (!t) return;
+        fetch('/api/company/settings', {headers:{'Authorization':'Bearer '+t}})
+          .then(r=>r.ok?r.json():null).then(d=>{if(d) setFormSettings({form_title:d.form_title||'',form_subtitle:d.form_subtitle||''}); }).catch(()=>{});
+      }, []);
+      const saveFormSettings = async () => {
+        setFormSettingsSaving(true);
+        const t = localStorage.getItem('mizon_token');
+        try {
+          const r = await fetch('/api/company/settings',{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(formSettings)});
+          const d = await r.json(); alert(d.success?'✅ Saqlandi!':'❌ '+(d.error||'Xato'));
+        } catch(e){alert('❌ Server xatosi');}
+        setFormSettingsSaving(false);
+      };
+
       const [editingLead, setEditingLead] = useState(false);
       const [searchQuery, setSearchQuery] = useState('');
       const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
 
-      // isFormMode
+      // isFormMode — tashqi forma
       if(isFormMode) {
         const [extFormData, setExtFormData] = useState({});
-        return (
+        const [extSubmitted, setExtSubmitted] = useState(false);
+        // Kompaniya ma'lumotlarini URL dagi slug yoki subdomain orqali yuklash
+        const [extCompanyInfo, setExtCompanyInfo] = useState(null);
+        useEffect(() => {
+          const slug = companySlug || new URLSearchParams(window.location.search).get('company') || '';
+          if (!slug) return;
+          fetch(`/api/company/info?slug=${encodeURIComponent(slug)}`)
+            .then(r=>r.json()).then(d=>{ if(d.found) setExtCompanyInfo(d); }).catch(()=>{});
+        }, []);
+
+        const extTitle    = extCompanyInfo?.form_title    || extCompanyInfo?.name || "Ro'yxatdan o'tish";
+        const extSubtitle = extCompanyInfo?.form_subtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz.";
+        const companyName = extCompanyInfo?.name || '';
+
+        const handleExtSubmit = async (e) => {
+          e.preventDefault();
+          const nameField = formFields.find(f=>f.key==='name');
+          const phoneField = formFields.find(f=>f.key==='phone');
+          if(nameField && nameField.required && !extFormData.name) return alert("Ismingizni kiriting!");
+          if(phoneField && phoneField.required && !extFormData.phone) return alert("Telefon raqamni kiriting!");
+          const cols = columnsMap[formPipeId] || [];
+          const initialStage = cols[0] ? cols[0].id : 'NEW';
+          const extraInfo = formFields.filter(f=>!['name','phone','region'].includes(f.key)).map(f=>`${f.label}: ${extFormData[f.key]||'-'}`).join(' | ');
+          // API ga yuborish
+          try {
+            await fetch('/api/leads', {
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({
+                name:extFormData.name||"Noma'lum", phone:extFormData.phone||'',
+                region:extFormData.region||'Veb-Sayt', source:'website',
+                owner:'Navbatda', pipelineId:formPipeId||'p1',
+                status:stageMapRef.current.toDbId[initialStage]||null,
+              })
+            });
+          } catch(err) { console.log('Forma yuborishda xato:', err.message); }
+          setExtSubmitted(true);
+        };
+
+        if (extSubmitted) return (
           <div className="login-overlay">
-            <form className="login-box" style={{maxWidth:'440px'}} onSubmit={(e) => {
-              e.preventDefault();
-              const nameField = formFields.find(f=>f.key==='name');
-              const phoneField = formFields.find(f=>f.key==='phone');
-              if(nameField && nameField.required && !extFormData.name) return alert("Ismingizni kiriting!");
-              if(phoneField && phoneField.required && !extFormData.phone) return alert("Telefon raqamni kiriting!");
-              const cols = columnsMap[formPipeId] || [];
-              const initialStage = cols[0] ? cols[0].id : 'NEW';
-              const extraInfo = formFields.filter(f=>!['name','phone','region'].includes(f.key)).map(f=>`${f.label}: ${extFormData[f.key]||'-'}`).join(' | ');
-              setLeads([...leads, {
-                id:'EXT_'+Date.now(), pipelineId:formPipeId||pipelines[0]?.id,
-                name:extFormData.name||"Noma'lum", phone:extFormData.phone||'', region:extFormData.region||'Veb-Sayt',
-                source:'website', owner:'Navbatda', status:initialStage, actualCallAttempts:0, deadline:null, taskDescription:null,
-                chatLogs:[
-                  {type:'sys', date:new Date().toISOString(), text:"Mijoz tashqi havoladan ro'yxatdan o'tdi."},
-                  ...(extraInfo?[{type:'sys', date:new Date().toISOString(), text:"Forma ma'lumotlari: "+extraInfo}]:[])
-                ]
-              }]);
-              alert("Arizangiz muvaffaqiyatli qabul qilindi!");
-              setExtFormData({});
-            }}>
-              <h2 style={{fontSize:'24px', marginBottom:'8px', fontWeight:800}}>Ro'yxatdan o'tish</h2>
-              <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'13px'}}>Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz.</p>
+            <div className="login-box" style={{maxWidth:'440px', textAlign:'center'}}>
+              <div style={{fontSize:'48px', marginBottom:'16px'}}>✅</div>
+              <h2 style={{fontSize:'22px', marginBottom:'8px', fontWeight:800}}>Rahmat!</h2>
+              <p style={{color:'var(--text-muted)', fontSize:'14px', lineHeight:'1.6'}}>Arizangiz qabul qilindi. {companyName?`${companyName} jamoasi `:''} tez orada siz bilan bog'lanadi.</p>
+            </div>
+          </div>
+        );
+
+        return (
+          <div className="login-overlay" style={{alignItems:'flex-start', paddingTop:'60px'}}>
+            <form className="login-box" style={{maxWidth:'480px', width:'100%'}} onSubmit={handleExtSubmit}>
+              {companyName && <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'8px', textAlign:'center', letterSpacing:'0.05em', textTransform:'uppercase', fontWeight:600}}>{companyName}</div>}
+              <h2 style={{fontSize:'24px', marginBottom:'8px', fontWeight:800, textAlign:'center'}}>{extTitle}</h2>
+              <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'13px', textAlign:'center', lineHeight:'1.6'}}>{extSubtitle}</p>
               {formFields.map(f => (
                 <div key={f.id}>
                   <span className="label-sm">{f.label}{f.required?' *':''}</span>
                   <input className="input-base" type={f.type||'text'} placeholder={f.placeholder||''} value={extFormData[f.key]||''} onChange={e=>setExtFormData({...extFormData,[f.key]:e.target.value})} />
                 </div>
               ))}
-              <button className="btn-primary" style={{width:'100%', marginTop:'16px', padding:'12px'}} type="submit">Arizani Jo'natish</button>
+              <button className="btn-primary" style={{width:'100%', marginTop:'16px', padding:'14px', fontSize:'15px'}} type="submit">Arizani Jo'natish →</button>
             </form>
           </div>
         );
@@ -3507,7 +3677,8 @@ tr:hover td{background:var(--surface-variant);}
             status:stageMapRef.current.toDbId[lead.status]||lead.status,
             name:lead.name, phone:lead.phone, region:lead.region, source:lead.source,
             actualCallAttempts:lead.actualCallAttempts, deadline:lead.deadline,
-            taskDescription:lead.taskDescription, chatLogs:lead.chatLogs, owner:lead.owner
+            taskDescription:lead.taskDescription, chatLogs:lead.chatLogs, owner:lead.owner,
+            customData: lead.customData || {}
           })
         }).then(res => {
           if (res.status === 401) forceLogout();
@@ -3791,6 +3962,18 @@ tr:hover td{background:var(--surface-variant);}
                           <select className="input-base" value={selectedLeadData.owner} onChange={e=>{setHasUnsavedChanges(true);setLeads(prev=>prev.map(l=>l.id==selectedLeadId?{...l,owner:e.target.value}:l));}}>
                             {users.map(u=><option key={u.username} value={u.username}>{u.username} ({u.role})</option>)}
                           </select>
+                          {/* Qo'shimcha (custom) maydonlar — tahrirlash rejimi */}
+                          {cardFields.length > 0 && (
+                            <div style={{borderTop:'1px solid var(--border-light)', paddingTop:'8px', marginTop:'4px'}}>
+                              <span className="label-sm">Qo'shimcha ma'lumotlar</span>
+                              {cardFields.map(cf => (
+                                <div key={cf.id}>
+                                  <span className="label-sm" style={{fontSize:'11px'}}>{cf.label}:</span>
+                                  <input className="input-base" type={cf.type||'text'} placeholder={cf.placeholder||''} value={(selectedLeadData.customData||{})[cf.key]||''} onChange={e=>{setHasUnsavedChanges(true);setLeads(prev=>prev.map(l=>l.id==selectedLeadId?{...l,customData:{...(l.customData||{}),[cf.key]:e.target.value}}:l));}} />
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div style={{marginBottom:'18px'}}>
@@ -3810,6 +3993,14 @@ tr:hover td{background:var(--surface-variant);}
                             <span className="info-label">Manba</span>
                             <span className="info-value"><span className={`source-badge badge-${selectedLeadData.source}`}>{selectedLeadData.source.replace('meta_','')}</span></span>
                           </div>
+                          {/* Qo'shimcha (custom) maydonlar — ko'rish rejimi */}
+                          {cardFields.filter(cf=>(selectedLeadData.customData||{})[cf.key]).map(cf => (
+                            <div key={cf.id} className="info-row">
+                              <div className="info-row-icon"><span className="material-symbols-outlined" style={{fontSize:'15px'}}>more_horiz</span></div>
+                              <span className="info-label">{cf.label}</span>
+                              <span className="info-value">{(selectedLeadData.customData||{})[cf.key]}</span>
+                            </div>
+                          ))}
                         </div>
                       )}
 
@@ -4055,6 +4246,7 @@ tr:hover td{background:var(--surface-variant);}
                     <div className={`settings-tab ${settingsActiveTab==='users'?'active':''}`} onClick={()=>setSettingsActiveTab('users')}><Ico n="users" s={14}/> Xodimlar</div>
                     <div className={`settings-tab ${settingsActiveTab==='limits'?'active':''}`} onClick={()=>setSettingsActiveTab('limits')}><Ico n="settings" s={14}/> Sozlamalar</div>
                     <div className={`settings-tab ${settingsActiveTab==='pipelines'?'active':''}`} onClick={()=>setSettingsActiveTab('pipelines')}><Ico n="layers" s={14}/> Varonkalar</div>
+                    <div className={`settings-tab ${settingsActiveTab==='cardfields'?'active':''}`} onClick={()=>setSettingsActiveTab('cardfields')}><Ico n="list" s={14}/> Karta Maydonlari</div>
                     <div className={`settings-tab ${settingsActiveTab==='webforms'?'active':''}`} onClick={()=>setSettingsActiveTab('webforms')}><Ico n="file" s={14}/> Veb Shakl</div>
                   </div>
                   <div className="card" style={{minHeight:'400px'}}>
@@ -4073,13 +4265,55 @@ tr:hover td{background:var(--surface-variant);}
                     {settingsActiveTab==='pipelines' && (
                       <div>
                         <h3 style={{marginBottom:'14px', fontWeight:600}}>Varonkalarni Sozlash</h3>
-                        <PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} />
+                        <PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} stageMapRef={stageMapRef} onStagesUpdated={reloadLeadsFromApi} />
                       </div>
                     )}
+                    {settingsActiveTab==='cardfields' && (
+                      <div>
+                        <h3 style={{marginBottom:'6px', fontWeight:600}}>Mijoz Kartasi Maydonlari</h3>
+                        <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>Har bir mijoz kartasida ko'rinadigan qo'shimcha ma'lumot maydonlarini sozlang. Misol: Byudjet, Kompaniya, Mahsulot va h.k.</p>
+                        <div style={{display:'flex', flexDirection:'column', gap:'7px', marginBottom:'16px'}}>
+                          {cardFields.map((cf, idx) => (
+                            <div key={cf.id} style={{display:'flex', gap:'8px', alignItems:'center', padding:'10px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
+                              <span style={{color:'var(--text-muted)', fontSize:'12px', width:'20px'}}>{idx+1}</span>
+                              <input className="input-base" style={{marginBottom:0, flex:2}} placeholder="Maydon nomi (masalan: Byudjet)" value={cf.label} onChange={e=>setCardFields(cardFields.map(x=>x.id===cf.id?{...x,label:e.target.value}:x))} />
+                              <input className="input-base" style={{marginBottom:0, flex:1}} placeholder="kalit (key)" value={cf.key} onChange={e=>setCardFields(cardFields.map(x=>x.id===cf.id?{...x,key:e.target.value.replace(/\s/g,'_')}:x))} />
+                              <select className="input-base" style={{marginBottom:0, width:'90px'}} value={cf.type||'text'} onChange={e=>setCardFields(cardFields.map(x=>x.id===cf.id?{...x,type:e.target.value}:x))}>
+                                <option value="text">Matn</option>
+                                <option value="number">Raqam</option>
+                                <option value="tel">Telefon</option>
+                                <option value="email">Email</option>
+                                <option value="url">URL</option>
+                              </select>
+                              <button className="btn-danger" style={{padding:'4px 8px'}} onClick={()=>setCardFields(cardFields.filter(x=>x.id!==cf.id))}>&times;</button>
+                            </div>
+                          ))}
+                          <button className="btn-outline" onClick={()=>setCardFields([...cardFields,{id:'cf_'+Date.now(), label:'', key:'field_'+Date.now(), type:'text', placeholder:''}])}>+ Yangi maydon qo'shish</button>
+                        </div>
+                        {cardFields.length === 0 && (
+                          <div style={{padding:'20px', textAlign:'center', color:'var(--text-muted)', background:'var(--bg-base)', borderRadius:'8px', border:'1px dashed var(--border-light)'}}>
+                            Hali hech qanday maxsus maydon qo'shilmagan. Yuqoridagi tugmani bosing.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {settingsActiveTab==='webforms' && (
                       <div>
-                        <h3 style={{marginBottom:'14px', fontWeight:600}}>Forma Konstruktori</h3>
-                        <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>Tashqi formada foydalanuvchilarga ko'rsatiladigan savollarni belgilang.</p>
+                        <h3 style={{marginBottom:'6px', fontWeight:600}}>Forma Konstruktori</h3>
+                        <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>Tashqi formaning ko'rinishini va savollarini sozlang.</p>
+
+                        {/* Forma sarlavhasi */}
+                        <div style={{padding:'16px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'8px', marginBottom:'18px'}}>
+                          <div style={{fontWeight:600, fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px'}}><span className="material-symbols-outlined" style={{fontSize:'16px'}}>title</span> Forma Sarlavhasi</div>
+                          <span className="label-sm">Asosiy sarlavha (bo'sh bo'lsa kompaniya nomi ishlatiladi)</span>
+                          <input className="input-base" placeholder="Masalan: Bepul konsultatsiya olish" value={formSettings.form_title} onChange={e=>setFormSettings({...formSettings,form_title:e.target.value})} />
+                          <span className="label-sm">Tavsif matni</span>
+                          <input className="input-base" placeholder="Masalan: Ma'lumotlaringizni qoldiring, 1 soat ichida aloqaga chiqamiz." value={formSettings.form_subtitle} onChange={e=>setFormSettings({...formSettings,form_subtitle:e.target.value})} />
+                          <button className="btn-primary" style={{marginTop:'6px'}} onClick={saveFormSettings} disabled={formSettingsSaving}>{formSettingsSaving?'Saqlanmoqda...':'Saqlash'}</button>
+                        </div>
+
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>Formada foydalanuvchilarga ko'rsatiladigan savollar:</div>
                         <div style={{display:'flex', flexDirection:'column', gap:'7px', marginBottom:'20px'}}>
                           {formFields.map((f, idx) => (
                             <div key={f.id} style={{display:'flex', gap:'8px', alignItems:'center', padding:'10px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
@@ -4101,37 +4335,9 @@ tr:hover td{background:var(--surface-variant);}
                           <button className="btn-outline" onClick={()=>setFormFields([...formFields,{id:'f_'+Date.now(), label:'', key:'custom_'+Date.now(), type:'text', required:false, placeholder:''}])}>+ Yangi savol qo'shish</button>
                         </div>
 
-                        <div style={{borderTop:'1px solid var(--border-light)', paddingTop:'20px'}}>
-                          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px'}}>
-                            <div style={{width:'34px', height:'34px', background:'linear-gradient(135deg, var(--accent), #8b5cf6)', borderRadius:'9px', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff'}}>
-                              <Ico n="link" s={16} c={{color:'#fff'}}/>
-                            </div>
-                            <div>
-                              <div style={{fontWeight:600, fontSize:'13px'}}>Havola Yaratish</div>
-                              <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Tashqi forma URL havolasini oling</div>
-                            </div>
-                          </div>
-                          <div style={{display:'flex', gap:'10px', alignItems:'stretch'}}>
-                            <select id="formPipeSelect" className="input-base" style={{marginBottom:0, flex:1}} defaultValue="">
-                              <option value="" disabled>Quvurni tanlang...</option>
-                              {pipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                            <button className="btn-primary" style={{whiteSpace:'nowrap'}} onClick={()=>{
-                              const sel = document.getElementById('formPipeSelect');
-                              if(!sel.value) return alert('Avval quvurni tanlang!');
-                              const lnk = window.location.origin + window.location.pathname + '?leadForm=true&pipe=' + sel.value;
-                              navigator.clipboard.writeText(lnk).then(()=>{
-                                const linkBox = document.getElementById('generatedLinkBox');
-                                if(linkBox){linkBox.value=lnk;linkBox.parentElement.style.display='flex';}
-                              });
-                            }}>
-                              <Ico n="link" s={13}/> Nusxalash
-                            </button>
-                          </div>
-                          <div id="generatedLinkWrap" style={{display:'none', marginTop:'10px', gap:'8px', alignItems:'center'}}>
-                            <input id="generatedLinkBox" className="input-base" readOnly style={{marginBottom:0, flex:1, fontSize:'12px', fontFamily:'monospace', color:'var(--success)'}} />
-                            <span style={{fontSize:'11px', color:'var(--success)', fontWeight:600, whiteSpace:'nowrap'}}><Ico n="check" s={13}/> Nusxalandi!</span>
-                          </div>
+                        {/* Havola yaratish Integratsiyalar bo'limiga ko'chirildi */}
+                        <div style={{padding:'12px 14px', background:'rgba(139,92,246,0.07)', border:'1px solid rgba(139,92,246,0.2)', borderRadius:'8px', marginTop:'4px', fontSize:'12px', color:'var(--text-secondary)'}}>
+                          🔗 Tashqi havola yaratish uchun <b>Integratsiyalar</b> bo'limiga o'ting va <b>Tashqi Havola</b> kartasini tanlang.
                         </div>
                       </div>
                     )}

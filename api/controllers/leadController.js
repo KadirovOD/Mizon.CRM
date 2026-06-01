@@ -10,7 +10,8 @@ exports.getLeads = async (req, res) => {
   const cid = req.user?.companyId;
   try {
     const { rows } = await req.db.query(`
-      SELECT l.*, s.name as stage_name
+      SELECT l.*, s.name as stage_name,
+             COALESCE(l.custom_data, '{}'::jsonb) as custom_data
       FROM crm_lead l
       LEFT JOIN crm_stage s ON l.stage_id = s.id
       WHERE l.company_id = $1
@@ -121,7 +122,7 @@ exports.updateLeadFull = async (req, res) => {
   const {
     name, phone, email, region, source,
     status, actualCallAttempts, deadline,
-    taskDescription, chatLogs, owner
+    taskDescription, chatLogs, owner, customData
   } = req.body;
 
   try {
@@ -137,8 +138,9 @@ exports.updateLeadFull = async (req, res) => {
            deadline = $8,
            taskdescription = $9,
            chatlogs = COALESCE($10, chatlogs),
-           owner = COALESCE($11, owner)
-       WHERE id = $12 AND company_id = $13 RETURNING *`,
+           owner = COALESCE($11, owner),
+           custom_data = COALESCE($12, custom_data)
+       WHERE id = $13 AND company_id = $14 RETURNING *`,
       [
         name || null, phone || null, email || null, region || null, source || null,
         isNaN(parseInt(status)) ? null : parseInt(status),
@@ -147,6 +149,7 @@ exports.updateLeadFull = async (req, res) => {
         taskDescription || null,
         chatLogs ? JSON.stringify(chatLogs) : null,
         owner,
+        customData != null ? JSON.stringify(customData) : null,
         id,
         cid
       ]
@@ -223,5 +226,62 @@ exports.getStats = async (req, res) => {
   } catch (err) {
     console.error('getStats error:', err.message);
     res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// PUT /api/stages/sync — CEO tomonidan bosqichlarni DB ga saqlash (batch)
+exports.syncStages = async (req, res) => {
+  if (!req.db) return res.status(503).json({ error: 'DB ulangan emas' });
+  const cid = req.user?.companyId;
+  if (!req.user || !['CEO', 'SUPERADMIN'].includes(req.user.role))
+    return res.status(403).json({ error: 'Faqat CEO bosqichlarni o\'zgartira oladi' });
+  const { stages } = req.body || {};
+  if (!Array.isArray(stages) || stages.length === 0)
+    return res.status(400).json({ error: 'stages array (kamida 1 ta) kerak' });
+
+  try {
+    // Mavjud bosqichlar
+    const existing = await req.db.query('SELECT id FROM crm_stage WHERE company_id=$1', [cid]);
+    const existingIds = new Set(existing.rows.map(r => r.id));
+
+    // Saqlanadigan ID'lar
+    const keepIds = new Set(
+      stages.filter(s => s.id != null).map(s => Number(s.id))
+    );
+
+    // O'chiriladigan bosqichlar — ulardagi leadlarni null ga o'tkazib
+    for (const id of existingIds) {
+      if (!keepIds.has(id)) {
+        await req.db.query('UPDATE crm_lead SET stage_id=NULL WHERE stage_id=$1 AND company_id=$2', [id, cid]);
+        await req.db.query('DELETE FROM crm_stage WHERE id=$1 AND company_id=$2', [id, cid]);
+      }
+    }
+
+    // Yangilash yoki yaratish
+    const result = [];
+    for (let i = 0; i < stages.length; i++) {
+      const s = stages[i];
+      const dbId = s.id != null ? Number(s.id) : null;
+      if (dbId && existingIds.has(dbId)) {
+        const r = await req.db.query(
+          `UPDATE crm_stage SET name=$1, sequence=$2, is_won=$3, is_lost=$4
+           WHERE id=$5 AND company_id=$6 RETURNING *`,
+          [s.name, i + 1, !!s.is_won, !!s.is_lost, dbId, cid]
+        );
+        if (r.rows.length) result.push(r.rows[0]);
+      } else {
+        const r = await req.db.query(
+          `INSERT INTO crm_stage (name, sequence, company_id, is_won, is_lost)
+           VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+          [s.name, i + 1, cid, !!s.is_won, !!s.is_lost]
+        );
+        result.push(r.rows[0]);
+      }
+    }
+
+    res.json({ success: true, stages: result });
+  } catch (err) {
+    console.error('syncStages error:', err.message);
+    res.status(500).json({ error: err.message });
   }
 };

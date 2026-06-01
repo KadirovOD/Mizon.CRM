@@ -223,7 +223,10 @@ exports.companyInfo = async (req, res) => {
       if (c) return res.json({ found: true, name: c.name, slug: c.slug, is_active: c.is_active });
     }
     if (req.db) {
-      const r = await req.db.query('SELECT name, slug, is_active FROM companies WHERE slug=$1', [slug]);
+      const r = await req.db.query(
+        'SELECT name, slug, is_active, form_title, form_subtitle FROM companies WHERE slug=$1',
+        [slug]
+      );
       if (r.rows.length) return res.json({ found: true, ...r.rows[0] });
     }
     return res.json({ found: false });

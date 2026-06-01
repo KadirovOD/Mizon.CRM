@@ -53,6 +53,43 @@ exports.deleteUser = async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
+// ── GET /api/company/settings ─────────────────────────────────────────────
+exports.getSettings = async (req, res) => {
+  if (!req.db) return res.json({});
+  const cid = req.user?.companyId;
+  try {
+    const r = await req.db.query(
+      'SELECT form_title, form_subtitle, extra_settings FROM companies WHERE id=$1',
+      [cid]
+    );
+    res.json(r.rows[0] || {});
+  } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
+// ── PUT /api/company/settings ─────────────────────────────────────────────
+exports.updateSettings = async (req, res) => {
+  if (!req.user || req.user.role !== 'CEO')
+    return res.status(403).json({ error: 'Faqat CEO o\'zgartira oladi' });
+  if (!req.db) return res.status(500).json({ error: 'DB ulangan emas' });
+  const { form_title, form_subtitle, extra_settings } = req.body || {};
+  try {
+    await req.db.query(
+      `UPDATE companies
+         SET form_title     = COALESCE($1, form_title),
+             form_subtitle  = COALESCE($2, form_subtitle),
+             extra_settings = COALESCE($3::jsonb, extra_settings)
+       WHERE id = $4`,
+      [
+        form_title    !== undefined ? form_title    : null,
+        form_subtitle !== undefined ? form_subtitle : null,
+        extra_settings != null ? JSON.stringify(extra_settings) : null,
+        req.user.companyId,
+      ]
+    );
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+};
+
 // ── PUT /api/company/users/:id ─────────────────
 exports.updateUser = async (req, res) => {
   if (!req.user || req.user.role !== 'CEO')

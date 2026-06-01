@@ -233,8 +233,12 @@ async function initDb() {
       ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS company_id  INT;
       ALTER TABLE automation_rules       ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'sms';
       ALTER TABLE crm_users              ADD COLUMN IF NOT EXISTS email       VARCHAR(255);
-      ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_won      BOOLEAN DEFAULT false;
-      ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_lost     BOOLEAN DEFAULT false;
+      ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_won       BOOLEAN DEFAULT false;
+      ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_lost      BOOLEAN DEFAULT false;
+      ALTER TABLE crm_lead               ADD COLUMN IF NOT EXISTS custom_data  JSONB   DEFAULT '{}'::jsonb;
+      ALTER TABLE companies              ADD COLUMN IF NOT EXISTS form_title   TEXT;
+      ALTER TABLE companies              ADD COLUMN IF NOT EXISTS form_subtitle TEXT;
+      ALTER TABLE companies              ADD COLUMN IF NOT EXISTS extra_settings JSONB  DEFAULT '{}'::jsonb;
     `);
 
     // ── Mavjud bosqichlarda is_won / is_lost ni yangilash ───────────────────────
@@ -343,7 +347,12 @@ app.put   ('/api/leads/:id',          leadController.updateLeadFull);
 app.delete('/api/leads/:id',          leadController.deleteLead);
 app.get   ('/api/leads/:id/chatlogs', leadController.getLeadChatlogs);
 app.get   ('/api/stages',             leadController.getStages);
+app.put   ('/api/stages/sync',        leadController.syncStages);
 app.get   ('/api/stats',              leadController.getStats);
+
+// ── Company settings (CEO) ────────────────────────────────────────────────────
+app.get('/api/company/settings', companyController.getSettings);
+app.put('/api/company/settings', companyController.updateSettings);
 
 // ── Webhooks ─────────────────────────────────────────────────────────────────
 app.get ('/api/webhook/meta',      webhookController.verifyMetaWebhook);
