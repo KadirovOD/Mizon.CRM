@@ -339,6 +339,17 @@ tr:hover td{background:var(--surface-variant);}
       const [viewModal, setViewModal] = useState({ state: false, title: '', items: [], withImportExport: false });
       const openDrillDown = (title, itemsArr, impExp) => setViewModal({ state: true, title, items: itemsArr, withImportExport: impExp });
 
+      // Kompaniya xodimlarini API dan yuklash (KPI uchun)
+      const [companyUsers, setCompanyUsers] = useState([]);
+      useEffect(() => {
+        const token = localStorage.getItem('mizon_token');
+        if (!token) return;
+        fetch('/api/company/users', { headers: { 'Authorization': 'Bearer ' + token } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d)) setCompanyUsers(d); })
+          .catch(() => {});
+      }, []);
+
       const p1Leads = leads.filter(l => l.pipelineId === 'p1');
       const stages = ['NEW','CONTACTED','QUALIFIED','PROPOSAL','NEGOTIATION','WON','LOST'];
       const stageLabels = { NEW:'Yangi', CONTACTED:'Aloqa', QUALIFIED:'Ehtiyoj', PROPOSAL:'Taklif', NEGOTIATION:'Muzokara', WON:'Yutildi', LOST:'Lost' };
@@ -395,30 +406,46 @@ tr:hover td{background:var(--surface-variant);}
             {role === 'CEO' && (
               <div className="card">
                 <div className="card-title" style={{marginBottom:'14px'}}>Sotuvchi xodimlar (KPI)</div>
-                {['menejer_1'].map(m => {
-                  const mLeads = leads.filter(l => l.owner === m);
-                  const mWon = mLeads.filter(l => l.status === 'WON').length;
-                  const mLost = mLeads.filter(l => l.status === 'LOST').length;
-                  return (
-                    <div key={m} style={{padding:'14px', background:'var(--bg-base)', borderRadius:'10px', border:'1px solid var(--border-light)'}}>
-                      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
-                        <div className="avatar" style={{width:'36px', height:'36px', fontSize:'13px'}}>{m[0].toUpperCase()}</div>
-                        <div>
-                          <div style={{fontWeight:600, fontSize:'14px'}}>{m}</div>
-                          <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Menejer • Faol</div>
-                        </div>
-                      </div>
-                      <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px', textAlign:'center'}}>
-                        {[['Jami', mLeads.length, 'var(--text-main)', 'var(--surface-variant)'], ['Yutildi', mWon, '#01a750', 'rgba(1,167,80,0.1)'], ['Lost', mLost, '#ef4444', 'rgba(239,68,68,0.08)']].map(([label, val, clr, bg]) => (
-                          <div key={label} style={{padding:'8px', background:bg, borderRadius:'8px'}}>
-                            <div style={{fontSize:'20px', fontWeight:700, color:clr}}>{val}</div>
-                            <div style={{color:'var(--text-muted)', fontSize:'10px', marginTop:'2px'}}>{label}</div>
+                {companyUsers.length === 0 ? (
+                  <div style={{textAlign:'center', padding:'20px', color:'var(--text-muted)', fontSize:'13px'}}>
+                    Xodimlar yuklanmoqda...
+                  </div>
+                ) : (
+                  <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                    {companyUsers.map(u => {
+                      const mLeads = leads.filter(l => l.owner === u.username);
+                      const mWon   = mLeads.filter(l => l.status === 'WON').length;
+                      const mLost  = mLeads.filter(l => l.status === 'LOST').length;
+                      const roleLabel = u.role === 'CEO' ? 'CEO' : u.role === 'MANAGER' ? 'Menejer' : u.role;
+                      const statusLabel = u.is_active === false ? 'Nofaol' : 'Faol';
+                      return (
+                        <div key={u.id || u.username} style={{padding:'14px', background:'var(--bg-base)', borderRadius:'10px', border:'1px solid var(--border-light)'}}>
+                          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
+                            <div className="avatar" style={{width:'36px', height:'36px', fontSize:'13px'}}>
+                              {(u.full_name || u.username)[0].toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{fontWeight:600, fontSize:'14px'}}>{u.full_name || u.username}</div>
+                              <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{roleLabel} • {statusLabel}</div>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+                          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px', textAlign:'center'}}>
+                            {[
+                              ['Jami',    mLeads.length, 'var(--text-main)', 'var(--surface-variant)'],
+                              ['Yutildi', mWon,          '#01a750',          'rgba(1,167,80,0.1)'],
+                              ['Lost',    mLost,         '#ef4444',          'rgba(239,68,68,0.08)']
+                            ].map(([label, val, clr, bg]) => (
+                              <div key={label} style={{padding:'8px', background:bg, borderRadius:'8px'}}>
+                                <div style={{fontSize:'20px', fontWeight:700, color:clr}}>{val}</div>
+                                <div style={{color:'var(--text-muted)', fontSize:'10px', marginTop:'2px'}}>{label}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
