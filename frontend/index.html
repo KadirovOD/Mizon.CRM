@@ -1468,70 +1468,79 @@ tr:hover td{background:var(--surface-variant);}
             const SheetsFlow = () => {
               const GS = '#0f9d58';
               const saved = configs.google_sheets || {};
-              const [colMap, setColMap] = useState({
-                name:   saved.col_name   ?? saved.name   ?? 0,
-                phone:  saved.col_phone  ?? saved.phone  ?? 1,
-                email:  saved.col_email  ?? saved.email  ?? 2,
-                region: saved.col_region ?? saved.region ?? 3,
-                note:   saved.col_note   ?? saved.note   ?? 4,
-              });
-              const [headerRow,  setHeaderRow]  = useState(saved.header_row  ?? true);
               const [gsSaving,   setGsSaving]   = useState(false);
               const [testStatus, setTestStatus] = useState(null); // null|'loading'|'ok'|'err'
 
-              const colLetter = n => String.fromCharCode(65 + Math.min(25, Math.max(0, parseInt(n) || 0)));
               const webhookUrl = `${origin}/api/webhook/sheets`;
+              const slug = intgCompanySlug || '';
 
-              // Apps Script — dinamik generatsiya (ustun moslash bilan)
+              // Apps Script — sarlavha nomidan avtomatik ustun aniqlash
               const script = [
-                `// ╔════════════════════════════════════════════════╗`,
-                `// ║   Mizon CRM — Google Sheets Integration        ║`,
-                `// ║   Extensions → Apps Script ga joylashtiring    ║`,
-                `// ╚════════════════════════════════════════════════╝`,
+                `// ╔════════════════════════════════════════════════════╗`,
+                `// ║   Mizon CRM — Google Sheets (Meta Lead Ads)        ║`,
+                `// ║   Extensions → Apps Script ga joylashtiring        ║`,
+                `// ╚════════════════════════════════════════════════════╝`,
                 ``,
                 `const CRM_WEBHOOK  = '${webhookUrl}';`,
-                `const COMPANY_SLUG = '${intgCompanySlug || 'YOUR_COMPANY_SLUG'}';`,
-                `const HEADER_ROWS  = ${headerRow ? 1 : 0}; // sarlavha qatorlari soni`,
+                `const COMPANY_SLUG = '${slug}';`,
                 ``,
-                `// Ustun moslash (0 = A, 1 = B, 2 = C, ...)`,
-                `const COL = {`,
-                `  name:   ${colMap.name},   // ${colLetter(colMap.name)} ustun — Ism`,
-                `  phone:  ${colMap.phone},  // ${colLetter(colMap.phone)} ustun — Telefon`,
-                `  email:  ${colMap.email},  // ${colLetter(colMap.email)} ustun — Email`,
-                `  region: ${colMap.region}, // ${colLetter(colMap.region)} ustun — Shahar/Hudud`,
-                `  note:   ${colMap.note},   // ${colLetter(colMap.note)} ustun — Izoh`,
+                `// Meta sheet sarlavhalaridan CRM maydonlariga avtomatik moslash`,
+                `// Chap: sheetdagi ustun nomi | O'ng: CRM maydoni`,
+                `const HEADER_MAP = {`,
+                `  'full_name':    'name',`,
+                `  'first_name':   'name',`,
+                `  'last_name':    'name',`,
+                `  'phone_number': 'phone',`,
+                `  'phone':        'phone',`,
+                `  'email':        'email',`,
+                `  'city':         'region',`,
+                `  'country':      'region',`,
+                `  'comments':     'note',`,
+                `  'message':      'note',`,
                 `};`,
                 ``,
-                `// ─── Asosiy funksiya ────────────────────────────────────`,
+                `// ─── Asosiy funksiya ──────────────────────────────────────`,
                 `function syncNewLeads() {`,
                 `  const sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();`,
                 `  const lastRow = sheet.getLastRow();`,
                 `  const props   = PropertiesService.getScriptProperties();`,
-                `  const lastProcessed = parseInt(props.getProperty('mizon_last_row') || String(HEADER_ROWS));`,
+                `  const lastProcessed = parseInt(props.getProperty('mizon_last_row') || '1');`,
                 `  if (lastRow <= lastProcessed) return;`,
+                ``,
+                `  // Sarlavha qatorini o'qib ustun indekslarini aniqlash`,
+                `  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];`,
+                `  const colIdx  = {};`,
+                `  headers.forEach(function(h, i) {`,
+                `    const field = HEADER_MAP[(h || '').toString().toLowerCase().trim()];`,
+                `    if (field && colIdx[field] === undefined) colIdx[field] = i;`,
+                `  });`,
+                `  Logger.log('Aniqlangan ustunlar: ' + JSON.stringify(colIdx));`,
                 ``,
                 `  const startRow = lastProcessed + 1;`,
                 `  const data = sheet.getRange(startRow, 1, lastRow - lastProcessed, sheet.getLastColumn()).getValues();`,
                 ``,
-                `  let processed = lastProcessed;`,
-                `  for (let i = 0; i < data.length; i++) {`,
-                `    const row = data[i];`,
-                `    const payload = {`,
+                `  var processed = lastProcessed;`,
+                `  for (var i = 0; i < data.length; i++) {`,
+                `    var row = data[i];`,
+                `    var firstName = colIdx['name'] !== undefined ? String(row[colIdx['name']] || '').trim() : '';`,
+                `    var lastName  = colIdx['name_last'] !== undefined ? String(row[colIdx['name_last']] || '').trim() : '';`,
+                `    var fullName  = [firstName, lastName].filter(Boolean).join(' ');`,
+                `    var payload = {`,
                 `      company_slug: COMPANY_SLUG,`,
-                `      name:   String(row[COL.name]   || '').trim(),`,
-                `      phone:  String(row[COL.phone]  || '').trim(),`,
-                `      email:  String(row[COL.email]  || '').trim(),`,
-                `      region: String(row[COL.region] || '').trim(),`,
-                `      note:   String(row[COL.note]   || '').trim(),`,
+                `      name:   fullName,`,
+                `      phone:  colIdx['phone']  !== undefined ? String(row[colIdx['phone']]  || '').trim() : '',`,
+                `      email:  colIdx['email']  !== undefined ? String(row[colIdx['email']]  || '').trim() : '',`,
+                `      region: colIdx['region'] !== undefined ? String(row[colIdx['region']] || '').trim() : '',`,
+                `      note:   colIdx['note']   !== undefined ? String(row[colIdx['note']]   || '').trim() : '',`,
                 `      row_index: startRow + i,`,
                 `    };`,
                 `    if (!payload.name && !payload.phone) { processed++; continue; }`,
                 `    try {`,
-                `      const resp   = UrlFetchApp.fetch(CRM_WEBHOOK, {`,
+                `      var resp   = UrlFetchApp.fetch(CRM_WEBHOOK, {`,
                 `        method: 'post', contentType: 'application/json',`,
                 `        payload: JSON.stringify(payload), muteHttpExceptions: true,`,
                 `      });`,
-                `      const result = JSON.parse(resp.getContentText());`,
+                `      var result = JSON.parse(resp.getContentText());`,
                 `      Logger.log('Qator '+(startRow+i)+': '+(result.duplicate?'⚠️ Takrorlangan':'✅ id='+result.id));`,
                 `    } catch(e) { Logger.log('Xato: '+e.message); }`,
                 `    processed++;`,
@@ -1539,11 +1548,11 @@ tr:hover td{background:var(--surface-variant);}
                 `  }`,
                 `}`,
                 ``,
-                `// ─── Trigger o'rnatish — BIR MARTA ishga tushiring ─────`,
+                `// ─── Trigger o'rnatish — BIR MARTA ishga tushiring ───────`,
                 `function createTrigger() {`,
                 `  ScriptApp.getProjectTriggers()`,
-                `    .filter(t => t.getHandlerFunction() === 'syncNewLeads')`,
-                `    .forEach(t => ScriptApp.deleteTrigger(t));`,
+                `    .filter(function(t){ return t.getHandlerFunction() === 'syncNewLeads'; })`,
+                `    .forEach(function(t){ ScriptApp.deleteTrigger(t); });`,
                 `  ScriptApp.newTrigger('syncNewLeads').timeBased().everyMinutes(5).create();`,
                 `  Logger.log("✅ Trigger o'rnatildi — har 5 daqiqada sinxronlanadi");`,
                 `}`,
@@ -1554,9 +1563,9 @@ tr:hover td{background:var(--surface-variant);}
                 try {
                   await fetch('/api/integrations', {method:'POST', headers:authH(), body:JSON.stringify({
                     platform: 'google_sheets',
-                    extra_config: { col_name:colMap.name, col_phone:colMap.phone, col_email:colMap.email, col_region:colMap.region, col_note:colMap.note, header_row:headerRow },
+                    extra_config: { auto_detect: true },
                   })});
-                  const updated = {...configs, google_sheets:{...colMap, header_row:headerRow, _connected_at:new Date().toISOString()}};
+                  const updated = {...configs, google_sheets:{ auto_detect:true, _connected_at:new Date().toISOString() }};
                   setConfigs(updated); localStorage.setItem('mizon_integrations', JSON.stringify(updated));
                   flash('✅ Google Sheets sozlamalari saqlandi');
                   setActiveModal(null);
@@ -1565,12 +1574,12 @@ tr:hover td{background:var(--surface-variant);}
               };
 
               const testConn = async () => {
-                if (!intgCompanySlug) { flash('❌ Kompaniya slug topilmadi (subdomen yoki ?company= parametri kerak)'); return; }
+                if (!slug) { flash('❌ Kompaniya slug topilmadi'); return; }
                 setTestStatus('loading');
                 try {
                   const r = await fetch('/api/webhook/sheets', {
                     method:'POST', headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({ company_slug:intgCompanySlug, name:'Test Mijoz (Sheets)', phone:'', note:'CRM dan yuborilgan sinov lead' }),
+                    body: JSON.stringify({ company_slug:slug, name:'Test Mijoz (Google Sheets)', phone:'', note:'CRM dan yuborilgan sinov lead' }),
                   });
                   const d = await r.json();
                   setTestStatus((r.ok && d.success) ? 'ok' : 'err');
@@ -1578,22 +1587,14 @@ tr:hover td{background:var(--surface-variant);}
                 setTimeout(()=>setTestStatus(null), 3000);
               };
 
-              const FIELD_ROWS = [
-                {key:'name',   label:'Ism (name)'},
-                {key:'phone',  label:'Telefon (phone)'},
-                {key:'email',  label:'Email'},
-                {key:'region', label:'Shahar / Hudud'},
-                {key:'note',   label:'Izoh (note)'},
-              ];
-
               return (
                 <div style={{padding:'20px 22px'}}>
                   {/* Yo'riqnoma */}
                   <div style={{marginBottom:'16px'}}>
                     {[
-                      {n:1, title:'Facebook Lead Ads → Google Sheets', desc:'Ads Manager → Lead Ads → "Connect to Spreadsheet" — Meta tasdiq talab qilmaydi'},
-                      {n:2, title:'Apps Script ni joylashtiring', desc:'Google Sheets → Extensions → Apps Script → kodni paste qiling → createTrigger() ni bir marta ishga tushiring'},
-                      {n:3, title:'Tayyor! Har 5 daqiqada avtomatik', desc:'Yangi qatorlar CRM ga tushadi, takrorlangan telefon raqamlar o\'tkazib yuboriladi'},
+                      {n:1, title:'Facebook Lead Ads → Google Sheets', desc:'Ads Manager → Lead Ads formasi → "Connect to Spreadsheet" — Meta tasdiq talab qilmaydi'},
+                      {n:2, title:'Расширения → Apps Script → kodni paste qiling', desc:'Sheetni oching → yuqori menyu → Расширения (Extensions) → Apps Script → kodni joylashtiring → createTrigger() ni bir marta ▶️ Run qiling'},
+                      {n:3, title:'Tayyor! Har 5 daqiqada avtomatik', desc:'Skript sarlavhadan ustunlarni o\'zi topadi — full_name, phone_number, email va boshqalar avtomatik aniqlanadi'},
                     ].map(s=>(
                       <div key={s.n} style={{display:'flex',gap:'11px',marginBottom:'11px',alignItems:'flex-start'}}>
                         <div style={{width:'22px',height:'22px',borderRadius:'50%',background:GS,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800,flexShrink:0}}>{s.n}</div>
@@ -1605,37 +1606,15 @@ tr:hover td{background:var(--surface-variant);}
                     ))}
                   </div>
 
-                  {/* Ustun moslash */}
-                  <div style={{background:'rgba(15,157,88,0.06)',border:'1px solid rgba(15,157,88,0.2)',borderRadius:'10px',padding:'14px',marginBottom:'14px'}}>
-                    <div style={{fontSize:'10px',fontWeight:700,color:GS,textTransform:'uppercase',marginBottom:'10px',letterSpacing:'0.07em'}}>📋 Ustun Moslash (Column Mapping)</div>
-                    <label style={{display:'flex',alignItems:'center',gap:'7px',cursor:'pointer',fontSize:'12px',color:'var(--text-secondary)',marginBottom:'10px'}}>
-                      <input type="checkbox" checked={headerRow} onChange={e=>setHeaderRow(e.target.checked)} style={{accentColor:GS}} />
-                      Birinchi qator sarlavha (header) — o'tkazib yuboriladi
-                    </label>
-                    {FIELD_ROWS.map(c=>(
-                      <div key={c.key} style={{display:'grid',gridTemplateColumns:'1fr 16px 72px',alignItems:'center',gap:'8px',marginBottom:'6px'}}>
-                        <span style={{fontSize:'12px',color:'var(--text-secondary)'}}>{c.label}</span>
-                        <span style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center'}}>→</span>
-                        <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
-                          <span style={{fontSize:'13px',fontWeight:800,color:GS,width:'18px',textAlign:'center'}}>{colLetter(colMap[c.key])}</span>
-                          <input type="number" min="0" max="25" value={colMap[c.key]}
-                            onChange={e=>setColMap({...colMap,[c.key]:parseInt(e.target.value)||0})}
-                            style={{width:'40px',padding:'4px 5px',borderRadius:'5px',border:'1px solid var(--outline-variant)',background:'var(--bg-base)',color:'var(--text-main)',fontSize:'12px',textAlign:'center'}}/>
-                        </div>
-                      </div>
-                    ))}
-                    <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'5px'}}>* Raqam: 0=A, 1=B, 2=C, 3=D, 4=E ...</div>
-                  </div>
-
-                  {/* Webhook URL */}
-                  <div style={{background:'rgba(15,157,88,0.07)',border:'1px solid rgba(15,157,88,0.2)',borderRadius:'9px',padding:'10px 14px',marginBottom:'14px'}}>
-                    <div style={{fontSize:'10px',fontWeight:700,color:GS,marginBottom:'5px',textTransform:'uppercase'}}>Webhook URL — skript ichida avtomatik qo'shiladi</div>
-                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                      <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{webhookUrl}</code>
-                      <button onClick={()=>copyText(webhookUrl,'gs_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='gs_wh'?'#01a750':GS,color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                        {copiedItem==='gs_wh'?'✓':'📋 Nusxa'}
-                      </button>
+                  {/* Avtomatik aniqlanadigan sarlavhalar */}
+                  <div style={{background:'rgba(15,157,88,0.06)',border:'1px solid rgba(15,157,88,0.2)',borderRadius:'10px',padding:'12px 14px',marginBottom:'14px'}}>
+                    <div style={{fontSize:'10px',fontWeight:700,color:GS,textTransform:'uppercase',marginBottom:'8px',letterSpacing:'0.07em'}}>✅ Avtomatik aniqlanadigan sarlavhalar</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                      {['full_name','first_name','phone_number','phone','email','city','country','comments','message'].map(h=>(
+                        <span key={h} style={{fontSize:'10px',fontWeight:600,padding:'3px 8px',borderRadius:'20px',background:'rgba(15,157,88,0.12)',color:GS,border:'1px solid rgba(15,157,88,0.25)',fontFamily:'monospace'}}>{h}</span>
+                      ))}
                     </div>
+                    <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'7px'}}>Meta sheet sarlavhasi yuqoridagilardan biriga mos kelsa — avtomatik CRM ga o'tkaziladi</div>
                   </div>
 
                   {/* Apps Script kodi */}
@@ -1646,7 +1625,7 @@ tr:hover td{background:var(--surface-variant);}
                         {copiedItem==='gs_script'?'✓ Nusxalandi':'📋 Kodni Nusxalash'}
                       </button>
                     </div>
-                    <pre style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'12px',fontSize:'10px',lineHeight:'1.65',color:'var(--text-secondary)',overflow:'auto',maxHeight:'210px',margin:0,fontFamily:'monospace',whiteSpace:'pre'}}>{script}</pre>
+                    <pre style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'12px',fontSize:'10px',lineHeight:'1.65',color:'var(--text-secondary)',overflow:'auto',maxHeight:'220px',margin:0,fontFamily:'monospace',whiteSpace:'pre'}}>{script}</pre>
                   </div>
 
                   {/* Amallar */}
