@@ -745,15 +745,24 @@ tr:hover td{background:var(--surface-variant);}
       const [apiKeys,     setApiKeys]     = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_api_keys_local')||'[]'); } catch{return [];} });
       // Pipelines list (for webform link generation)
       const [intgPipelines] = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_pipelines')||'[]'); } catch{return [];} });
-      // Company slug (for building links that include the company)
+      // Company slug (subdomain → URL param → session dan ketma-ket qidirish)
       const intgCompanySlug = (() => {
+        // 1. Subdomain: kompaniya.mizon-crm.uz
         const host = window.location.hostname;
         const DOMAIN = 'mizon-crm.uz';
         if (host !== DOMAIN && host !== 'www.'+DOMAIN && host.endsWith('.'+DOMAIN)) {
           const sub = host.slice(0, host.length - DOMAIN.length - 1);
           if (sub && sub !== 'www') return sub;
         }
-        return new URLSearchParams(window.location.search).get('company') || '';
+        // 2. URL parametr: ?company=slug
+        const urlSlug = new URLSearchParams(window.location.search).get('company');
+        if (urlSlug) return urlSlug;
+        // 3. Kirgan foydalanuvchining session ma'lumotlaridan
+        try {
+          const session = JSON.parse(localStorage.getItem('mizon_session') || 'null');
+          if (session?.companySlug) return session.companySlug;
+        } catch {}
+        return '';
       })();
       const [activeModal, setActiveModal] = useState(null);
       const [formData,    setFormData]    = useState({});
