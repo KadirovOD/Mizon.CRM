@@ -360,6 +360,83 @@ app.post('/api/webhook/meta',      webhookController.handleMetaWebhook);
 app.post('/api/webhook/telegram',  webhookController.handleTelegramWebhook);
 app.post('/api/webhook/moizvonki', voipController.handleWebhook);
 
+// POST /api/webhook/sheets — Google Sheets Apps Script dan keluvchi leadlar
+// JWT talab qilinmaydi (Apps Script serveri to'g'ridan-to'g'ri chaqiradi)
+app.post('/api/webhook/sheets', async (req, res) => {
+  try {
+    const body        = req.body || {};
+    const slug        = (body.company_slug || req.query.company || req.query.slug || '').trim();
+    const name        = (body.name  || '').trim();
+    const phone       = (body.phone || '').trim();
+    const email       = (body.email || '').trim();
+    const region      = (body.region || body.city || '').trim();
+    const note        = (body.note  || body.comment || '').trim();
+    const rowIndex    = body.row_index || null; // Takrorlanishni aniqlash uchun
+
+    if (!req.db)  return res.status(503).json({ error: 'DB disabled' });
+    if (!slug)    return res.status(400).json({ error: 'company_slug majburiy' });
+    if (!name && !phone) return res.status(400).json({ error: 'name yoki phone majburiy' });
+
+    // Kompaniyani topish
+    const cR = await req.db.query(
+      'SELECT id FROM companies WHERE slug=$1 AND is_active=true LIMIT 1', [slug]
+    );
+    if (!cR.rows.length) return res.status(404).json({ error: 'Kompaniya topilmadi' });
+    const companyId = cR.rows[0].id;
+
+    // Telefon bo'yicha takrorlanishni tekshirish
+    if (phone) {
+      const clean = phone.replace(/\D/g, '');
+      if (clean.length >= 7) {
+        const dup = await req.db.query(
+          "SELECT id FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 AND company_id=$2 LIMIT 1",
+          [clean, companyId]
+        );
+        if (dup.rows.length) {
+          return res.json({ success: true, duplicate: true, id: dup.rows[0].id });
+        }
+      }
+    }
+
+    // Birinchi bosqichni olish
+    const stageR = await req.db.query(
+      'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence ASC LIMIT 1', [companyId]
+    );
+    const stageId = stageR.rows[0]?.id || 1;
+
+    // taskdescription — qo'shimcha maydonlar
+    const extraParts = [
+      note   && `Izoh: ${note}`,
+    ].filter(Boolean);
+
+    const inserted = await req.db.query(
+      `INSERT INTO crm_lead
+         (name, phone, email, region, taskdescription,
+          mizon_source, lead_score, stage_id, company_id, chatlogs)
+       VALUES ($1,$2,$3,$4,$5,'google_sheets',30,$6,$7,$8) RETURNING id`,
+      [
+        name || `+${phone}`,
+        phone || null,
+        email || null,
+        region || null,
+        extraParts.join(' | ') || null,
+        stageId, companyId,
+        JSON.stringify([{
+          type: 'sys',
+          date: new Date().toISOString(),
+          text: `📊 Google Sheets orqali keldi${rowIndex ? ` (qator ${rowIndex})` : ''}`,
+        }]),
+      ]
+    );
+
+    console.log(`📊 Google Sheets lead: "${name || phone}" → company=${slug} id=${inserted.rows[0].id}`);
+    res.json({ success: true, id: inserted.rows[0].id });
+  } catch (err) {
+    console.error('Sheets webhook error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── VoIP ─────────────────────────────────────────────────────────────────────
 app.get ('/api/voip/config',    voipController.getConfig);
 app.post('/api/voip/config',    voipController.saveConfig);

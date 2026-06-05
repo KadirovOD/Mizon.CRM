@@ -980,6 +980,10 @@ tr:hover td{background:var(--surface-variant);}
             {k:'domain',     label:'Domain', ph:'app.moizvonki.ru', t:'text'},
           ],
           wh:{label:'Callback Webhook — Moizvonki kabinetiga kiriting', url:`${origin}/api/webhook/moizvonki`} },
+
+        { key:'google_sheets', name:'Google Sheets', logo:'📊', color:'#0f9d58', bg:'rgba(15,157,88,0.12)',
+          desc:'Facebook Lead Ads → Google Sheets → CRM: Apps Script orqali avtomatik sinxronizatsiya',
+          customUI: true },
       ];
 
       const cfgIsOn = (key) => { const c = configs[key]; return Array.isArray(c) ? c.length > 0 : !!c; };
@@ -1460,18 +1464,222 @@ tr:hover td{background:var(--surface-variant);}
               );
             };
 
+            // ── Google Sheets custom UI ─────────────────────────────
+            const SheetsFlow = () => {
+              const GS = '#0f9d58';
+              const saved = configs.google_sheets || {};
+              const [colMap, setColMap] = useState({
+                name:   saved.col_name   ?? saved.name   ?? 0,
+                phone:  saved.col_phone  ?? saved.phone  ?? 1,
+                email:  saved.col_email  ?? saved.email  ?? 2,
+                region: saved.col_region ?? saved.region ?? 3,
+                note:   saved.col_note   ?? saved.note   ?? 4,
+              });
+              const [headerRow,  setHeaderRow]  = useState(saved.header_row  ?? true);
+              const [gsSaving,   setGsSaving]   = useState(false);
+              const [testStatus, setTestStatus] = useState(null); // null|'loading'|'ok'|'err'
+
+              const colLetter = n => String.fromCharCode(65 + Math.min(25, Math.max(0, parseInt(n) || 0)));
+              const webhookUrl = `${origin}/api/webhook/sheets`;
+
+              // Apps Script — dinamik generatsiya (ustun moslash bilan)
+              const script = [
+                `// ╔════════════════════════════════════════════════╗`,
+                `// ║   Mizon CRM — Google Sheets Integration        ║`,
+                `// ║   Extensions → Apps Script ga joylashtiring    ║`,
+                `// ╚════════════════════════════════════════════════╝`,
+                ``,
+                `const CRM_WEBHOOK  = '${webhookUrl}';`,
+                `const COMPANY_SLUG = '${intgCompanySlug || 'YOUR_COMPANY_SLUG'}';`,
+                `const HEADER_ROWS  = ${headerRow ? 1 : 0}; // sarlavha qatorlari soni`,
+                ``,
+                `// Ustun moslash (0 = A, 1 = B, 2 = C, ...)`,
+                `const COL = {`,
+                `  name:   ${colMap.name},   // ${colLetter(colMap.name)} ustun — Ism`,
+                `  phone:  ${colMap.phone},  // ${colLetter(colMap.phone)} ustun — Telefon`,
+                `  email:  ${colMap.email},  // ${colLetter(colMap.email)} ustun — Email`,
+                `  region: ${colMap.region}, // ${colLetter(colMap.region)} ustun — Shahar/Hudud`,
+                `  note:   ${colMap.note},   // ${colLetter(colMap.note)} ustun — Izoh`,
+                `};`,
+                ``,
+                `// ─── Asosiy funksiya ────────────────────────────────────`,
+                `function syncNewLeads() {`,
+                `  const sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();`,
+                `  const lastRow = sheet.getLastRow();`,
+                `  const props   = PropertiesService.getScriptProperties();`,
+                `  const lastProcessed = parseInt(props.getProperty('mizon_last_row') || String(HEADER_ROWS));`,
+                `  if (lastRow <= lastProcessed) return;`,
+                ``,
+                `  const startRow = lastProcessed + 1;`,
+                `  const data = sheet.getRange(startRow, 1, lastRow - lastProcessed, sheet.getLastColumn()).getValues();`,
+                ``,
+                `  let processed = lastProcessed;`,
+                `  for (let i = 0; i < data.length; i++) {`,
+                `    const row = data[i];`,
+                `    const payload = {`,
+                `      company_slug: COMPANY_SLUG,`,
+                `      name:   String(row[COL.name]   || '').trim(),`,
+                `      phone:  String(row[COL.phone]  || '').trim(),`,
+                `      email:  String(row[COL.email]  || '').trim(),`,
+                `      region: String(row[COL.region] || '').trim(),`,
+                `      note:   String(row[COL.note]   || '').trim(),`,
+                `      row_index: startRow + i,`,
+                `    };`,
+                `    if (!payload.name && !payload.phone) { processed++; continue; }`,
+                `    try {`,
+                `      const resp   = UrlFetchApp.fetch(CRM_WEBHOOK, {`,
+                `        method: 'post', contentType: 'application/json',`,
+                `        payload: JSON.stringify(payload), muteHttpExceptions: true,`,
+                `      });`,
+                `      const result = JSON.parse(resp.getContentText());`,
+                `      Logger.log('Qator '+(startRow+i)+': '+(result.duplicate?'⚠️ Takrorlangan':'✅ id='+result.id));`,
+                `    } catch(e) { Logger.log('Xato: '+e.message); }`,
+                `    processed++;`,
+                `    props.setProperty('mizon_last_row', String(processed));`,
+                `  }`,
+                `}`,
+                ``,
+                `// ─── Trigger o'rnatish — BIR MARTA ishga tushiring ─────`,
+                `function createTrigger() {`,
+                `  ScriptApp.getProjectTriggers()`,
+                `    .filter(t => t.getHandlerFunction() === 'syncNewLeads')`,
+                `    .forEach(t => ScriptApp.deleteTrigger(t));`,
+                `  ScriptApp.newTrigger('syncNewLeads').timeBased().everyMinutes(5).create();`,
+                `  Logger.log("✅ Trigger o'rnatildi — har 5 daqiqada sinxronlanadi");`,
+                `}`,
+              ].join('\n');
+
+              const saveGs = async () => {
+                setGsSaving(true);
+                try {
+                  await fetch('/api/integrations', {method:'POST', headers:authH(), body:JSON.stringify({
+                    platform: 'google_sheets',
+                    extra_config: { col_name:colMap.name, col_phone:colMap.phone, col_email:colMap.email, col_region:colMap.region, col_note:colMap.note, header_row:headerRow },
+                  })});
+                  const updated = {...configs, google_sheets:{...colMap, header_row:headerRow, _connected_at:new Date().toISOString()}};
+                  setConfigs(updated); localStorage.setItem('mizon_integrations', JSON.stringify(updated));
+                  flash('✅ Google Sheets sozlamalari saqlandi');
+                  setActiveModal(null);
+                } catch(e) { flash('❌ '+e.message); }
+                setGsSaving(false);
+              };
+
+              const testConn = async () => {
+                if (!intgCompanySlug) { flash('❌ Kompaniya slug topilmadi (subdomen yoki ?company= parametri kerak)'); return; }
+                setTestStatus('loading');
+                try {
+                  const r = await fetch('/api/webhook/sheets', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ company_slug:intgCompanySlug, name:'Test Mijoz (Sheets)', phone:'', note:'CRM dan yuborilgan sinov lead' }),
+                  });
+                  const d = await r.json();
+                  setTestStatus((r.ok && d.success) ? 'ok' : 'err');
+                } catch { setTestStatus('err'); }
+                setTimeout(()=>setTestStatus(null), 3000);
+              };
+
+              const FIELD_ROWS = [
+                {key:'name',   label:'Ism (name)'},
+                {key:'phone',  label:'Telefon (phone)'},
+                {key:'email',  label:'Email'},
+                {key:'region', label:'Shahar / Hudud'},
+                {key:'note',   label:'Izoh (note)'},
+              ];
+
+              return (
+                <div style={{padding:'20px 22px'}}>
+                  {/* Yo'riqnoma */}
+                  <div style={{marginBottom:'16px'}}>
+                    {[
+                      {n:1, title:'Facebook Lead Ads → Google Sheets', desc:'Ads Manager → Lead Ads → "Connect to Spreadsheet" — Meta tasdiq talab qilmaydi'},
+                      {n:2, title:'Apps Script ni joylashtiring', desc:'Google Sheets → Extensions → Apps Script → kodni paste qiling → createTrigger() ni bir marta ishga tushiring'},
+                      {n:3, title:'Tayyor! Har 5 daqiqada avtomatik', desc:'Yangi qatorlar CRM ga tushadi, takrorlangan telefon raqamlar o\'tkazib yuboriladi'},
+                    ].map(s=>(
+                      <div key={s.n} style={{display:'flex',gap:'11px',marginBottom:'11px',alignItems:'flex-start'}}>
+                        <div style={{width:'22px',height:'22px',borderRadius:'50%',background:GS,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800,flexShrink:0}}>{s.n}</div>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:'13px'}}>{s.title}</div>
+                          <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px',lineHeight:'1.5'}}>{s.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Ustun moslash */}
+                  <div style={{background:'rgba(15,157,88,0.06)',border:'1px solid rgba(15,157,88,0.2)',borderRadius:'10px',padding:'14px',marginBottom:'14px'}}>
+                    <div style={{fontSize:'10px',fontWeight:700,color:GS,textTransform:'uppercase',marginBottom:'10px',letterSpacing:'0.07em'}}>📋 Ustun Moslash (Column Mapping)</div>
+                    <label style={{display:'flex',alignItems:'center',gap:'7px',cursor:'pointer',fontSize:'12px',color:'var(--text-secondary)',marginBottom:'10px'}}>
+                      <input type="checkbox" checked={headerRow} onChange={e=>setHeaderRow(e.target.checked)} style={{accentColor:GS}} />
+                      Birinchi qator sarlavha (header) — o'tkazib yuboriladi
+                    </label>
+                    {FIELD_ROWS.map(c=>(
+                      <div key={c.key} style={{display:'grid',gridTemplateColumns:'1fr 16px 72px',alignItems:'center',gap:'8px',marginBottom:'6px'}}>
+                        <span style={{fontSize:'12px',color:'var(--text-secondary)'}}>{c.label}</span>
+                        <span style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center'}}>→</span>
+                        <div style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                          <span style={{fontSize:'13px',fontWeight:800,color:GS,width:'18px',textAlign:'center'}}>{colLetter(colMap[c.key])}</span>
+                          <input type="number" min="0" max="25" value={colMap[c.key]}
+                            onChange={e=>setColMap({...colMap,[c.key]:parseInt(e.target.value)||0})}
+                            style={{width:'40px',padding:'4px 5px',borderRadius:'5px',border:'1px solid var(--outline-variant)',background:'var(--bg-base)',color:'var(--text-main)',fontSize:'12px',textAlign:'center'}}/>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'5px'}}>* Raqam: 0=A, 1=B, 2=C, 3=D, 4=E ...</div>
+                  </div>
+
+                  {/* Webhook URL */}
+                  <div style={{background:'rgba(15,157,88,0.07)',border:'1px solid rgba(15,157,88,0.2)',borderRadius:'9px',padding:'10px 14px',marginBottom:'14px'}}>
+                    <div style={{fontSize:'10px',fontWeight:700,color:GS,marginBottom:'5px',textTransform:'uppercase'}}>Webhook URL — skript ichida avtomatik qo'shiladi</div>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{webhookUrl}</code>
+                      <button onClick={()=>copyText(webhookUrl,'gs_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='gs_wh'?'#01a750':GS,color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
+                        {copiedItem==='gs_wh'?'✓':'📋 Nusxa'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Apps Script kodi */}
+                  <div style={{marginBottom:'14px'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
+                      <span style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase'}}>Google Apps Script kodi</span>
+                      <button onClick={()=>copyText(script,'gs_script')} style={{padding:'4px 12px',fontSize:'11px',fontWeight:700,background:copiedItem==='gs_script'?'rgba(1,167,80,0.15)':'rgba(15,157,88,0.12)',color:copiedItem==='gs_script'?'#01a750':GS,border:`1px solid ${copiedItem==='gs_script'?'rgba(1,167,80,0.3)':'rgba(15,157,88,0.3)'}`,borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                        {copiedItem==='gs_script'?'✓ Nusxalandi':'📋 Kodni Nusxalash'}
+                      </button>
+                    </div>
+                    <pre style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'12px',fontSize:'10px',lineHeight:'1.65',color:'var(--text-secondary)',overflow:'auto',maxHeight:'210px',margin:0,fontFamily:'monospace',whiteSpace:'pre'}}>{script}</pre>
+                  </div>
+
+                  {/* Amallar */}
+                  <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                    <button style={{flex:1,padding:'10px',background:GS,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:700,cursor:'pointer',opacity:gsSaving?0.7:1}} disabled={gsSaving} onClick={saveGs}>
+                      {gsSaving?'⏳ Saqlanmoqda...':(cfgIsOn('google_sheets')?'💾 Yangilash':'✅ Faollashtirish')}
+                    </button>
+                    <button onClick={testConn} disabled={testStatus==='loading'} style={{padding:'10px 14px',background:testStatus==='ok'?'rgba(1,167,80,0.12)':testStatus==='err'?'rgba(239,68,68,0.1)':'var(--surface-variant)',border:`1px solid ${testStatus==='ok'?'rgba(1,167,80,0.3)':testStatus==='err'?'rgba(239,68,68,0.3)':'var(--outline-variant)'}`,color:testStatus==='ok'?'#01a750':testStatus==='err'?'#ef4444':'var(--text-secondary)',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:600,whiteSpace:'nowrap'}}>
+                      {testStatus==='loading'?'⏳ Test...':testStatus==='ok'?'✅ Ishlaydi':testStatus==='err'?'❌ Xato':'🧪 Test'}
+                    </button>
+                    {cfgIsOn('google_sheets') && (
+                      <button style={{padding:'10px 12px',background:'none',border:'1px solid rgba(239,68,68,0.35)',color:'#ef4444',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:600}} onClick={()=>disconnectIntg('google_sheets')}>Uzish</button>
+                    )}
+                  </div>
+                </div>
+              );
+            };
+
             // ── Modal wrapper ───────────────────────────────────────
+            const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets';
             const isFbIg = activeModal.key === 'facebook' || activeModal.key === 'instagram';
             return (
               <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
-                <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:isFbIg?'500px':(activeModal.showMapping?'580px':'460px'),maxHeight:'92vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
+                <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:isCustomUI?'520px':(activeModal.showMapping?'580px':'460px'),maxHeight:'92vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
 
                   {/* Header */}
                   <div style={{padding:'18px 22px 14px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)',position:'sticky',top:0,background:'var(--bg-surface)',zIndex:1}}>
                     <div style={{width:'42px',height:'42px',background:activeModal.bg,borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>{activeModal.logo}</div>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:700,fontSize:'16px'}}>{activeModal.name}</div>
-                      <div style={{fontSize:'11px',color:'var(--text-muted)'}}>{isFbIg?'OAuth orqali ulash':'Integratsiya sozlamalari'}</div>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)'}}>
+                        {activeModal.key==='google_sheets' ? 'Ustun moslash va Apps Script' : isFbIg ? 'OAuth orqali ulash' : 'Integratsiya sozlamalari'}
+                      </div>
                     </div>
                     <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1,padding:'4px'}}>✕</button>
                   </div>
@@ -1482,8 +1690,11 @@ tr:hover td{background:var(--surface-variant);}
                   {/* Instagram OAuth */}
                   {activeModal.key === 'instagram' && <IgOAuthFlow />}
 
+                  {/* Google Sheets */}
+                  {activeModal.key === 'google_sheets' && <SheetsFlow />}
+
                   {/* Standard form modal (telegram, voip, webhook) */}
-                  {!isFbIg && (
+                  {!isCustomUI && (
                     <div style={{padding:'20px 22px'}}>
                       {activeModal.wh && (
                         <div style={{background:activeModal.bg,border:`1px solid ${activeModal.color}30`,borderRadius:'9px',padding:'11px 14px',marginBottom:'16px'}}>
@@ -4023,11 +4234,11 @@ tr:hover td{background:var(--surface-variant);}
       useEffect(() => { const iv = setInterval(()=>setTick(t=>t+1), 60000); return ()=>clearInterval(iv); }, []);
       const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-      // ── Refs: back-button handler uchun joriy state ni saqlash ──
-      const stateRefs = useRef({ selectedLeadId: null, showAddLead: false, showCompleteModal: false, activeTab: 'dashboard' });
+      // ── Refs: event handler'lar uchun joriy state ni saqlash (stale closure oldini olish) ──
+      const stateRefs = useRef({ selectedLeadId: null, showAddLead: false, showCompleteModal: false, activeTab: 'dashboard', editLeadSnapshot: null, editingLead: false, leads: [], authUser: null });
       useEffect(() => {
-        stateRefs.current = { selectedLeadId, showAddLead, showCompleteModal, activeTab };
-      }, [selectedLeadId, showAddLead, showCompleteModal, activeTab]);
+        stateRefs.current = { selectedLeadId, showAddLead, showCompleteModal, activeTab, editLeadSnapshot, editingLead, leads, authUser };
+      }, [selectedLeadId, showAddLead, showCompleteModal, activeTab, editLeadSnapshot, editingLead, leads, authUser]);
 
       // ── Orqaga tugmasi (touchpad swipe / browser back) ──────────
       useEffect(() => {
@@ -4053,30 +4264,94 @@ tr:hover td{background:var(--surface-variant);}
       }, [authUser]);
 
       // ── Klaviatura: ESC va Enter ─────────────────────────────────
+      // [] — bir marta ro'yxatdan o'tadi, stateRefs orqali har doim yangi qiymatlar o'qiladi
       useEffect(() => {
         const handleKeyDown = (e) => {
-          // ESC: ochiq modal / panel ni yopish
+          const s = stateRefs.current;
+
+          // ── ESC: bekor qilish va yopish ──────────────────────────
           if (e.key === 'Escape') {
-            if (selectedLeadId) {
+            if (s.selectedLeadId) {
+              // Tahrirlash rejimida bo'lsa — snapshot ga qaytarish (o'zgarishlar saqlanmaydi)
+              if (s.editLeadSnapshot) {
+                setLeads(prev => prev.map(l =>
+                  String(l.id) === String(s.selectedLeadId) ? s.editLeadSnapshot : l
+                ));
+                setEditLeadSnapshot(null);
+                setEditingLead(false);
+              }
               setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);
-            } else if (showCompleteModal) {
+            } else if (s.showCompleteModal) {
               setShowCompleteModal(false);
-            } else if (showAddLead) {
+            } else if (s.showAddLead) {
               setShowAddLead(false);
             }
             return;
           }
-          // Enter: lead detail panelni yopish
-          if (e.key === 'Enter' && selectedLeadId) {
+
+          // ── Enter: saqlash va yopish ──────────────────────────────
+          if (e.key === 'Enter' && s.selectedLeadId) {
+            // Matn kiritish maydonlarida Enter ni ushlamaymiz
             if (e.target.id === 'chatMessageInputBox') return;
-            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-              setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);
+            if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+            // Joriy leadni leads massividan topamiz
+            const currentLead = (s.leads || []).find(l => String(l.id) === String(s.selectedLeadId));
+            if (currentLead) {
+              // applyAuditAndSave mantiqini inline bajarish (stale closure yo'q)
+              const snapshot = s.editLeadSnapshot;
+              const FIELDS = { name: 'Ism', phone: 'Telefon', region: 'Manzil', source: 'Manba', owner: "Mas'ul xodim" };
+              const changes = snapshot
+                ? Object.entries(FIELDS)
+                    .filter(([k]) => (snapshot[k] || '') !== (currentLead[k] || ''))
+                    .map(([k, label]) => `${label}: "${snapshot[k] || '—'}" → "${currentLead[k] || '—'}"`)
+                : [];
+              let finalLead = currentLead;
+              if (changes.length > 0) {
+                const by = s.authUser?.username || "Noma'lum";
+                finalLead = {
+                  ...currentLead,
+                  chatLogs: [...(currentLead.chatLogs || []), {
+                    type: 'audit', date: new Date().toISOString(), by,
+                    text: `✏️ ${by} o'zgartirdi: ${changes.join(' | ')}`,
+                  }],
+                };
+                setLeads(prev => prev.map(l => String(l.id) === String(currentLead.id) ? finalLead : l));
+                // Faqat haqiqiy o'zgarishlar bo'lganda API ga saqlash
+                if (!String(finalLead.id).startsWith('L_') && !String(finalLead.id).startsWith('EXT_')) {
+                  setSyncStatus('saving');
+                  const token = localStorage.getItem('mizon_token');
+                  fetch('/api/leads/' + finalLead.id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+                    body: JSON.stringify({
+                      status:             stageMapRef.current.toDbId[finalLead.status] || finalLead.status,
+                      name:               finalLead.name,
+                      phone:              finalLead.phone,
+                      region:             finalLead.region,
+                      source:             finalLead.source,
+                      actualCallAttempts: finalLead.actualCallAttempts,
+                      deadline:           finalLead.deadline,
+                      taskDescription:    finalLead.taskDescription,
+                      chatLogs:           finalLead.chatLogs,
+                      owner:              finalLead.owner,
+                      customData:         finalLead.customData || {},
+                    }),
+                  })
+                    .then(res => { if (!res.ok) setSyncStatus('error'); else setSyncStatus('saved'); })
+                    .catch(() => setSyncStatus('error'));
+                }
+              }
             }
+
+            setEditingLead(false);
+            setEditLeadSnapshot(null);
+            setSelectedLeadId(null); setShowCompleteModal(false); setHasUnsavedChanges(false);
           }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-      }, [selectedLeadId, showCompleteModal, showAddLead]);
+      }, []);
 
       const handleLogin = async (e) => {
         e.preventDefault();
