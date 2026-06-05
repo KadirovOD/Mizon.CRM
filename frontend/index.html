@@ -769,46 +769,61 @@ tr:hover td{background:var(--surface-variant);}
       // Load existing integrations from backend on mount
       useEffect(() => {
         const H = {'Authorization':'Bearer '+localStorage.getItem('mizon_token')};
+
+        // API tomonidan boshqariladigan barcha platformalar
+        // Bu ro'yxatdagi platformalar faqat DB dan yuklanadi — localStorage dagi eskilar tozalanadi
+        const API_PLATFORMS = ['facebook','instagram','telegram','webhook','google_sheets'];
+
         // Load platform integrations
         fetch('/api/integrations', {headers:H}).then(r=>r.ok?r.json():null).then(list => {
           if (!Array.isArray(list)) return;
           const loaded = {};
           list.forEach(cfg => {
             if (['facebook','instagram'].includes(cfg.platform)) {
-              // Multi-connection: array per platform
               if (!loaded[cfg.platform]) loaded[cfg.platform] = [];
               loaded[cfg.platform].push({
-                id:           cfg.id,
-                page_id:      cfg.page_id || '',
-                form_id:      cfg.form_id || '',
+                id:            cfg.id,
+                page_id:       cfg.page_id || '',
+                form_id:       cfg.form_id || '',
                 _connected_at: cfg.created_at || new Date().toISOString(),
                 ...(cfg.extra_config || {}),
               });
             } else {
               loaded[cfg.platform] = {
-                page_id:      cfg.page_id      || '',
-                form_id:      cfg.form_id      || '',
-                _connected_at: cfg.created_at  || new Date().toISOString(),
+                page_id:       cfg.page_id      || '',
+                form_id:       cfg.form_id      || '',
+                _connected_at: cfg.created_at   || new Date().toISOString(),
                 ...(cfg.extra_config || {}),
               };
             }
           });
           setConfigs(prev => {
-            const merged = {...prev, ...loaded};
+            // localStorage dagi eski platform ma'lumotlarini tozalash,
+            // so'ng faqat DB dan kelganlarni qo'yish
+            const cleaned = {...prev};
+            API_PLATFORMS.forEach(p => { delete cleaned[p]; });
+            const merged = {...cleaned, ...loaded};
             localStorage.setItem('mizon_integrations', JSON.stringify(merged));
             return merged;
           });
         }).catch(()=>{});
+
         // Load VoIP config
         fetch('/api/voip/config', {headers:H}).then(r=>r.ok?r.json():null).then(d => {
-          if (d?.configured) {
-            setConfigs(prev => {
-              const upd = {...prev, voip:{account_id:d.account_id, caller_id:d.caller_id, domain:d.domain, _connected_at:d.created_at||new Date().toISOString()}};
-              localStorage.setItem('mizon_integrations', JSON.stringify(upd));
-              return upd;
-            });
-          }
+          setConfigs(prev => {
+            const upd = {...prev};
+            if (d?.configured) {
+              // VoIP ulangan — ma'lumotlarni yangilash
+              upd.voip = { account_id:d.account_id, caller_id:d.caller_id, domain:d.domain, _connected_at:d.created_at||new Date().toISOString() };
+            } else {
+              // VoIP ulangan emas — localStorage dagi eski ma'lumotni o'chirish
+              delete upd.voip;
+            }
+            localStorage.setItem('mizon_integrations', JSON.stringify(upd));
+            return upd;
+          });
         }).catch(()=>{});
+
         // Load API keys
         fetch('/api/api-keys', {headers:H}).then(r=>r.ok?r.json():null).then(list => {
           if (!Array.isArray(list)) return;
