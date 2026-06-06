@@ -54,6 +54,11 @@ function _rlFail(key) {
   return { justLocked: false, attemptsLeft: RL_MAX - e.count };
 }
 function _rlClear(key) { _locks.delete(key); }
+// Memory leak oldini olish: lock'i tugagan yozuvlarni har soatda tozalash
+setInterval(() => {
+  const now = Date.now();
+  _locks.forEach((v, k) => { if (v.lockUntil <= now && v.count === 0) _locks.delete(k); });
+}, 3_600_000);
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 exports.login = async (req, res) => {

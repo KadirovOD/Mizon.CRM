@@ -4772,7 +4772,7 @@ tr:hover td{background:var(--surface-variant);}
         return () => clearInterval(iv);
       }, [leads, authUser]);
 
-      // Kiruvchi qo'ng'iroqlar — har 5 sek polling (Moizvonki webhook orqali keladiganlar)
+      // Kiruvchi qo'ng'iroqlar — har 30 sek polling (Moizvonki webhook orqali keladiganlar)
       useEffect(() => {
         if (!authUser) return;
         const poll = async () => {
@@ -4792,7 +4792,7 @@ tr:hover td{background:var(--surface-variant);}
             reloadLeadsFromApi(); // yangi/yangilangan leadlarni ko'rsatish
           } catch { /* server yo'q — skip */ }
         };
-        const iv = setInterval(poll, 5000);
+        const iv = setInterval(poll, 30000);
         return () => clearInterval(iv);
       }, [authUser, addNotif]);
 

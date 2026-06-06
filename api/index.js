@@ -1,8 +1,9 @@
-const express = require('express');
-const cors    = require('cors');
-const path    = require('path');
-const https   = require('https');
-const { Pool } = require('pg');
+const express     = require('express');
+const cors        = require('cors');
+const compression = require('compression');
+const path        = require('path');
+const https       = require('https');
+const { Pool }    = require('pg');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
@@ -25,13 +26,16 @@ const pool = DB_URL
       ssl: DB_URL.includes('localhost') || DB_URL.includes('127.0.0.1')
         ? false
         : { rejectUnauthorized: false },   // Railway / Supabase / Neon SSL
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      max: 20,
+      idleTimeoutMillis: 15000,
+      connectionTimeoutMillis: 10000,
     })
   : null;
 
 app.use((req, res, next) => { req.db = pool; next(); });
+
+// Gzip kompressiya — JSON response hajmini 60-70% kamaytiradi
+app.use(compression());
 
 app.use(cors({
   origin: (origin, cb) => {
