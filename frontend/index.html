@@ -678,18 +678,24 @@ tr:hover td{background:var(--surface-variant);}
                   <select className="input-base" style={{marginBottom:0}} value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                     <option value="MANAGER">MANAGER</option>
                     <option value="CEO">CEO</option>
+                    <option value="WATCHER">KUZATUVCHI</option>
                   </select>
                   <button className="btn-primary" onClick={saveEdit}>Saqlash</button>
                   <button className="btn-outline" onClick={()=>setEditId(null)}>Bekor</button>
                 </div>
               );
+              const roleColor = {CEO:'#01a750', MANAGER:'#3b82f6', WATCHER:'#8b5cf6'}[u.role] || '#888';
               return (
                 <div key={uid} style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 14px', background:'var(--bg-base)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
                   <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                    <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px'}}>{u.username[0].toUpperCase()}</div>
+                    <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px', background:`${roleColor}22`, color:roleColor}}>{u.username[0].toUpperCase()}</div>
                     <div>
                       <div style={{fontWeight:600, color:'var(--accent)'}}>{u.username}</div>
-                      <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{u.role}{u.full_name && u.full_name!==u.username ? ' · '+u.full_name : ''}{u.email ? ' · '+u.email : ''}</div>
+                      <div style={{fontSize:'11px', color:'var(--text-muted)', display:'flex', gap:'6px', alignItems:'center'}}>
+                        <span style={{padding:'1px 7px', borderRadius:'10px', fontSize:'10px', fontWeight:700, background:`${roleColor}18`, color:roleColor}}>{u.role==='WATCHER'?'KUZATUVCHI':u.role}</span>
+                        {u.full_name && u.full_name!==u.username && <span>{u.full_name}</span>}
+                        {u.email && <span>{u.email}</span>}
+                      </div>
                     </div>
                   </div>
                   <div style={{display:'flex', gap:'8px'}}>
@@ -709,6 +715,7 @@ tr:hover td{background:var(--surface-variant);}
               <select className="input-base" value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                 <option value="MANAGER">MANAGER (Sotuvchi)</option>
                 <option value="CEO">CEO (Boshqaruvchi)</option>
+                <option value="WATCHER">KUZATUVCHI (Faqat ko'rish)</option>
               </select>
               <div style={{display:'flex', gap:'8px'}}>
                 <button className="btn-primary" onClick={saveNewUser} disabled={saving}>{saving?'Saqlanmoqda...':'Qo\'shish'}</button>
@@ -725,6 +732,28 @@ tr:hover td{background:var(--surface-variant);}
     // ===== GLOBAL LIMITS =====
     const GlobalLimitsConfig = ({ globalCallLimit, setGlobalCallLimit }) => {
       const [tlimit, setTlimit] = useState(globalCallLimit);
+      const [saving, setSaving] = useState(false);
+      const [saved,  setSaved]  = useState(false);
+
+      const saveLimit = async () => {
+        setSaving(true);
+        try {
+          const t = localStorage.getItem('mizon_token');
+          const r = await fetch('/api/company/settings', {
+            method:'PUT',
+            headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+            body: JSON.stringify({ call_limit: tlimit }),
+          });
+          const d = await r.json();
+          if (d.success) {
+            setGlobalCallLimit(tlimit);
+            localStorage.setItem('mizon_callLimit', String(tlimit));
+            setSaved(true); setTimeout(()=>setSaved(false), 2500);
+          } else { alert('❌ ' + (d.error || 'Saqlashda xato')); }
+        } catch(e) { alert('❌ Server xatosi'); }
+        setSaving(false);
+      };
+
       return (
         <div style={{padding:'20px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
           <span className="label-sm">Avtomatik LOST Limit (Call Limit)</span>
@@ -732,8 +761,10 @@ tr:hover td{background:var(--surface-variant);}
             Ushbu raqam mijoz bilan bog'lanish uchun berilgan maksimal urinishlar soni. Limit tugasa tizim mijozni LOST statusiga o'tkazadi.
           </p>
           <div style={{display:'flex', gap:'12px', alignItems:'center'}}>
-            <input type="number" className="input-base" style={{marginBottom:0, width:'100px', fontSize:'18px'}} value={tlimit} onChange={e=>setTlimit(Number(e.target.value))} />
-            <button className="btn-primary" onClick={()=>{setGlobalCallLimit(tlimit);alert("Global limit saqlandi!");}}>Tasdiqlash</button>
+            <input type="number" className="input-base" style={{marginBottom:0, width:'100px', fontSize:'18px'}} value={tlimit} min={1} max={50} onChange={e=>setTlimit(Number(e.target.value))} />
+            <button className="btn-primary" onClick={saveLimit} disabled={saving} style={{minWidth:'110px'}}>
+              {saving ? 'Saqlanmoqda...' : saved ? '✅ Saqlandi!' : 'Tasdiqlash'}
+            </button>
           </div>
         </div>
       );
@@ -2657,6 +2688,66 @@ tr:hover td{background:var(--surface-variant);}
               </tbody>
             </table>
           </div>
+
+          {/* ── Task 2: Harakatlar Jurnali (Activity Log) ── */}
+          {(() => {
+            // Barcha leadlardan sys va audit chatlog yozuvlarini yig'amiz
+            const actLogs = [];
+            leads.forEach(l => {
+              const logs = Array.isArray(l.chatLogs) ? l.chatLogs : [];
+              logs.forEach(log => {
+                if (log.type === 'sys' || log.type === 'audit') {
+                  actLogs.push({ ...log, leadId: l.id, leadName: l.name, leadPhone: l.phone });
+                }
+              });
+            });
+            // Sanaga qarab tartiblash (yangi birinchi)
+            actLogs.sort((a,b) => new Date(b.date) - new Date(a.date));
+            const shown = actLogs.slice(0, 200);
+            return (
+              <div className="card" style={{padding:0, overflow:'hidden', marginTop:'16px'}}>
+                <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                  <div>
+                    <span style={{fontWeight:600, fontSize:'14px'}}>📋 Harakatlar Jurnali</span>
+                    <span style={{fontSize:'11px', color:'var(--text-muted)', marginLeft:'10px'}}>(so'nggi {shown.length} ta yozuv)</span>
+                  </div>
+                </div>
+                {shown.length === 0 ? (
+                  <div style={{padding:'30px', textAlign:'center', color:'var(--text-muted)', fontSize:'13px'}}>
+                    Hali hech qanday harakat qayd etilmagan
+                  </div>
+                ) : (
+                  <div style={{maxHeight:'400px', overflowY:'auto'}}>
+                    {shown.map((log, idx) => {
+                      const isAudit = log.type === 'audit';
+                      const dt = new Date(log.date);
+                      const dtStr = dt.toLocaleDateString('uz-UZ', {day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('uz-UZ', {hour:'2-digit',minute:'2-digit'});
+                      return (
+                        <div key={idx} style={{display:'flex', gap:'12px', alignItems:'flex-start', padding:'10px 20px', borderBottom:'1px solid var(--outline-variant)', cursor:setSelectedLeadId?'pointer':'default'}}
+                          onClick={()=>setSelectedLeadId&&setSelectedLeadId(log.leadId)}
+                          onMouseEnter={e=>{if(setSelectedLeadId)e.currentTarget.style.background='var(--bg-hover)';}}
+                          onMouseLeave={e=>e.currentTarget.style.background=''}>
+                          <div style={{width:'6px', height:'6px', borderRadius:'50%', background:isAudit?'#3b82f6':'var(--text-muted)', marginTop:'6px', flexShrink:0}}></div>
+                          <div style={{flex:1, minWidth:0}}>
+                            <div style={{fontSize:'12px', color:'var(--text-secondary)', lineHeight:1.4}}>{log.text}</div>
+                            <div style={{display:'flex', gap:'10px', marginTop:'3px'}}>
+                              <span style={{fontSize:'10px', color:'var(--text-muted)'}}>{dtStr}</span>
+                              {log.leadName && (
+                                <span style={{fontSize:'10px', color:'var(--primary)', fontWeight:600}}>
+                                  {log.leadName}{log.leadPhone ? ` · ${log.leadPhone}` : ''}
+                                </span>
+                              )}
+                              {log.by && <span style={{fontSize:'10px', color:'var(--text-muted)'}}>by {log.by}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       );
     };
@@ -3409,6 +3500,14 @@ tr:hover td{background:var(--surface-variant);}
       const [copiedSlug,   setCopiedSlug]   = useState(null);
       const [editUserModal, setEditUserModal] = useState(null);
       const [editUserForm,  setEditUserForm]  = useState({username:'', password:'', role:'MANAGER', full_name:''});
+      // Task 4: Settings tab — parol o'zgartirish
+      const [saView,        setSaView]        = useState('companies'); // 'companies' | 'settings'
+      const [passForm,      setPassForm]      = useState({currentPassword:'', newPassword:'', confirmPassword:'', keyword:''});
+      const [passSaving,    setPassSaving]    = useState(false);
+      // Task 5: Company edit modal
+      const [editCompModal, setEditCompModal] = useState(null); // null | companyObj
+      const [editCompForm,  setEditCompForm]  = useState({name:'', slug:'', plan:'basic', call_limit:5, email:''});
+      const [editCompSaving, setEditCompSaving] = useState(false);
 
       const token = localStorage.getItem('mizon_token');
       const H = {'Content-Type':'application/json','Authorization':'Bearer '+token};
@@ -3518,8 +3617,24 @@ tr:hover td{background:var(--surface-variant);}
       };
 
       const deleteCompany = async (comp) => {
-        if (!window.confirm(`"${comp.name}" kompaniyasini va barcha ma'lumotlarini o'chirasizmi?`)) return;
-        await fetch(`/api/superadmin/companies/${comp.id}`, {method:'DELETE', headers:H});
+        // Task 3: Kalit so'z tekshiruvi
+        const keyword = window.prompt(
+          `⚠️ "${comp.name}" kompaniyasini O'CHIRISH uchun kalit so'zni kiriting:\n\n` +
+          `Bu amalni bekor qilib bo'lmaydi. Barcha leadlar, xodimlar va ma'lumotlar o'chib ketadi!\n\n` +
+          `Kalit so'z:`
+        );
+        if (!keyword) return; // Bekor qilindi
+        if (keyword.trim() !== 'tizim') {
+          alert('❌ Noto\'g\'ri kalit so\'z. O\'chirish bekor qilindi.');
+          return;
+        }
+        const r = await fetch(`/api/superadmin/companies/${comp.id}`, {
+          method:'DELETE', headers:{...H, 'Content-Type':'application/json'},
+          body: JSON.stringify({ keyword: 'tizim' }),
+        });
+        const d = await r.json();
+        if (!r.ok) { flash('❌ ' + d.error); return; }
+        flash('✅ Kompaniya o\'chirildi');
         loadCompanies(); setView('list');
       };
 
@@ -3561,6 +3676,48 @@ tr:hover td{background:var(--surface-variant);}
         loadCompanyUsers(selCompany);
       };
 
+      // Task 4: SA parol o'zgartirish
+      const changePassword = async (e) => {
+        e.preventDefault();
+        if (passForm.newPassword !== passForm.confirmPassword)
+          return flash('❌ Yangi parollar mos kelmadi');
+        if (passForm.keyword !== 'tizim')
+          return flash('❌ Noto\'g\'ri kalit so\'z');
+        setPassSaving(true);
+        const r = await fetch('/api/superadmin/password', {
+          method:'PUT', headers:H,
+          body: JSON.stringify({ currentPassword:passForm.currentPassword, newPassword:passForm.newPassword, keyword:passForm.keyword })
+        });
+        const d = await r.json(); setPassSaving(false);
+        if (!r.ok) return flash('❌ ' + d.error);
+        flash('✅ Parol muvaffaqiyatli o\'zgartirildi');
+        setPassForm({currentPassword:'', newPassword:'', confirmPassword:'', keyword:''});
+      };
+
+      // Task 5: Company tahrirlash
+      const openEditComp = (comp) => {
+        setEditCompForm({
+          name: comp.name || '',
+          slug: comp.slug || '',
+          plan: comp.plan || 'basic',
+          call_limit: comp.call_limit || 5,
+          email: comp.email || '',
+        });
+        setEditCompModal(comp);
+      };
+      const submitEditComp = async (e) => {
+        e.preventDefault(); setEditCompSaving(true);
+        const r = await fetch(`/api/superadmin/companies/${editCompModal.id}`, {
+          method:'PUT', headers:{...H, 'Content-Type':'application/json'},
+          body: JSON.stringify(editCompForm),
+        });
+        const d = await r.json(); setEditCompSaving(false);
+        if (!r.ok) return flash('❌ ' + d.error);
+        flash('✅ Kompaniya ma\'lumotlari yangilandi');
+        setEditCompModal(null);
+        loadCompanies(true);
+      };
+
       const planBadge = (plan) => ({basic:'#3b82f6', pro:'#8b5cf6', enterprise:'#f59e0b'}[plan]||'#6b7280');
 
       return (
@@ -3578,7 +3735,10 @@ tr:hover td{background:var(--surface-variant);}
             </div>
             <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
               {view !== 'list' && <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('list')}>← Orqaga</button>}
-              <button className="btn-primary" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('create')}>+ Kompaniya qo'shish</button>
+              {saView === 'companies' && <button className="btn-primary" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('create')}>+ Kompaniya qo'shish</button>}
+              <button className={`btn-outline`} style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setSaView(saView==='settings'?'companies':'settings')}>
+                {saView==='settings' ? '← Kompaniyalar' : '⚙️ Sozlamalar'}
+              </button>
               <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={onLogout}>Chiqish</button>
             </div>
           </div>
@@ -3587,6 +3747,41 @@ tr:hover td{background:var(--surface-variant);}
           {msg && <div style={{background:msg.startsWith('✅')?'rgba(1,167,80,0.12)':'rgba(239,68,68,0.1)', border:`1px solid ${msg.startsWith('✅')?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`, color:msg.startsWith('✅')?'#01a750':'#ef4444', padding:'12px 28px', fontSize:'13px'}}>{msg}</div>}
 
           <div style={{padding:'28px', maxWidth:'1100px', margin:'0 auto'}}>
+
+            {/* ── SETTINGS VIEW (Task 4) ── */}
+            {saView === 'settings' && (
+              <div style={{maxWidth:'480px'}}>
+                <div style={{fontWeight:700, fontSize:'18px', marginBottom:'20px'}}>⚙️ Super Admin Sozlamalari</div>
+                <div className="card" style={{padding:'24px'}}>
+                  <div style={{fontWeight:600, fontSize:'14px', marginBottom:'16px', borderBottom:'1px solid var(--outline-variant)', paddingBottom:'10px'}}>🔑 Parolni o'zgartirish</div>
+                  <form onSubmit={changePassword} style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+                    <div>
+                      <span className="label-sm">Joriy parol *</span>
+                      <input className="input-base" type="password" placeholder="••••••••" value={passForm.currentPassword} onChange={e=>setPassForm({...passForm,currentPassword:e.target.value})} required />
+                    </div>
+                    <div>
+                      <span className="label-sm">Yangi parol *</span>
+                      <input className="input-base" type="password" placeholder="Kamida 6 ta belgi" value={passForm.newPassword} onChange={e=>setPassForm({...passForm,newPassword:e.target.value})} required minLength={6} />
+                    </div>
+                    <div>
+                      <span className="label-sm">Yangi parolni tasdiqlang *</span>
+                      <input className="input-base" type="password" placeholder="Yangi parolni qaytaring" value={passForm.confirmPassword} onChange={e=>setPassForm({...passForm,confirmPassword:e.target.value})} required />
+                    </div>
+                    <div>
+                      <span className="label-sm">Kalit so'z * (tasdiqlash uchun)</span>
+                      <input className="input-base" type="text" placeholder="tizim" value={passForm.keyword} onChange={e=>setPassForm({...passForm,keyword:e.target.value})} required />
+                      <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'3px'}}>Amalning haqiqiyligini tasdiqlash uchun <b>"tizim"</b> deb kiriting</div>
+                    </div>
+                    <button className="btn-primary" type="submit" disabled={passSaving} style={{padding:'10px', marginTop:'4px'}}>
+                      {passSaving ? 'Saqlanmoqda...' : '🔒 Parolni o\'zgartirish'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* ── COMPANIES VIEWS (only when saView === 'companies') ── */}
+            {saView === 'companies' && <>
 
             {/* ── CREATE VIEW ── */}
             {view === 'create' && (
@@ -3652,6 +3847,7 @@ tr:hover td{background:var(--surface-variant);}
                     </div>
                   </div>
                   <div style={{display:'flex', gap:'8px'}}>
+                    <button className="btn-outline" style={{padding:'7px 14px', fontSize:'12px'}} onClick={()=>openEditComp(selCompany)}>✏️ Tahrirlash</button>
                     <button className={selCompany.is_active ? 'btn-outline' : 'btn-primary'} style={{padding:'7px 14px', fontSize:'12px'}} onClick={()=>toggleActive(selCompany)}>
                       {selCompany.is_active ? '⛔ Bloklash' : '✅ Faollashtirish'}
                     </button>
@@ -3686,7 +3882,9 @@ tr:hover td{background:var(--surface-variant);}
                       <div><span className="label-sm">Parol *</span><input className="input-base" style={{marginBottom:0}} type="password" placeholder="••••••" value={userForm.password} onChange={e=>setUserForm({...userForm,password:e.target.value})} required /></div>
                       <div><span className="label-sm">Rol</span>
                         <select className="input-base" style={{marginBottom:0}} value={userForm.role} onChange={e=>setUserForm({...userForm,role:e.target.value})}>
-                          <option value="MANAGER">MANAGER</option><option value="CEO">CEO</option>
+                          <option value="MANAGER">MANAGER</option>
+                          <option value="CEO">CEO</option>
+                          <option value="WATCHER">KUZATUVCHI</option>
                         </select>
                       </div>
                       <div style={{display:'flex', gap:'6px', paddingBottom:'1px'}}>
@@ -3747,6 +3945,7 @@ tr:hover td{background:var(--surface-variant);}
                         <select className="input-base" style={{marginBottom:0}} value={editUserForm.role} onChange={e=>setEditUserForm({...editUserForm,role:e.target.value})}>
                           <option value="MANAGER">MANAGER</option>
                           <option value="CEO">CEO</option>
+                          <option value="WATCHER">KUZATUVCHI</option>
                         </select>
                       </div>
                     </div>
@@ -3837,6 +4036,7 @@ tr:hover td{background:var(--surface-variant);}
                           {c.is_active?'Faol':'Bloklangan'}
                         </span>
                         <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>openDetail(c)}>Boshqarish</button>
+                        <button className="btn-outline" style={{padding:'6px 12px', fontSize:'11px'}} onClick={e=>{e.stopPropagation();openEditComp(c);}}>✏️</button>
                         <button className={c.is_active?'btn-outline':'btn-primary'} style={{padding:'6px 12px', fontSize:'11px'}} onClick={()=>toggleActive(c)}>
                           {c.is_active?'Bloklash':'Faollashtirish'}
                         </button>
@@ -3846,7 +4046,53 @@ tr:hover td{background:var(--surface-variant);}
                 </div>
               </div>
             )}
+
+            </> /* End saView==='companies' */}
           </div>
+
+          {/* ── EDIT COMPANY MODAL (Task 5) ── */}
+          {editCompModal && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setEditCompModal(null);}}>
+              <div style={{background:'var(--bg-surface)',borderRadius:'14px',width:'100%',maxWidth:'520px',boxShadow:'0 24px 64px rgba(0,0,0,0.5)'}}>
+                <div style={{padding:'18px 22px 14px',borderBottom:'1px solid var(--outline-variant)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:'15px'}}>Kompaniyani tahrirlash</div>
+                    <div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'2px'}}>{editCompModal.name}</div>
+                  </div>
+                  <button onClick={()=>setEditCompModal(null)} style={{background:'none',border:'none',fontSize:'18px',cursor:'pointer',color:'var(--text-muted)'}}>✕</button>
+                </div>
+                <form onSubmit={submitEditComp} style={{padding:'18px 22px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <span className="label-sm">Kompaniya nomi *</span>
+                    <input className="input-base" style={{marginBottom:0}} placeholder="Kompaniya nomi" value={editCompForm.name} onChange={e=>setEditCompForm({...editCompForm,name:e.target.value})} required />
+                  </div>
+                  <div>
+                    <span className="label-sm">URL Slug</span>
+                    <input className="input-base" style={{marginBottom:0}} placeholder="slug" value={editCompForm.slug} onChange={e=>setEditCompForm({...editCompForm,slug:e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'-')})} />
+                    {editCompForm.slug && <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'3px'}}>{editCompForm.slug}.{MAIN_DOMAIN}</div>}
+                  </div>
+                  <div>
+                    <span className="label-sm">Email</span>
+                    <input className="input-base" style={{marginBottom:0}} type="email" placeholder="info@kompaniya.uz" value={editCompForm.email} onChange={e=>setEditCompForm({...editCompForm,email:e.target.value})} />
+                  </div>
+                  <div>
+                    <span className="label-sm">Tarif rejasi</span>
+                    <select className="input-base" style={{marginBottom:0}} value={editCompForm.plan} onChange={e=>setEditCompForm({...editCompForm,plan:e.target.value})}>
+                      <option value="basic">Basic</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span className="label-sm">Qo'ng'iroq limiti</span>
+                    <input className="input-base" style={{marginBottom:0}} type="number" min="1" max="50" value={editCompForm.call_limit} onChange={e=>setEditCompForm({...editCompForm,call_limit:parseInt(e.target.value)||5})} />
+                  </div>
+                  <div style={{gridColumn:'1/-1',display:'flex',gap:'8px',marginTop:'4px'}}>
+                    <button className="btn-primary" type="submit" disabled={editCompSaving} style={{flex:1,padding:'10px'}}>{editCompSaving?'Saqlanmoqda...':'💾 Saqlash'}</button>
+                    <button className="btn-outline" type="button" style={{padding:'10px 16px'}} onClick={()=>setEditCompModal(null)}>Bekor</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
@@ -4032,7 +4278,24 @@ tr:hover td{background:var(--surface-variant);}
 
       useEffect(() => { reloadLeadsFromApi(); }, []);
 
-      const [globalCallLimit, setGlobalCallLimit] = useState(5);
+      // Task 7: globalCallLimit — localStorage dan o'qish (login paytida saqlanadi)
+      const [globalCallLimit, setGlobalCallLimit] = useState(() => {
+        const saved = localStorage.getItem('mizon_callLimit');
+        return saved ? parseInt(saved) || 5 : 5;
+      });
+      // Startup: API dan call_limit yuklash (localStorage ga sync)
+      useEffect(() => {
+        const t = localStorage.getItem('mizon_token');
+        if (!t) return;
+        fetch('/api/company/settings', { headers: { 'Authorization': 'Bearer ' + t } })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (d?.call_limit) {
+              setGlobalCallLimit(d.call_limit);
+              localStorage.setItem('mizon_callLimit', String(d.call_limit));
+            }
+          }).catch(() => {});
+      }, []);
       useEffect(() => { localStorage.setItem('mizon_pipelines', JSON.stringify(pipelines)); }, [pipelines]);
       useEffect(() => { localStorage.setItem('mizon_columnsMap', JSON.stringify(columnsMap)); }, [columnsMap]);
       useEffect(() => { localStorage.setItem('mizon_leads', JSON.stringify(leads)); }, [leads]);
@@ -4719,7 +4982,7 @@ tr:hover td{background:var(--surface-variant);}
             <div className="sidebar-brand">
               <div className="brand-icon">M</div>
               <span className="brand-name">MIZON</span>
-              <span className="brand-role">{role}</span>
+              <span className="brand-role" style={role==='WATCHER'?{background:'rgba(139,92,246,0.15)',color:'#8b5cf6',borderColor:'rgba(139,92,246,0.3)'}:undefined}>{role==='WATCHER'?'KUZATUVCHI':role}</span>
             </div>
 
             <nav className="sidebar-nav">
@@ -4734,12 +4997,18 @@ tr:hover td{background:var(--surface-variant);}
                 <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>call</span> Call Center
               </div>
 
-              {role === 'CEO' && (
+              {/* CEO va WATCHER uchun Hisobotlar */}
+              {(role === 'CEO' || role === 'WATCHER') && (
                 <>
                   <span className="nav-section-label" style={{marginTop:'8px'}}>Analitika</span>
                   <div className={`nav-item ${activeTab==='reports'?'active':''}`} onClick={()=>{setActiveTab('reports');setSelectedLeadId(null);}}>
                     <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>bar_chart_4_bars</span> Hisobotlar
                   </div>
+                </>
+              )}
+
+              {role === 'CEO' && (
+                <>
                   <div className={`nav-item ${activeTab==='marketing'?'active':''}`} onClick={()=>{setActiveTab('marketing');setSelectedLeadId(null);}}>
                     <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>campaign</span> Marketing
                   </div>
@@ -4921,7 +5190,7 @@ tr:hover td{background:var(--surface-variant);}
                       </div>
                     )}
 
-                    {hasUnsavedChanges ? (
+                    {hasUnsavedChanges && role !== 'WATCHER' ? (
                       <button className="btn-success" onClick={()=>{
                         if (selectedLeadData) applyAuditAndSave(selectedLeadData, editLeadSnapshot);
                         setEditingLead(false);
@@ -4938,20 +5207,22 @@ tr:hover td{background:var(--surface-variant);}
                     <div className="lead-profile-col">
                       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
                         <span className="label-sm" style={{marginBottom:0}}>Mijoz ma'lumotlari</span>
-                        <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={()=>{
-                          if (editingLead && selectedLeadData) {
-                            applyAuditAndSave(selectedLeadData, editLeadSnapshot);
-                          } else if (!editingLead && selectedLeadData) {
-                            // Edit rejimiga kirish — asl nusxani saqlaymiz
-                            setEditLeadSnapshot({ ...selectedLeadData });
-                          }
-                          setEditingLead(prev => !prev);
-                        }}>
-                          {editingLead ? <><Ico n="check" s={12}/> Saqlash</> : <><Ico n="pencil" s={12}/> Tahrirlash</>}
-                        </button>
+                        {role !== 'WATCHER' && (
+                          <button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={()=>{
+                            if (editingLead && selectedLeadData) {
+                              applyAuditAndSave(selectedLeadData, editLeadSnapshot);
+                            } else if (!editingLead && selectedLeadData) {
+                              // Edit rejimiga kirish — asl nusxani saqlaymiz
+                              setEditLeadSnapshot({ ...selectedLeadData });
+                            }
+                            setEditingLead(prev => !prev);
+                          }}>
+                            {editingLead ? <><Ico n="check" s={12}/> Saqlash</> : <><Ico n="pencil" s={12}/> Tahrirlash</>}
+                          </button>
+                        )}
                       </div>
 
-                      {editingLead ? (
+                      {editingLead && role !== 'WATCHER' ? (
                         <div style={{display:'flex', flexDirection:'column', gap:'4px', marginBottom:'18px'}}>
                           <span className="label-sm">Ism:</span>
                           <input className="input-base" value={selectedLeadData.name} onChange={e=>{setHasUnsavedChanges(true);setLeads(prev=>prev.map(l=>l.id==selectedLeadId?{...l,name:e.target.value}:l));}} />
@@ -5040,16 +5311,26 @@ tr:hover td{background:var(--surface-variant);}
                           )}
                         </div>
                       ) : (
-                        <div style={{padding:'14px', borderRadius:'8px', marginBottom:'16px', background:'var(--bg-hover)', border:'1px solid var(--border-light)'}}>
-                          <div style={{fontSize:'12px', color:'var(--danger)', fontWeight:600, marginBottom:'10px', display:'flex', alignItems:'center', gap:'5px'}}><Ico n="alert" s={13}/> Vazifa biriktirilmagan!</div>
-                          <input className="input-base" placeholder="Vazifa izoh (matn)..." value={taskDescInput} onChange={e=>setTaskDescInput(e.target.value)} />
-                          <input type="datetime-local" className="input-base" value={taskDateInput} onChange={e=>setTaskDateInput(e.target.value)} />
-                          <button className="btn-primary" style={{width:'100%'}} onClick={()=>handleTaskCreate(selectedLeadData.id)}>Vazifani belgilash</button>
-                        </div>
+                        {role !== 'WATCHER' ? (
+                          <div style={{padding:'14px', borderRadius:'8px', marginBottom:'16px', background:'var(--bg-hover)', border:'1px solid var(--border-light)'}}>
+                            <div style={{fontSize:'12px', color:'var(--danger)', fontWeight:600, marginBottom:'10px', display:'flex', alignItems:'center', gap:'5px'}}><Ico n="alert" s={13}/> Vazifa biriktirilmagan!</div>
+                            <input className="input-base" placeholder="Vazifa izoh (matn)..." value={taskDescInput} onChange={e=>setTaskDescInput(e.target.value)} />
+                            <input type="datetime-local" className="input-base" value={taskDateInput} onChange={e=>setTaskDateInput(e.target.value)} />
+                            <button className="btn-primary" style={{width:'100%'}} onClick={()=>handleTaskCreate(selectedLeadData.id)}>Vazifani belgilash</button>
+                          </div>
+                        ) : (
+                          <div style={{padding:'10px 14px', borderRadius:'8px', marginBottom:'16px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', fontSize:'12px', color:'var(--text-muted)', display:'flex', alignItems:'center', gap:'5px'}}>
+                            <Ico n="alert" s={12}/> Vazifa belgilanmagan
+                          </div>
+                        )}
                       )}
 
                       <span className="label-sm">Qo'ng'iroq</span>
-                      {callingLeadId === String(selectedLeadData.id) ? (
+                      {role === 'WATCHER' ? (
+                        <div style={{padding:'8px 12px', marginBottom:'14px', fontSize:'12px', color:'var(--text-muted)', background:'var(--bg-hover)', borderRadius:'8px', border:'1px solid var(--border-light)'}}>
+                          <Ico n="phone" s={13}/> {selectedLeadData.actualCallAttempts} ta qo'ng'iroq qayd etilgan
+                        </div>
+                      ) : callingLeadId === String(selectedLeadData.id) ? (
                         <button className="btn-primary" style={{width:'100%', marginBottom:'14px', opacity:0.85, cursor:'not-allowed'}} disabled>
                           <span className="calling-ring">📞</span> Qo'ng'iroq amalga oshirilmoqda...
                         </button>
@@ -5059,10 +5340,16 @@ tr:hover td{background:var(--surface-variant);}
                         </button>
                       )}
 
-                      <span className="label-sm">Bosqichni o'zgartirish</span>
-                      <select className="input-base" value={selectedLeadData.status} onChange={e=>handleStatusChange(selectedLeadData.id, e.target.value)}>
-                        {columnsMap[selectedLeadData.pipelineId]?.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}
-                      </select>
+                      <span className="label-sm">Bosqich</span>
+                      {role === 'WATCHER' ? (
+                        <div style={{padding:'8px 12px', fontSize:'12px', color:'var(--text-secondary)', background:'var(--bg-hover)', borderRadius:'8px', border:'1px solid var(--border-light)'}}>
+                          {columnsMap[selectedLeadData.pipelineId]?.find(c=>c.id===selectedLeadData.status)?.title || selectedLeadData.status}
+                        </div>
+                      ) : (
+                        <select className="input-base" value={selectedLeadData.status} onChange={e=>handleStatusChange(selectedLeadData.id, e.target.value)}>
+                          {columnsMap[selectedLeadData.pipelineId]?.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}
+                        </select>
+                      )}
                     </div>
 
                     {/* CHAT COLUMN */}
@@ -5173,10 +5460,12 @@ tr:hover td{background:var(--surface-variant);}
                           return <div key={idx} className={`msg-bubble ${log.dir==='in'?'msg-in':'msg-out'}`}>{log.text}</div>;
                         })}
                       </div>
-                      <div className="chat-input-area">
-                        <input id="chatMessageInputBox" className="input-base" style={{marginBottom:0}} placeholder="Izoh yoki qayd yozib qoldirish..." value={chatMessageInput} onChange={e=>setChatMessageInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') handleSendChatMsg(selectedLeadData.id);}} />
-                        <button className="btn-primary" onClick={()=>handleSendChatMsg(selectedLeadData.id)}>Yuborish</button>
-                      </div>
+                      {role !== 'WATCHER' && (
+                        <div className="chat-input-area">
+                          <input id="chatMessageInputBox" className="input-base" style={{marginBottom:0}} placeholder="Izoh yoki qayd yozib qoldirish..." value={chatMessageInput} onChange={e=>setChatMessageInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') handleSendChatMsg(selectedLeadData.id);}} />
+                          <button className="btn-primary" onClick={()=>handleSendChatMsg(selectedLeadData.id)}>Yuborish</button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5208,7 +5497,7 @@ tr:hover td{background:var(--surface-variant);}
 
               {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} syncLeadToAPI={syncLeadToAPI} addNotif={addNotif} voipConfigured={voipConfigured} />}
 
-              {activeTab === 'reports' && role === 'CEO' && <HisobotlarModule leads={leads} columnsMap={columnsMap} pipelines={pipelines} setSelectedLeadId={setSelectedLeadId} />}
+              {activeTab === 'reports' && (role === 'CEO' || role === 'WATCHER') && <HisobotlarModule leads={leads} columnsMap={columnsMap} pipelines={pipelines} setSelectedLeadId={setSelectedLeadId} />}
 
               {activeTab === 'automation' && role === 'CEO' && <AutomationModule getAuthHeaders={getAuthHeaders} />}
               {activeTab === 'marketing' && role === 'CEO' && <MarketingModule />}
@@ -5223,9 +5512,11 @@ tr:hover td{background:var(--surface-variant);}
                       <select className="pipeline-selector" value={activePipe} onChange={e=>setActivePipe(e.target.value)}>
                         {pipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
-                      <button className="btn-primary" onClick={()=>setShowAddLead(true)}>
-                        <Ico n="plus" s={14}/> Yangi Lead
-                      </button>
+                      {role !== 'WATCHER' && (
+                        <button className="btn-primary" onClick={()=>setShowAddLead(true)}>
+                          <Ico n="plus" s={14}/> Yangi Lead
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -5234,7 +5525,7 @@ tr:hover td{background:var(--surface-variant);}
                       const colLeads = filteredActiveLeads.filter(l => l.status === col.id);
                       const dotColor = colColors[col.id] || '#888';
                       return (
-                        <div key={col.id} className="kanban-col" onDragOver={e=>e.preventDefault()} onDrop={e=>handleDrop(e, col.id)}>
+                        <div key={col.id} className="kanban-col" onDragOver={role!=='WATCHER'?e=>e.preventDefault():undefined} onDrop={role!=='WATCHER'?e=>handleDrop(e, col.id):undefined}>
                           <div className="kanban-col-header">
                             <span className="kanban-col-title">
                               <span className="col-dot" style={{background:dotColor}}></span>
@@ -5253,8 +5544,8 @@ tr:hover td{background:var(--surface-variant);}
                               return (
                                 <div key={lead.id} className={`k-card ${customClass}`}
                                   style={{borderLeftColor: customClass ? undefined : dotColor}}
-                                  draggable={true}
-                                  onDragStart={e=>handleDragStart(e, lead.id)}
+                                  draggable={role !== 'WATCHER'}
+                                  onDragStart={role !== 'WATCHER' ? e=>handleDragStart(e, lead.id) : undefined}
                                   onClick={()=>setSelectedLeadId(lead.id)}>
                                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px'}}>
                                     <span className={`source-badge badge-${lead.source}`}>{lead.source.replace('meta_','')}</span>

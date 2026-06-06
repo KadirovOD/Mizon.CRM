@@ -59,7 +59,7 @@ exports.getSettings = async (req, res) => {
   const cid = req.user?.companyId;
   try {
     const r = await req.db.query(
-      'SELECT form_title, form_subtitle, extra_settings FROM companies WHERE id=$1',
+      'SELECT form_title, form_subtitle, extra_settings, call_limit FROM companies WHERE id=$1',
       [cid]
     );
     res.json(r.rows[0] || {});
@@ -71,18 +71,20 @@ exports.updateSettings = async (req, res) => {
   if (!req.user || req.user.role !== 'CEO')
     return res.status(403).json({ error: 'Faqat CEO o\'zgartira oladi' });
   if (!req.db) return res.status(500).json({ error: 'DB ulangan emas' });
-  const { form_title, form_subtitle, extra_settings } = req.body || {};
+  const { form_title, form_subtitle, extra_settings, call_limit } = req.body || {};
   try {
     await req.db.query(
       `UPDATE companies
          SET form_title     = COALESCE($1, form_title),
              form_subtitle  = COALESCE($2, form_subtitle),
-             extra_settings = COALESCE($3::jsonb, extra_settings)
-       WHERE id = $4`,
+             extra_settings = COALESCE($3::jsonb, extra_settings),
+             call_limit     = COALESCE($4, call_limit)
+       WHERE id = $5`,
       [
         form_title    !== undefined ? form_title    : null,
         form_subtitle !== undefined ? form_subtitle : null,
         extra_settings != null ? JSON.stringify(extra_settings) : null,
+        call_limit    != null  ? parseInt(call_limit) : null,
         req.user.companyId,
       ]
     );

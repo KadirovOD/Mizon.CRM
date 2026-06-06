@@ -112,12 +112,21 @@ exports.createCompany = async (req, res) => {
 // ── PUT /api/superadmin/companies/:id ─────────────────────────────────────────
 exports.updateCompany = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { is_active, plan, call_limit, name } = req.body || {};
+  const { is_active, plan, call_limit, name, slug, email } = req.body || {};
+  const cleanSlug = slug ? slug.toLowerCase().replace(/[^a-z0-9-]/g, '-') : undefined;
   try {
     if (ec.isAvailable()) {
       const companies = await ec.getCompanies();
       const updated = companies.map(c => c.id === req.params.id
-        ? { ...c, ...(is_active !== undefined && { is_active }), ...(plan && { plan }), ...(call_limit && { call_limit }), ...(name && { name }) }
+        ? {
+            ...c,
+            ...(is_active !== undefined && { is_active }),
+            ...(plan      && { plan }),
+            ...(call_limit && { call_limit }),
+            ...(name      && { name }),
+            ...(cleanSlug && { slug: cleanSlug }),
+            ...(email !== undefined && { email }),
+          }
         : c
       );
       await ec.saveCompanies(updated);
@@ -125,13 +134,31 @@ exports.updateCompany = async (req, res) => {
     }
     if (req.db) {
       await req.db.query(
-        'UPDATE companies SET is_active=COALESCE($1,is_active),plan=COALESCE($2,plan),call_limit=COALESCE($3,call_limit),name=COALESCE($4,name) WHERE id=$5',
-        [is_active, plan, call_limit, name, req.params.id]
+        `UPDATE companies
+           SET is_active  = COALESCE($1, is_active),
+               plan       = COALESCE($2, plan),
+               call_limit = COALESCE($3, call_limit),
+               name       = COALESCE($4, name),
+               slug       = COALESCE($5, slug),
+               email      = COALESCE($6, email)
+         WHERE id = $7`,
+        [
+          is_active !== undefined ? is_active : null,
+          plan      || null,
+          call_limit != null ? parseInt(call_limit) : null,
+          name      || null,
+          cleanSlug || null,
+          email !== undefined ? (email || null) : null,
+          req.params.id,
+        ]
       );
       return res.json({ success: true });
     }
     return res.status(500).json({ error: 'Storage ulangan emas' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: 'Bu slug allaqachon ishlatilgan' });
+    res.status(500).json({ error: e.message });
+  }
 };
 
 // ── GET /api/superadmin/companies/:id ────────────────────────────────────────
@@ -157,6 +184,11 @@ exports.getCompany = async (req, res) => {
 // ── DELETE /api/superadmin/companies/:id ──────────────────────────────────────
 exports.deleteCompany = async (req, res) => {
   if (!isSA(req, res)) return;
+  // Task 3: kalit so'z tekshiruvi
+  const { keyword } = req.body || {};
+  if (keyword !== 'tizim') {
+    return res.status(400).json({ error: "Noto'g'ri kalit so'z. \"tizim\" deb kiriting." });
+  }
   try {
     if (ec.isAvailable()) {
       const [companies, users] = await Promise.all([ec.getCompanies(), ec.getUsers()]);
@@ -282,6 +314,52 @@ exports.updateUser = async (req, res) => {
     if (e.code === '23505') return res.status(400).json({ error: 'Bu username allaqachon mavjud' });
     res.status(500).json({ error: e.message });
   }
+};
+
+// ── PUT /api/superadmin/password — super admin parolini o'zgartirish ──────────
+// Task 4: kalit so'z ("tizim") bilan tasdiqlash kerak
+let _saPasswordHash = null; // In-memory, DB ga ham saqlanadi
+exports.getSaPasswordHash = () => _saPasswordHash;
+
+exports.changePassword = async (req, res) => {
+  if (!isSA(req, res)) return;
+  const { currentPassword, newPassword, keyword } = req.body || {};
+  if (keyword !== 'tizim')
+    return res.status(400).json({ error: "Noto'g'ri kalit so'z. \"tizim\" deb kiriting." });
+  if (!newPassword || newPassword.length < 6)
+    return res.status(400).json({ error: 'Yangi parol kamida 6 ta belgi bo\'lishi kerak' });
+
+  // Joriy parolni tekshirish
+  const SA_PASS = process.env.SUPER_ADMIN_PASS || 'mizon@super2025!';
+  const currentOk = _saPasswordHash
+    ? await bcrypt.compare(currentPassword || '', _saPasswordHash)
+    : (currentPassword === SA_PASS);
+  if (!currentOk)
+    return res.status(401).json({ error: 'Joriy parol noto\'g\'ri' });
+
+  _saPasswordHash = await bcrypt.hash(newPassword, 10);
+
+  // DB ga saqlash (system_config jadvalida)
+  if (req.db) {
+    try {
+      await req.db.query(
+        `INSERT INTO system_config (key, value) VALUES ('sa_password_hash', $1)
+         ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=NOW()`,
+        [_saPasswordHash]
+      );
+    } catch (e) { console.warn('system_config saqlashda xato:', e.message); }
+  }
+
+  res.json({ success: true, message: 'Parol muvaffaqiyatli o\'zgartirildi' });
+};
+
+// Tizim ishga tushganda DB dan SA parolini yuklash
+exports.loadSaPassword = async (db) => {
+  if (!db) return;
+  try {
+    const r = await db.query("SELECT value FROM system_config WHERE key='sa_password_hash' LIMIT 1");
+    if (r.rows.length) { _saPasswordHash = r.rows[0].value; console.log('✅ SA password hash loaded from DB'); }
+  } catch { /* system_config jadval yo'q bo'lishi mumkin */ }
 };
 
 // ── DELETE /api/superadmin/users/:userId ──────────────────────────────────────

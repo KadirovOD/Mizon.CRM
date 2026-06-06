@@ -6,6 +6,14 @@ const JWT_SECRET = process.env.JWT_SECRET       || 'mizon-dev-secret-2024-change
 const SA_USER    = process.env.SUPER_ADMIN_USER  || 'superadmin';
 const SA_PASS    = process.env.SUPER_ADMIN_PASS  || 'mizon@super2025!';
 
+// SA parolini tekshirish — DB'da saqlangan hash yoki env var
+const checkSaPassword = async (inputPassword) => {
+  const saCtrl = require('./superAdminController');
+  const hash = saCtrl.getSaPasswordHash();
+  if (hash) return bcrypt.compare(inputPassword || '', hash);
+  return inputPassword === SA_PASS;
+};
+
 // ── Rate Limiting (in-memory) ─────────────────────────────────────────────────
 // Key: "username:ip"  →  { count, lockUntil, blocks }
 const _locks = new Map();
@@ -91,7 +99,8 @@ exports.login = async (req, res) => {
 
   // ── 1. Super admin ──────────────────────────────────────────────────────────
   if (isSA) {
-    if (password !== SA_PASS) return res.status(401).json({ error: "Login yoki parol noto'g'ri" });
+    const saOk = await checkSaPassword(password);
+    if (!saOk) return res.status(401).json({ error: "Login yoki parol noto'g'ri" });
     const token = jwt.sign(
       { userId: 0, companyId: null, username: 'superadmin', role: 'SUPERADMIN' },
       JWT_SECRET, { expiresIn: '12h' }

@@ -172,6 +172,10 @@ exports.updateLeadFull = async (req, res) => {
 // DELETE /api/leads/:id — delete a lead
 exports.deleteLead = async (req, res) => {
   if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  // Task 1: Faqat CEO va SUPERADMIN o'chira oladi
+  if (!req.user || !['CEO', 'SUPERADMIN'].includes(req.user.role)) {
+    return res.status(403).json({ error: "Faqat CEO lidlarni o'chira oladi" });
+  }
   const cid = req.user?.companyId;
   const { id } = req.params;
   try {

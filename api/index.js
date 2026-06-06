@@ -239,6 +239,16 @@ async function initDb() {
       ALTER TABLE companies              ADD COLUMN IF NOT EXISTS form_title   TEXT;
       ALTER TABLE companies              ADD COLUMN IF NOT EXISTS form_subtitle TEXT;
       ALTER TABLE companies              ADD COLUMN IF NOT EXISTS extra_settings JSONB  DEFAULT '{}'::jsonb;
+      ALTER TABLE companies              ADD COLUMN IF NOT EXISTS email        VARCHAR(255);
+    `);
+
+    // ── system_config jadvali (super admin paroli va boshqa konfiguratsiyalar) ─
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_config (
+        key        VARCHAR(100) PRIMARY KEY,
+        value      TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
     `);
 
     // ── Mavjud bosqichlarda is_won / is_lost ni yangilash ───────────────────────
@@ -297,7 +307,13 @@ async function initDb() {
     client.release();
   }
 }
-initDb();
+initDb().then(() => {
+  // DB tayyor bo'lgandan keyin SA parolini yuklash
+  if (pool) {
+    const saCtrl = require('./controllers/superAdminController');
+    saCtrl.loadSaPassword(pool).catch(() => {});
+  }
+});
 
 // ========== CONTROLLERS ==========
 const leadController       = require('./controllers/leadController');
@@ -333,6 +349,8 @@ app.get   ('/api/superadmin/companies/:id/users',    superAdminController.listUs
 app.post  ('/api/superadmin/companies/:id/users',    superAdminController.addUser);
 app.put   ('/api/superadmin/users/:userId',          superAdminController.updateUser);
 app.delete('/api/superadmin/users/:userId',          superAdminController.deleteUser);
+// Task 4: Super admin parol o'zgartirish
+app.put   ('/api/superadmin/password',               superAdminController.changePassword);
 
 // ── Company user management (CEO) ────────────────────────────────────────────
 app.get   ('/api/company/users',      companyController.listUsers);
