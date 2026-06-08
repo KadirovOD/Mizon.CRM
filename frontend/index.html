@@ -5480,7 +5480,9 @@ tr:hover td{background:var(--surface-variant);}
                             );
                           }
                           // ---- Vazifa karta (sys + isTask) ----
-                          if (log.type === 'sys' && log.isTask) {
+                          const isTaskLog = log.type === 'sys' && (log.isTask ||
+                            (log.text && (log.text.startsWith('📌') || log.text.includes('Vazifa ochildi') || log.text.includes('Vazifa belgilandi'))));
+                          if (isTaskLog) {
                             // Bu vazifa keyinchalik yakunlanganmi? idx dan keyin '✅' yozuvi bor bo'lsa — yakunlangan
                             const completedAfter = selectedLeadData.chatLogs.slice(idx + 1).some(
                               lg => lg.type === 'sys' && lg.text && lg.text.startsWith('✅')
