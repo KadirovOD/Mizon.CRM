@@ -5477,7 +5477,11 @@ tr:hover td{background:var(--surface-variant);}
                           }
                           // ---- Vazifa karta (sys + isTask) ----
                           if (log.type === 'sys' && log.isTask) {
-                            const taskStillActive = !!selectedLeadData.deadline;
+                            // Bu vazifa keyinchalik yakunlanganmi? idx dan keyin '✅' yozuvi bor bo'lsa — yakunlangan
+                            const completedAfter = selectedLeadData.chatLogs.slice(idx + 1).some(
+                              lg => lg.type === 'sys' && lg.text && lg.text.startsWith('✅')
+                            );
+                            const taskStillActive = !!selectedLeadData.deadline && !completedAfter;
                             const isCompleting = inlineCompleteId === idx;
                             return (
                               <div key={idx} style={{padding:'10px 14px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:'10px'}}>
