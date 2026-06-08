@@ -4864,7 +4864,7 @@ tr:hover td{background:var(--surface-variant);}
         if(!taskDateInput) return alert("Sana va vaqt kiritilishi shart!");
         let targetLead = null;
         setLeads(prev=>prev.map(l => {
-          if(l.id==id) { targetLead={...l, deadline:taskDateInput, taskDescription:taskDescInput||'Izohsiz vazifa', chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),text:`Vazifa ochildi: "${taskDescInput||'Izohsiz'}" -> ${new Date(taskDateInput).toLocaleString()}`}]}; return targetLead; }
+          if(l.id==id) { targetLead={...l, deadline:taskDateInput, taskDescription:taskDescInput||'Izohsiz vazifa', chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`📌 Vazifa belgilandi: "${taskDescInput||'Izohsiz'}" → ${new Date(taskDateInput).toLocaleString()}`}]}; return targetLead; }
           return l;
         }));
         setTaskDateInput(''); setTaskDescInput(''); setHasUnsavedChanges(true);
@@ -4874,7 +4874,7 @@ tr:hover td{background:var(--surface-variant);}
       const handleTaskComplete = (id) => {
         let targetLead = null;
         setLeads(prev=>prev.map(l => {
-          if(l.id==id) { targetLead={...l, deadline:null, taskDescription:null, chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),text:`✅ Vazifa yakunlandi! Natija: "${taskCompleteNote||'Izohsiz bajardi'}"`}]}; return targetLead; }
+          if(l.id==id) { targetLead={...l, deadline:null, taskDescription:null, chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`✅ Vazifa yakunlandi! Natija: "${taskCompleteNote||'Izohsiz bajardi'}"`}]}; return targetLead; }
           return l;
         }));
         setShowCompleteModal(false); setTaskCompleteNote(''); setHasUnsavedChanges(true);
@@ -4914,7 +4914,7 @@ tr:hover td{background:var(--surface-variant);}
         // Hard limit: mark as LOST
         if (a > globalCallLimit) {
           const limitLead = {...lead, actualCallAttempts: a, status:'LOST',
-            chatLogs:[...lead.chatLogs,{type:'sys',date:new Date().toISOString(),text:`⛔ Limit tugadi (${globalCallLimit} urinish). LOST.`}]};
+            chatLogs:[...lead.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`⛔ Limit tugadi (${globalCallLimit} urinish). LOST.`}]};
           setLeads(prev=>prev.map(l=>l.id==id?limitLead:l));
           setTimeout(()=>syncLeadToAPI(limitLead), 100);
           addNotif('call_limit', '📵 Qo\'ng\'iroq limiti tugadi', `${lead.name} — ${globalCallLimit} ta urinishdan keyin LOST ga o'tdi`, id);
@@ -4951,7 +4951,7 @@ tr:hover td{background:var(--surface-variant);}
         setHasUnsavedChanges(true);
         let targetLead = null;
         setLeads(prev=>prev.map(l => {
-          if(l.id==leadId) { targetLead={...l, status:newStatus, actualCallAttempts:0, chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),text:`Bosqich o'zgardi → ${newStatus}. Urinishlar nollashtirildi.`}]}; return targetLead; }
+          if(l.id==leadId) { targetLead={...l, status:newStatus, actualCallAttempts:0, chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`🔄 Bosqich o'zgardi → ${newStatus}. Urinishlar nollashtirildi.`}]}; return targetLead; }
           return l;
         }));
         if(targetLead) {
@@ -5374,12 +5374,19 @@ tr:hover td{background:var(--surface-variant);}
                           </span>
                         )}
                       </div>
-                      {selectedLeadData.deadline && selectedLeadData.taskDescription && (
-                        <div className="lead-pinned-task">
-                          <Ico n="pin" s={13}/> <strong>Faol Vazifa:</strong> <span>{selectedLeadData.taskDescription}</span>
-                        </div>
-                      )}
                       <div className="chat-logs-area">
+                        {selectedLeadData.deadline && selectedLeadData.taskDescription && (
+                          <div style={{margin:'8px 12px 4px', padding:'10px 14px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.3)', borderRadius:'10px', display:'flex', alignItems:'flex-start', gap:'8px'}}>
+                            <span className="material-symbols-outlined" style={{fontSize:'16px', color:'#f59e0b', flexShrink:0, marginTop:'1px'}}>push_pin</span>
+                            <div style={{flex:1, minWidth:0}}>
+                              <div style={{fontSize:'11px', fontWeight:700, color:'#f59e0b', marginBottom:'3px'}}>Faol Vazifa</div>
+                              <div style={{fontSize:'12px', color:'var(--text-main)', lineHeight:1.4}}>{selectedLeadData.taskDescription}</div>
+                              <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'3px'}}>
+                                ⏰ {new Date(selectedLeadData.deadline).toLocaleString('uz-UZ', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {selectedLeadData.chatLogs.map((log, idx) => {
                           // ---- VoIP call log ----
                           if (log.type === 'call') {
@@ -5455,7 +5462,15 @@ tr:hover td{background:var(--surface-variant);}
                             );
                           }
                           // ---- System log ----
-                          if(log.type==='sys') return <div key={idx} className="sys-log">{new Date(log.date).toLocaleTimeString()} — {log.text}</div>;
+                          if(log.type==='sys') return (
+                            <div key={idx} className="sys-log" style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', flexWrap:'wrap'}}>
+                              <span>{log.text}</span>
+                              <span style={{fontSize:'10px', color:'var(--text-muted)', whiteSpace:'nowrap', flexShrink:0}}>
+                                {log.by && <span style={{color:'var(--primary)', fontWeight:600}}>{log.by} · </span>}
+                                {new Date(log.date).toLocaleTimeString()}
+                              </span>
+                            </div>
+                          );
                           // ---- Telegram / Instagram message ----
                           if (log.type === 'telegram' || log.type === 'instagram') {
                             const icon = log.type === 'telegram' ? '✈️' : '📸';
