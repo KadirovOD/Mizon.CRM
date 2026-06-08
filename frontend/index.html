@@ -186,7 +186,7 @@ body{background:var(--bg-base);color:var(--text-main);font-family:var(--font-bod
 
 /* ===== LEAD PANEL ===== */
 .lead-panel-overlay{position:fixed;inset:0;width:100%;height:100vh;background:var(--bg-base);z-index:100;display:flex;flex-direction:column;animation:slideInPanel 0.2s ease;}
-@keyframes slideInPanel{from{opacity:0;transform:scale(0.99)}to{opacity:1;transform:scale(1)}}
+@keyframes slideInPanel{from{opacity:0}to{opacity:1}}
 .lead-panel-header{padding:14px 28px;border-bottom:1px solid var(--outline-variant);display:flex;justify-content:space-between;align-items:center;background:var(--bg-surface);flex-shrink:0;}
 .lead-panel-body{flex:1;display:grid;grid-template-columns:420px 1fr;overflow:hidden;min-height:0;}
 .lead-profile-col{border-right:1px solid var(--outline-variant);padding:18px 20px;overflow-y:auto;background:var(--bg-surface);}
@@ -5568,8 +5568,14 @@ tr:hover td{background:var(--surface-variant);}
                               </div>
                               <input className="input-base" style={{marginBottom:'6px', fontSize:'12px'}}
                                 placeholder="Vazifa tavsifi..." value={taskDescInput} onChange={e=>setTaskDescInput(e.target.value)} />
-                              <input type="datetime-local" className="input-base" style={{marginBottom:'6px', fontSize:'12px'}}
-                                value={taskDateInput} onChange={e=>setTaskDateInput(e.target.value)} />
+                              <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
+                                <input type="date" className="input-base" style={{marginBottom:0, fontSize:'12px', flex:1}}
+                                  value={taskDateInput ? taskDateInput.split('T')[0] : ''}
+                                  onChange={e=>{const t=taskDateInput?taskDateInput.split('T')[1]||'09:00':'09:00'; setTaskDateInput(e.target.value+'T'+t);}} />
+                                <input type="time" className="input-base" style={{marginBottom:0, fontSize:'12px', flex:1}}
+                                  value={taskDateInput ? taskDateInput.split('T')[1]||'' : ''}
+                                  onChange={e=>{const d=taskDateInput?taskDateInput.split('T')[0]:new Date().toISOString().split('T')[0]; setTaskDateInput(d+'T'+e.target.value);}} />
+                              </div>
                               <select className="input-base" style={{marginBottom:'8px', fontSize:'12px'}}
                                 value={taskAssignee} onChange={e=>setTaskAssignee(e.target.value)}>
                                 <option value="">👤 Kim uchun? ({authUser.username})</option>
