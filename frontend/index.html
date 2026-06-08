@@ -4911,6 +4911,7 @@ tr:hover td{background:var(--surface-variant);}
 
       const handleTaskCreate = (id) => {
         if(!taskDateInput) return alert("Sana va vaqt kiritilishi shart!");
+        if(new Date(taskDateInput) <= new Date()) return alert("O'tib ketgan vaqt uchun vazifa belgilab bo'lmaydi!");
         const assignee = taskAssignee || authUser.username;
         let targetLead = null;
         setLeads(prev=>prev.map(l => {
@@ -5570,6 +5571,7 @@ tr:hover td{background:var(--surface-variant);}
                                 placeholder="Vazifa tavsifi..." value={taskDescInput} onChange={e=>setTaskDescInput(e.target.value)} />
                               <div style={{display:'flex', gap:'6px', marginBottom:'6px'}}>
                                 <input type="date" className="input-base" style={{marginBottom:0, fontSize:'12px', flex:1}}
+                                  min={new Date().toISOString().split('T')[0]}
                                   value={taskDateInput ? taskDateInput.split('T')[0] : ''}
                                   onChange={e=>{const t=taskDateInput?taskDateInput.split('T')[1]||'09:00':'09:00'; setTaskDateInput(e.target.value+'T'+t);}} />
                                 <input type="time" className="input-base" style={{marginBottom:0, fontSize:'12px', flex:1}}
