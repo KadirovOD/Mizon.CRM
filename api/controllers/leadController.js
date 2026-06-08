@@ -122,7 +122,7 @@ exports.updateLeadFull = async (req, res) => {
   const {
     name, phone, email, region, source,
     status, actualCallAttempts, deadline,
-    taskDescription, chatLogs, owner, customData
+    taskDescription, taskAssignee, chatLogs, owner, customData
   } = req.body;
 
   try {
@@ -137,16 +137,18 @@ exports.updateLeadFull = async (req, res) => {
            actualcallattempts = COALESCE($7, actualcallattempts),
            deadline = $8,
            taskdescription = $9,
-           chatlogs = COALESCE($10, chatlogs),
-           owner = COALESCE($11, owner),
-           custom_data = COALESCE($12, custom_data)
-       WHERE id = $13 AND company_id = $14 RETURNING *`,
+           taskassignee = $10,
+           chatlogs = COALESCE($11, chatlogs),
+           owner = COALESCE($12, owner),
+           custom_data = COALESCE($13, custom_data)
+       WHERE id = $14 AND company_id = $15 RETURNING *`,
       [
         name || null, phone || null, email || null, region || null, source || null,
         isNaN(parseInt(status)) ? null : parseInt(status),
         actualCallAttempts,
         deadline || null,
         taskDescription || null,
+        taskAssignee || null,
         chatLogs ? JSON.stringify(chatLogs) : null,
         owner,
         customData != null ? JSON.stringify(customData) : null,

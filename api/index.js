@@ -141,6 +141,7 @@ async function initDb() {
         deadline          TIMESTAMP,
         actualcallattempts INTEGER DEFAULT 0,
         taskdescription   TEXT,
+        taskassignee      VARCHAR(100),
         owner             VARCHAR(50) DEFAULT 'ceo',
         region            VARCHAR(255),
         pipelineid        VARCHAR(50) DEFAULT 'p1',
@@ -223,6 +224,7 @@ async function initDb() {
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS deadline          TIMESTAMP;
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS actualcallattempts INTEGER  DEFAULT 0;
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskdescription   TEXT;
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskassignee      VARCHAR(100);
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS owner             VARCHAR(50) DEFAULT 'ceo';
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS region            VARCHAR(255);
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS pipelineid        VARCHAR(50) DEFAULT 'p1';
