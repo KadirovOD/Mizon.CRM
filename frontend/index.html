@@ -5006,8 +5006,12 @@ tr:hover td{background:var(--surface-variant);}
           } catch(e) { /* VoIP not configured or network error — fall through */ }
         }
 
-        // Fallback: persist log manually and clear calling state
-        setTimeout(()=>syncLeadToAPI(updatedLead), 100);
+        // Fallback: VoIP yo'q — calling statusini 'logged' ga o'zgartir va saqlash
+        const finalLead = {...updatedLead, chatLogs: updatedLead.chatLogs.map(
+          lg => lg === callingLog ? {...lg, status:'logged', text:`📞 Chiquvchi qo'ng'iroq: ${lead.phone}`} : lg
+        )};
+        setLeads(prev=>prev.map(l=>l.id==id?finalLead:l));
+        setTimeout(()=>syncLeadToAPI(finalLead), 100);
         setCallingLeadId(null);
       };
 
