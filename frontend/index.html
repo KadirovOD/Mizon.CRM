@@ -4436,6 +4436,26 @@ tr:hover td{background:var(--surface-variant);}
         setEditLeadSnapshot(null);
         return finalLead;
       };
+
+      // ── Lidni o'chirish (faqat CEO/SUPERADMIN) ──
+      const handleDeleteLead = (id) => {
+        if (!window.confirm("Bu lidni butunlay o'chirmoqchimisiz? Bu amalni ortga qaytarib bo'lmaydi!")) return;
+        const closeAndRemove = () => {
+          setLeads(prev => prev.filter(l => String(l.id) !== String(id)));
+          setSelectedLeadId(null); setHasUnsavedChanges(false); setEditLeadSnapshot(null);
+        };
+        // Hali API ga saqlanmagan lokal lid — to'g'ridan-to'g'ri olib tashlaymiz
+        if (String(id).startsWith('L_') || String(id).startsWith('EXT_')) { closeAndRemove(); return; }
+        fetch('/api/leads/' + id, { method:'DELETE', headers: getAuthHeaders() })
+          .then(async res => {
+            if (res.status === 401) { forceLogout(); return; }
+            if (res.status === 403) { alert("Faqat CEO lidlarni o'chira oladi"); return; }
+            if (!res.ok) { const b = await res.text().catch(()=> ''); alert("O'chirishda xato: " + res.status + ' ' + b); return; }
+            closeAndRemove();
+          })
+          .catch(err => alert("Tarmoq xatosi — o'chirib bo'lmadi: " + err.message));
+      };
+
       const [searchQuery, setSearchQuery] = useState('');
       const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
 
@@ -4874,14 +4894,21 @@ tr:hover td{background:var(--surface-variant);}
             customData:         lead.customData || {},
           }),
         })
-          .then(res => {
+          .then(async res => {
             if (res.status === 401) { forceLogout(); return; }
-            if (!res.ok) { setSyncStatus('error'); return; }
+            if (!res.ok) {
+              const body = await res.text().catch(()=> '');
+              console.error('SAQLASH XATOSI:', res.status, body);
+              setSyncStatus('error');
+              alert("Saqlashda xato (" + res.status + "):\n" + body + "\n\nO'zgarishlar serverga yozilmadi!");
+              return;
+            }
             setSyncStatus('saved');
           })
           .catch(err => {
-            console.warn('Sinxronlashda xato:', err.message);
+            console.error('Sinxronlashda tarmoq xatosi:', err.message);
             setSyncStatus('error');
+            alert("Tarmoq xatosi — o'zgarishlar saqlanmadi: " + err.message);
           });
       };
 
@@ -5268,6 +5295,11 @@ tr:hover td{background:var(--surface-variant);}
                       </div>
                     )}
 
+                    {['CEO','SUPERADMIN'].includes(role) && (
+                      <button className="btn-danger" style={{marginRight:'8px'}} onClick={()=>handleDeleteLead(selectedLeadData.id)}>
+                        <Ico n="delete" s={14}/> Lidni o'chirish
+                      </button>
+                    )}
                     {hasUnsavedChanges && role !== 'WATCHER' ? (
                       <button className="btn-success" onClick={()=>{
                         if (selectedLeadData) applyAuditAndSave(selectedLeadData, editLeadSnapshot);
