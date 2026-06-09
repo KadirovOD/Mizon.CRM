@@ -3193,6 +3193,287 @@
     };
 
     // ===== SUPER ADMIN PANEL =====
+    // ── Billing yordamchilari ───────────────────────────────────────────────
+    const billMoney = (n) => { try { return Number(n||0).toLocaleString('ru-RU'); } catch { return String(n||0); } };
+    const billDate  = (d) => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+    const billPeriod = (p) => p === 'year' ? 'yillik' : 'oylik';
+    const billStatusStyle = (s) => ({
+      paid:      {bg:'rgba(1,167,80,0.12)',   c:'#01a750',          t:"To'langan"},
+      active:    {bg:'rgba(1,167,80,0.12)',   c:'#01a750',          t:'Faol'},
+      pending:   {bg:'rgba(245,158,11,0.14)', c:'#d97706',          t:'Kutilmoqda'},
+      trial:     {bg:'rgba(59,130,246,0.12)', c:'#3b82f6',          t:'Sinov'},
+      expired:   {bg:'rgba(239,68,68,0.1)',   c:'#ef4444',          t:'Muddati tugagan'},
+      failed:    {bg:'rgba(239,68,68,0.1)',   c:'#ef4444',          t:'Xato'},
+      cancelled: {bg:'var(--surface-variant)',c:'var(--text-muted)',t:'Bekor qilingan'},
+    }[s] || {bg:'var(--surface-variant)', c:'var(--text-muted)', t:s||'—'});
+    const BillBadge = ({s}) => { const st = billStatusStyle(s); return (
+      <span style={{padding:'3px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:700, background:st.bg, color:st.c}}>{st.t}</span>
+    ); };
+
+    // ── BillingAdmin — SUPERADMIN uchun obuna/to'lov boshqaruvi ───────────────
+    const BillingAdmin = () => {
+      const token = localStorage.getItem('mizon_token');
+      const H = {'Content-Type':'application/json','Authorization':'Bearer '+token};
+      const [tab,       setTab]       = useState('plans'); // plans | subs | invoices
+      const [plans,     setPlans]     = useState([]);
+      const [subs,      setSubs]      = useState([]);
+      const [invoices,  setInvoices]  = useState([]);
+      const [companies, setCompanies] = useState([]);
+      const [msg,       setMsg]       = useState('');
+      const [planForm,  setPlanForm]  = useState({name:'', price:'', period:'month', call_limit:'', user_limit:'', lead_limit:''});
+      const [editPlanId,setEditPlanId]= useState(null);
+      const [assignForm,setAssignForm]= useState({company_id:'', plan_id:''});
+
+      const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 3500); };
+      const loadPlans     = () => fetch('/api/billing/plans',         {headers:H}).then(r=>r.json()).then(d=>setPlans(Array.isArray(d)?d:[]));
+      const loadSubs      = () => fetch('/api/billing/subscriptions', {headers:H}).then(r=>r.json()).then(d=>setSubs(Array.isArray(d)?d:[]));
+      const loadInvoices  = () => fetch('/api/billing/invoices',      {headers:H}).then(r=>r.json()).then(d=>setInvoices(Array.isArray(d)?d:[]));
+      const loadCompanies = () => fetch('/api/superadmin/companies',  {headers:H}).then(r=>r.json()).then(d=>setCompanies(Array.isArray(d)?d:[]));
+
+      useEffect(() => { loadPlans(); loadSubs(); loadInvoices(); loadCompanies(); }, []);
+
+      const savePlan = async (e) => {
+        e.preventDefault();
+        if (!planForm.name || planForm.price === '') return flash('❌ Nom va narx majburiy');
+        const body = {
+          name: planForm.name, price: Number(planForm.price)||0, period: planForm.period,
+          call_limit: planForm.call_limit==='' ? null : Number(planForm.call_limit),
+          user_limit: planForm.user_limit==='' ? null : Number(planForm.user_limit),
+          lead_limit: planForm.lead_limit==='' ? null : Number(planForm.lead_limit),
+        };
+        const r = await fetch(editPlanId ? `/api/billing/plans/${editPlanId}` : '/api/billing/plans',
+          {method: editPlanId?'PUT':'POST', headers:H, body:JSON.stringify(body)});
+        const d = await r.json();
+        if (!r.ok) return flash('❌ '+(d.error||'Xato'));
+        flash('✅ Tarif saqlandi');
+        setPlanForm({name:'', price:'', period:'month', call_limit:'', user_limit:'', lead_limit:''});
+        setEditPlanId(null); loadPlans();
+      };
+      const editPlan = (p) => { setEditPlanId(p.id); setPlanForm({name:p.name, price:p.price, period:p.period||'month', call_limit:p.call_limit??'', user_limit:p.user_limit??'', lead_limit:p.lead_limit??''}); };
+      const cancelEdit = () => { setEditPlanId(null); setPlanForm({name:'', price:'', period:'month', call_limit:'', user_limit:'', lead_limit:''}); };
+      const delPlan = async (p) => {
+        if (!window.confirm(`"${p.name}" tarifini o'chirasizmi?`)) return;
+        const r = await fetch(`/api/billing/plans/${p.id}`, {method:'DELETE', headers:H});
+        const d = await r.json();
+        flash(d.deactivated ? "⚠️ Tarif obunada ishlatilgani uchun deaktiv qilindi" : '✅ Tarif o\'chirildi');
+        loadPlans();
+      };
+      const togglePlan = async (p) => { await fetch(`/api/billing/plans/${p.id}`, {method:'PUT', headers:H, body:JSON.stringify({is_active:!p.is_active})}); loadPlans(); };
+
+      const assignPlan = async (e) => {
+        e.preventDefault();
+        if (!assignForm.company_id || !assignForm.plan_id) return flash('❌ Kompaniya va tarifni tanlang');
+        const r = await fetch('/api/billing/subscriptions', {method:'POST', headers:H, body:JSON.stringify({company_id:Number(assignForm.company_id), plan_id:Number(assignForm.plan_id)})});
+        const d = await r.json();
+        if (!r.ok) return flash('❌ '+(d.error||'Xato'));
+        flash('✅ Tarif biriktirildi va hisob-faktura yaratildi');
+        setAssignForm({company_id:'', plan_id:''}); loadSubs(); loadInvoices(); setTab('invoices');
+      };
+      const newInvoice = async (companyId) => {
+        const r = await fetch('/api/billing/invoices', {method:'POST', headers:H, body:JSON.stringify({company_id:companyId})});
+        const d = await r.json();
+        if (!r.ok) return flash('❌ '+(d.error||'Xato'));
+        flash('✅ Yangi hisob-faktura yaratildi'); loadInvoices(); setTab('invoices');
+      };
+      const payInvoice = async (inv) => {
+        if (!window.confirm(`${billMoney(inv.amount)} UZS — to'landi deb belgilansinmi?\nObuna ${billDate(inv.period_end)} gacha uzaytiriladi.`)) return;
+        const r = await fetch(`/api/billing/invoices/${inv.id}/pay`, {method:'PUT', headers:H, body:JSON.stringify({payment_method:'manual'})});
+        const d = await r.json();
+        if (!r.ok) return flash('❌ '+(d.error||'Xato'));
+        flash('✅ To\'lov qabul qilindi, obuna uzaytirildi'); loadSubs(); loadInvoices();
+      };
+
+      return (
+        <div>
+          {msg && <div style={{background:msg.startsWith('✅')?'rgba(1,167,80,0.12)':(msg.startsWith('⚠️')?'rgba(245,158,11,0.12)':'rgba(239,68,68,0.1)'), border:'1px solid var(--outline-variant)', borderRadius:'8px', padding:'10px 16px', fontSize:'13px', marginBottom:'16px'}}>{msg}</div>}
+
+          {/* Sub-tab nav */}
+          <div style={{display:'flex', gap:'8px', marginBottom:'20px'}}>
+            {[['plans','💳 Tariflar'],['subs','📅 Obunalar'],['invoices','🧾 Hisob-fakturalar']].map(([v,label]) => (
+              <button key={v} className={tab===v?'btn-primary':'btn-outline'} style={{padding:'7px 16px', fontSize:'13px'}} onClick={()=>setTab(v)}>{label}</button>
+            ))}
+          </div>
+
+          {/* ── TARIFLAR ── */}
+          {tab === 'plans' && (
+            <div style={{display:'grid', gridTemplateColumns:'340px 1fr', gap:'20px', alignItems:'start'}}>
+              <form onSubmit={savePlan} className="card" style={{padding:'20px', display:'flex', flexDirection:'column', gap:'12px'}}>
+                <div style={{fontWeight:700, fontSize:'15px'}}>{editPlanId ? '✏️ Tarifni tahrirlash' : '➕ Yangi tarif'}</div>
+                <div><span className="label-sm">Tarif nomi *</span><input className="input-base" style={{marginBottom:0}} placeholder="Pro" value={planForm.name} onChange={e=>setPlanForm({...planForm,name:e.target.value})} required /></div>
+                <div><span className="label-sm">Narx (UZS) *</span><input className="input-base" style={{marginBottom:0}} type="number" min="0" placeholder="500000" value={planForm.price} onChange={e=>setPlanForm({...planForm,price:e.target.value})} required /></div>
+                <div><span className="label-sm">Davr</span>
+                  <select className="input-base" style={{marginBottom:0}} value={planForm.period} onChange={e=>setPlanForm({...planForm,period:e.target.value})}>
+                    <option value="month">Oylik</option><option value="year">Yillik</option>
+                  </select>
+                </div>
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px'}}>
+                  <div><span className="label-sm">Qo'ng'iroq</span><input className="input-base" style={{marginBottom:0}} type="number" min="0" placeholder="∞" value={planForm.call_limit} onChange={e=>setPlanForm({...planForm,call_limit:e.target.value})} /></div>
+                  <div><span className="label-sm">Xodim</span><input className="input-base" style={{marginBottom:0}} type="number" min="0" placeholder="∞" value={planForm.user_limit} onChange={e=>setPlanForm({...planForm,user_limit:e.target.value})} /></div>
+                  <div><span className="label-sm">Lead</span><input className="input-base" style={{marginBottom:0}} type="number" min="0" placeholder="∞" value={planForm.lead_limit} onChange={e=>setPlanForm({...planForm,lead_limit:e.target.value})} /></div>
+                </div>
+                <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Bo'sh limit = cheksiz</div>
+                <div style={{display:'flex', gap:'8px'}}>
+                  <button className="btn-primary" type="submit" style={{flex:1, padding:'10px'}}>{editPlanId?'💾 Saqlash':'➕ Qo\'shish'}</button>
+                  {editPlanId && <button className="btn-outline" type="button" style={{padding:'10px 16px'}} onClick={cancelEdit}>Bekor</button>}
+                </div>
+              </form>
+
+              <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                {plans.length === 0 && <div style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>Hali tarif yo'q. Chapdan birinchisini qo'shing.</div>}
+                {plans.map(p => (
+                  <div key={p.id} className="card" style={{padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', opacity:p.is_active?1:0.55}}>
+                    <div>
+                      <div style={{fontWeight:700, fontSize:'15px'}}>{p.name} {!p.is_active && <span style={{fontSize:'11px', color:'var(--text-muted)'}}>(nofaol)</span>}</div>
+                      <div style={{fontSize:'13px', color:'var(--primary)', fontWeight:700, marginTop:'2px'}}>{billMoney(p.price)} UZS <span style={{color:'var(--text-muted)', fontWeight:400}}>/ {billPeriod(p.period)}</span></div>
+                      <div style={{fontSize:'12px', color:'var(--text-muted)', marginTop:'4px', display:'flex', gap:'12px'}}>
+                        <span>📞 {p.call_limit ?? '∞'}</span><span>👥 {p.user_limit ?? '∞'}</span><span>📋 {p.lead_limit ?? '∞'}</span>
+                      </div>
+                    </div>
+                    <div style={{display:'flex', gap:'6px'}}>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'11px'}} onClick={()=>togglePlan(p)}>{p.is_active?'⛔ Nofaol':'✅ Faol'}</button>
+                      <button className="btn-outline" style={{padding:'5px 12px', fontSize:'11px'}} onClick={()=>editPlan(p)}>✏️</button>
+                      <button className="btn-danger"  style={{padding:'5px 12px', fontSize:'11px'}} onClick={()=>delPlan(p)}>🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── OBUNALAR ── */}
+          {tab === 'subs' && (
+            <div>
+              <form onSubmit={assignPlan} className="card" style={{padding:'16px 20px', display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:'12px', alignItems:'end', marginBottom:'18px'}}>
+                <div><span className="label-sm">Kompaniya</span>
+                  <select className="input-base" style={{marginBottom:0}} value={assignForm.company_id} onChange={e=>setAssignForm({...assignForm,company_id:e.target.value})} required>
+                    <option value="">— Kompaniyani tanlang —</option>
+                    {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div><span className="label-sm">Tarif</span>
+                  <select className="input-base" style={{marginBottom:0}} value={assignForm.plan_id} onChange={e=>setAssignForm({...assignForm,plan_id:e.target.value})} required>
+                    <option value="">— Tarifni tanlang —</option>
+                    {plans.filter(p=>p.is_active).map(p => <option key={p.id} value={p.id}>{p.name} — {billMoney(p.price)} UZS/{billPeriod(p.period)}</option>)}
+                  </select>
+                </div>
+                <button className="btn-primary" type="submit" style={{padding:'10px 18px'}}>Biriktirish</button>
+              </form>
+
+              <div className="card" style={{padding:0, overflow:'hidden'}}>
+                <table><thead><tr><th>Kompaniya</th><th>Tarif</th><th>Holat</th><th>Tugaydi</th><th>Bloklash sanasi</th><th>Kompaniya</th><th></th></tr></thead>
+                  <tbody>
+                    {subs.length===0 && <tr><td colSpan={7} style={{textAlign:'center', padding:'30px', color:'var(--text-muted)'}}>Obunalar yo'q</td></tr>}
+                    {subs.map(s => (
+                      <tr key={s.id} style={s.is_overdue?{background:'rgba(239,68,68,0.05)'}:undefined}>
+                        <td style={{fontWeight:600}}>{s.company_name}</td>
+                        <td>{s.plan_name ? <>{s.plan_name} <span style={{color:'var(--text-muted)', fontSize:'11px'}}>({billMoney(s.plan_price)} UZS)</span></> : <span style={{opacity:0.4}}>—</span>}</td>
+                        <td><BillBadge s={s.status} /></td>
+                        <td style={{fontSize:'12px', color:s.is_overdue?'#ef4444':'var(--text-secondary)', fontWeight:s.is_overdue?700:400}}>{billDate(s.expires_at)}</td>
+                        <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{billDate(s.grace_until)}</td>
+                        <td>{s.company_active ? <span style={{color:'#01a750', fontSize:'12px', fontWeight:600}}>Faol</span> : <span style={{color:'#ef4444', fontSize:'12px', fontWeight:600}}>Bloklangan</span>}</td>
+                        <td><button className="btn-outline" style={{padding:'4px 10px', fontSize:'11px'}} onClick={()=>newInvoice(s.company_id)} disabled={!s.plan_id}>🧾 Faktura</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ── HISOB-FAKTURALAR ── */}
+          {tab === 'invoices' && (
+            <div className="card" style={{padding:0, overflow:'hidden'}}>
+              <table><thead><tr><th>Kompaniya</th><th>Summa</th><th>Holat</th><th>Davr</th><th>To'langan</th><th></th></tr></thead>
+                <tbody>
+                  {invoices.length===0 && <tr><td colSpan={6} style={{textAlign:'center', padding:'30px', color:'var(--text-muted)'}}>Hisob-fakturalar yo'q</td></tr>}
+                  {invoices.map(i => (
+                    <tr key={i.id}>
+                      <td style={{fontWeight:600}}>{i.company_name}</td>
+                      <td style={{fontWeight:700}}>{billMoney(i.amount)} {i.currency}</td>
+                      <td><BillBadge s={i.status} /></td>
+                      <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{billDate(i.period_start)} – {billDate(i.period_end)}</td>
+                      <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{i.paid_at ? billDate(i.paid_at) : <span style={{opacity:0.4}}>—</span>}</td>
+                      <td>{i.status==='pending' && <button className="btn-primary" style={{padding:'4px 12px', fontSize:'11px'}} onClick={()=>payInvoice(i)}>✅ To'landi</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ── BillingCEO — CEO uchun o'z obunasi (faqat o'qish) ─────────────────────
+    const BillingCEO = () => {
+      const token = localStorage.getItem('mizon_token');
+      const H = {'Authorization':'Bearer '+token};
+      const [data, setData] = useState({subscription:null, invoices:[]});
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        fetch('/api/billing/me', {headers:H}).then(r=>r.json())
+          .then(d => { setData(d && typeof d==='object' ? d : {subscription:null, invoices:[]}); setLoading(false); })
+          .catch(() => setLoading(false));
+      }, []);
+
+      if (loading) return <div style={{textAlign:'center', padding:'60px', color:'var(--text-muted)'}}>Yuklanmoqda...</div>;
+      const sub = data.subscription;
+      const overdue = sub && sub.expires_at && new Date(sub.expires_at) < new Date();
+
+      return (
+        <div style={{maxWidth:'820px'}}>
+          {/* Obuna kartasi */}
+          {!sub ? (
+            <div className="card" style={{padding:'30px', textAlign:'center', color:'var(--text-muted)'}}>
+              <div style={{fontSize:'34px', marginBottom:'10px'}}>💳</div>
+              <div style={{fontWeight:600, fontSize:'15px', marginBottom:'6px'}}>Obuna biriktirilmagan</div>
+              <div style={{fontSize:'13px'}}>Tarif tanlash uchun administrator bilan bog'laning.</div>
+            </div>
+          ) : (
+            <div className="card" style={{padding:'24px', marginBottom:'20px', border:overdue?'1px solid rgba(239,68,68,0.4)':undefined}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'12px'}}>
+                <div>
+                  <div style={{fontSize:'12px', color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'0.5px'}}>Joriy tarif</div>
+                  <div style={{fontWeight:800, fontSize:'24px', marginTop:'4px'}}>{sub.plan_name || '—'}</div>
+                  <div style={{fontSize:'15px', color:'var(--primary)', fontWeight:700, marginTop:'2px'}}>{billMoney(sub.plan_price)} UZS <span style={{color:'var(--text-muted)', fontWeight:400, fontSize:'13px'}}>/ {billPeriod(sub.plan_period)}</span></div>
+                </div>
+                <BillBadge s={sub.status} />
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px', marginTop:'20px'}}>
+                <div className="stat-mini"><div className="stat-mini-label">Qo'ng'iroq limiti</div><div className="stat-mini-value" style={{fontSize:'18px'}}>{sub.call_limit ?? '∞'}</div></div>
+                <div className="stat-mini"><div className="stat-mini-label">Xodim limiti</div><div className="stat-mini-value" style={{fontSize:'18px'}}>{sub.user_limit ?? '∞'}</div></div>
+                <div className="stat-mini"><div className="stat-mini-label">Lead limiti</div><div className="stat-mini-value" style={{fontSize:'18px'}}>{sub.lead_limit ?? '∞'}</div></div>
+              </div>
+              <div style={{marginTop:'18px', padding:'12px 16px', borderRadius:'8px', background:overdue?'rgba(239,68,68,0.08)':'var(--surface-variant)', fontSize:'13px'}}>
+                {overdue
+                  ? <span style={{color:'#ef4444', fontWeight:600}}>⚠️ Obuna muddati tugagan ({billDate(sub.expires_at)}). To'lov qilinmasa {billDate(sub.grace_until)} dan keyin akkaunt bloklanadi.</span>
+                  : <span>✅ Obuna <b>{billDate(sub.expires_at)}</b> gacha amal qiladi.</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Hisob-fakturalar */}
+          <div className="card" style={{padding:0, overflow:'hidden'}}>
+            <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', fontWeight:600, fontSize:'14px'}}>🧾 To'lovlar tarixi</div>
+            <table><thead><tr><th>Summa</th><th>Holat</th><th>Davr</th><th>To'langan sana</th></tr></thead>
+              <tbody>
+                {(data.invoices||[]).length===0 && <tr><td colSpan={4} style={{textAlign:'center', padding:'24px', color:'var(--text-muted)'}}>Hozircha to'lovlar yo'q</td></tr>}
+                {(data.invoices||[]).map(i => (
+                  <tr key={i.id}>
+                    <td style={{fontWeight:700}}>{billMoney(i.amount)} {i.currency}</td>
+                    <td><BillBadge s={i.status} /></td>
+                    <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{billDate(i.period_start)} – {billDate(i.period_end)}</td>
+                    <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{i.paid_at ? billDate(i.paid_at) : <span style={{opacity:0.4}}>—</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
     const SuperAdminPanel = ({ authUser, onLogout }) => {
       const [companies,    setCompanies]    = useState([]);
       const [loading,      setLoading]      = useState(true);
@@ -3442,11 +3723,11 @@
               </div>
             </div>
             <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-              {view !== 'list' && <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('list')}>← Orqaga</button>}
+              {saView === 'companies' && view !== 'list' && <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('list')}>← Orqaga</button>}
               {saView === 'companies' && <button className="btn-primary" style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setView('create')}>+ Kompaniya qo'shish</button>}
-              <button className={`btn-outline`} style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setSaView(saView==='settings'?'companies':'settings')}>
-                {saView==='settings' ? '← Kompaniyalar' : '⚙️ Sozlamalar'}
-              </button>
+              <button className={saView==='companies'?'btn-primary':'btn-outline'} style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setSaView('companies')}>🏢 Kompaniyalar</button>
+              <button className={saView==='billing'?'btn-primary':'btn-outline'} style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setSaView('billing')}>💳 Billing</button>
+              <button className={saView==='settings'?'btn-primary':'btn-outline'} style={{padding:'6px 14px', fontSize:'12px'}} onClick={()=>setSaView('settings')}>⚙️ Sozlamalar</button>
               <button className="btn-outline" style={{padding:'6px 14px', fontSize:'12px'}} onClick={onLogout}>Chiqish</button>
             </div>
           </div>
@@ -3756,6 +4037,9 @@
             )}
 
             </>}
+
+            {/* ── BILLING VIEW ── */}
+            {saView === 'billing' && <BillingAdmin />}
           </div>
 
           {/* ── EDIT COMPANY MODAL (Task 5) ── */}
@@ -4769,7 +5053,7 @@
       const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); };
       const handleDrop = (e, targetStatus) => { e.preventDefault(); const leadId = e.dataTransfer.getData('leadId'); if(leadId) handleStatusChange(leadId, targetStatus); };
 
-      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar' };
+      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
 
       // Filtered leads for search
       const filteredActiveLeads = searchQuery.trim()
@@ -4819,6 +5103,9 @@
                   </div>
                   <div className={`nav-item ${activeTab==='integrations'?'active':''}`} onClick={()=>{setActiveTab('integrations');setSelectedLeadId(null);}}>
                     <Ico n="plug" s={17}/> Integratsiyalar
+                  </div>
+                  <div className={`nav-item ${activeTab==='billing'?'active':''}`} onClick={()=>{setActiveTab('billing');setSelectedLeadId(null);}}>
+                    <span className="material-symbols-outlined" style={{fontSize:'18px',lineHeight:1,flexShrink:0}}>credit_card</span> Obuna va to'lov
                   </div>
                   <div className={`nav-item ${activeTab==='settings'?'active':''}`} onClick={()=>{setActiveTab('settings');setSelectedLeadId(null);}}>
                     <Ico n="settings" s={17}/> Sozlamalar
@@ -5443,6 +5730,8 @@
                   </div>
                 </div>
               )}
+
+              {activeTab === 'billing' && role === 'CEO' && <BillingCEO />}
 
               {activeTab === 'settings' && role === 'CEO' && (
                 <div style={{maxWidth:'780px', margin:'0 auto'}}>

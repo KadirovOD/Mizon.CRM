@@ -7872,6 +7872,845 @@ const MarketingModule = () => {
 };
 
 // ===== SUPER ADMIN PANEL =====
+// ── Billing yordamchilari ───────────────────────────────────────────────
+const billMoney = n => {
+  try {
+    return Number(n || 0).toLocaleString('ru-RU');
+  } catch {
+    return String(n || 0);
+  }
+};
+const billDate = d => d ? new Date(d).toLocaleDateString('ru-RU') : '—';
+const billPeriod = p => p === 'year' ? 'yillik' : 'oylik';
+const billStatusStyle = s => ({
+  paid: {
+    bg: 'rgba(1,167,80,0.12)',
+    c: '#01a750',
+    t: "To'langan"
+  },
+  active: {
+    bg: 'rgba(1,167,80,0.12)',
+    c: '#01a750',
+    t: 'Faol'
+  },
+  pending: {
+    bg: 'rgba(245,158,11,0.14)',
+    c: '#d97706',
+    t: 'Kutilmoqda'
+  },
+  trial: {
+    bg: 'rgba(59,130,246,0.12)',
+    c: '#3b82f6',
+    t: 'Sinov'
+  },
+  expired: {
+    bg: 'rgba(239,68,68,0.1)',
+    c: '#ef4444',
+    t: 'Muddati tugagan'
+  },
+  failed: {
+    bg: 'rgba(239,68,68,0.1)',
+    c: '#ef4444',
+    t: 'Xato'
+  },
+  cancelled: {
+    bg: 'var(--surface-variant)',
+    c: 'var(--text-muted)',
+    t: 'Bekor qilingan'
+  }
+})[s] || {
+  bg: 'var(--surface-variant)',
+  c: 'var(--text-muted)',
+  t: s || '—'
+};
+const BillBadge = ({
+  s
+}) => {
+  const st = billStatusStyle(s);
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      padding: '3px 10px',
+      borderRadius: '20px',
+      fontSize: '11px',
+      fontWeight: 700,
+      background: st.bg,
+      color: st.c
+    }
+  }, st.t);
+};
+
+// ── BillingAdmin — SUPERADMIN uchun obuna/to'lov boshqaruvi ───────────────
+const BillingAdmin = () => {
+  const token = localStorage.getItem('mizon_token');
+  const H = {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + token
+  };
+  const [tab, setTab] = useState('plans'); // plans | subs | invoices
+  const [plans, setPlans] = useState([]);
+  const [subs, setSubs] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [planForm, setPlanForm] = useState({
+    name: '',
+    price: '',
+    period: 'month',
+    call_limit: '',
+    user_limit: '',
+    lead_limit: ''
+  });
+  const [editPlanId, setEditPlanId] = useState(null);
+  const [assignForm, setAssignForm] = useState({
+    company_id: '',
+    plan_id: ''
+  });
+  const flash = m => {
+    setMsg(m);
+    setTimeout(() => setMsg(''), 3500);
+  };
+  const loadPlans = () => fetch('/api/billing/plans', {
+    headers: H
+  }).then(r => r.json()).then(d => setPlans(Array.isArray(d) ? d : []));
+  const loadSubs = () => fetch('/api/billing/subscriptions', {
+    headers: H
+  }).then(r => r.json()).then(d => setSubs(Array.isArray(d) ? d : []));
+  const loadInvoices = () => fetch('/api/billing/invoices', {
+    headers: H
+  }).then(r => r.json()).then(d => setInvoices(Array.isArray(d) ? d : []));
+  const loadCompanies = () => fetch('/api/superadmin/companies', {
+    headers: H
+  }).then(r => r.json()).then(d => setCompanies(Array.isArray(d) ? d : []));
+  useEffect(() => {
+    loadPlans();
+    loadSubs();
+    loadInvoices();
+    loadCompanies();
+  }, []);
+  const savePlan = async e => {
+    e.preventDefault();
+    if (!planForm.name || planForm.price === '') return flash('❌ Nom va narx majburiy');
+    const body = {
+      name: planForm.name,
+      price: Number(planForm.price) || 0,
+      period: planForm.period,
+      call_limit: planForm.call_limit === '' ? null : Number(planForm.call_limit),
+      user_limit: planForm.user_limit === '' ? null : Number(planForm.user_limit),
+      lead_limit: planForm.lead_limit === '' ? null : Number(planForm.lead_limit)
+    };
+    const r = await fetch(editPlanId ? `/api/billing/plans/${editPlanId}` : '/api/billing/plans', {
+      method: editPlanId ? 'PUT' : 'POST',
+      headers: H,
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!r.ok) return flash('❌ ' + (d.error || 'Xato'));
+    flash('✅ Tarif saqlandi');
+    setPlanForm({
+      name: '',
+      price: '',
+      period: 'month',
+      call_limit: '',
+      user_limit: '',
+      lead_limit: ''
+    });
+    setEditPlanId(null);
+    loadPlans();
+  };
+  const editPlan = p => {
+    setEditPlanId(p.id);
+    setPlanForm({
+      name: p.name,
+      price: p.price,
+      period: p.period || 'month',
+      call_limit: p.call_limit ?? '',
+      user_limit: p.user_limit ?? '',
+      lead_limit: p.lead_limit ?? ''
+    });
+  };
+  const cancelEdit = () => {
+    setEditPlanId(null);
+    setPlanForm({
+      name: '',
+      price: '',
+      period: 'month',
+      call_limit: '',
+      user_limit: '',
+      lead_limit: ''
+    });
+  };
+  const delPlan = async p => {
+    if (!window.confirm(`"${p.name}" tarifini o'chirasizmi?`)) return;
+    const r = await fetch(`/api/billing/plans/${p.id}`, {
+      method: 'DELETE',
+      headers: H
+    });
+    const d = await r.json();
+    flash(d.deactivated ? "⚠️ Tarif obunada ishlatilgani uchun deaktiv qilindi" : '✅ Tarif o\'chirildi');
+    loadPlans();
+  };
+  const togglePlan = async p => {
+    await fetch(`/api/billing/plans/${p.id}`, {
+      method: 'PUT',
+      headers: H,
+      body: JSON.stringify({
+        is_active: !p.is_active
+      })
+    });
+    loadPlans();
+  };
+  const assignPlan = async e => {
+    e.preventDefault();
+    if (!assignForm.company_id || !assignForm.plan_id) return flash('❌ Kompaniya va tarifni tanlang');
+    const r = await fetch('/api/billing/subscriptions', {
+      method: 'POST',
+      headers: H,
+      body: JSON.stringify({
+        company_id: Number(assignForm.company_id),
+        plan_id: Number(assignForm.plan_id)
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) return flash('❌ ' + (d.error || 'Xato'));
+    flash('✅ Tarif biriktirildi va hisob-faktura yaratildi');
+    setAssignForm({
+      company_id: '',
+      plan_id: ''
+    });
+    loadSubs();
+    loadInvoices();
+    setTab('invoices');
+  };
+  const newInvoice = async companyId => {
+    const r = await fetch('/api/billing/invoices', {
+      method: 'POST',
+      headers: H,
+      body: JSON.stringify({
+        company_id: companyId
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) return flash('❌ ' + (d.error || 'Xato'));
+    flash('✅ Yangi hisob-faktura yaratildi');
+    loadInvoices();
+    setTab('invoices');
+  };
+  const payInvoice = async inv => {
+    if (!window.confirm(`${billMoney(inv.amount)} UZS — to'landi deb belgilansinmi?\nObuna ${billDate(inv.period_end)} gacha uzaytiriladi.`)) return;
+    const r = await fetch(`/api/billing/invoices/${inv.id}/pay`, {
+      method: 'PUT',
+      headers: H,
+      body: JSON.stringify({
+        payment_method: 'manual'
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) return flash('❌ ' + (d.error || 'Xato'));
+    flash('✅ To\'lov qabul qilindi, obuna uzaytirildi');
+    loadSubs();
+    loadInvoices();
+  };
+  return /*#__PURE__*/React.createElement("div", null, msg && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: msg.startsWith('✅') ? 'rgba(1,167,80,0.12)' : msg.startsWith('⚠️') ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.1)',
+      border: '1px solid var(--outline-variant)',
+      borderRadius: '8px',
+      padding: '10px 16px',
+      fontSize: '13px',
+      marginBottom: '16px'
+    }
+  }, msg), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '8px',
+      marginBottom: '20px'
+    }
+  }, [['plans', '💳 Tariflar'], ['subs', '📅 Obunalar'], ['invoices', '🧾 Hisob-fakturalar']].map(([v, label]) => /*#__PURE__*/React.createElement("button", {
+    key: v,
+    className: tab === v ? 'btn-primary' : 'btn-outline',
+    style: {
+      padding: '7px 16px',
+      fontSize: '13px'
+    },
+    onClick: () => setTab(v)
+  }, label))), tab === 'plans' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '340px 1fr',
+      gap: '20px',
+      alignItems: 'start'
+    }
+  }, /*#__PURE__*/React.createElement("form", {
+    onSubmit: savePlan,
+    className: "card",
+    style: {
+      padding: '20px',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '12px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: '15px'
+    }
+  }, editPlanId ? '✏️ Tarifni tahrirlash' : '➕ Yangi tarif'), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Tarif nomi *"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    placeholder: "Pro",
+    value: planForm.name,
+    onChange: e => setPlanForm({
+      ...planForm,
+      name: e.target.value
+    }),
+    required: true
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Narx (UZS) *"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    type: "number",
+    min: "0",
+    placeholder: "500000",
+    value: planForm.price,
+    onChange: e => setPlanForm({
+      ...planForm,
+      price: e.target.value
+    }),
+    required: true
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Davr"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    value: planForm.period,
+    onChange: e => setPlanForm({
+      ...planForm,
+      period: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "month"
+  }, "Oylik"), /*#__PURE__*/React.createElement("option", {
+    value: "year"
+  }, "Yillik"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr 1fr',
+      gap: '8px'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Qo'ng'iroq"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    type: "number",
+    min: "0",
+    placeholder: "\u221E",
+    value: planForm.call_limit,
+    onChange: e => setPlanForm({
+      ...planForm,
+      call_limit: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Xodim"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    type: "number",
+    min: "0",
+    placeholder: "\u221E",
+    value: planForm.user_limit,
+    onChange: e => setPlanForm({
+      ...planForm,
+      user_limit: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Lead"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    type: "number",
+    min: "0",
+    placeholder: "\u221E",
+    value: planForm.lead_limit,
+    onChange: e => setPlanForm({
+      ...planForm,
+      lead_limit: e.target.value
+    })
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)'
+    }
+  }, "Bo'sh limit = cheksiz"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '8px'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-primary",
+    type: "submit",
+    style: {
+      flex: 1,
+      padding: '10px'
+    }
+  }, editPlanId ? '💾 Saqlash' : '➕ Qo\'shish'), editPlanId && /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    type: "button",
+    style: {
+      padding: '10px 16px'
+    },
+    onClick: cancelEdit
+  }, "Bekor"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px'
+    }
+  }, plans.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '40px',
+      color: 'var(--text-muted)'
+    }
+  }, "Hali tarif yo'q. Chapdan birinchisini qo'shing."), plans.map(p => /*#__PURE__*/React.createElement("div", {
+    key: p.id,
+    className: "card",
+    style: {
+      padding: '16px 20px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '12px',
+      opacity: p.is_active ? 1 : 0.55
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: '15px'
+    }
+  }, p.name, " ", !p.is_active && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)'
+    }
+  }, "(nofaol)")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '13px',
+      color: 'var(--primary)',
+      fontWeight: 700,
+      marginTop: '2px'
+    }
+  }, billMoney(p.price), " UZS ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-muted)',
+      fontWeight: 400
+    }
+  }, "/ ", billPeriod(p.period))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      marginTop: '4px',
+      display: 'flex',
+      gap: '12px'
+    }
+  }, /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCDE ", p.call_limit ?? '∞'), /*#__PURE__*/React.createElement("span", null, "\uD83D\uDC65 ", p.user_limit ?? '∞'), /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCCB ", p.lead_limit ?? '∞'))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '6px'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      padding: '5px 12px',
+      fontSize: '11px'
+    },
+    onClick: () => togglePlan(p)
+  }, p.is_active ? '⛔ Nofaol' : '✅ Faol'), /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      padding: '5px 12px',
+      fontSize: '11px'
+    },
+    onClick: () => editPlan(p)
+  }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-danger",
+    style: {
+      padding: '5px 12px',
+      fontSize: '11px'
+    },
+    onClick: () => delPlan(p)
+  }, "\uD83D\uDDD1\uFE0F")))))), tab === 'subs' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("form", {
+    onSubmit: assignPlan,
+    className: "card",
+    style: {
+      padding: '16px 20px',
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr auto',
+      gap: '12px',
+      alignItems: 'end',
+      marginBottom: '18px'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Kompaniya"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    value: assignForm.company_id,
+    onChange: e => setAssignForm({
+      ...assignForm,
+      company_id: e.target.value
+    }),
+    required: true
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\u2014 Kompaniyani tanlang \u2014"), companies.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c.id,
+    value: c.id
+  }, c.name)))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Tarif"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    value: assignForm.plan_id,
+    onChange: e => setAssignForm({
+      ...assignForm,
+      plan_id: e.target.value
+    }),
+    required: true
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\u2014 Tarifni tanlang \u2014"), plans.filter(p => p.is_active).map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.name, " \u2014 ", billMoney(p.price), " UZS/", billPeriod(p.period))))), /*#__PURE__*/React.createElement("button", {
+    className: "btn-primary",
+    type: "submit",
+    style: {
+      padding: '10px 18px'
+    }
+  }, "Biriktirish")), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Kompaniya"), /*#__PURE__*/React.createElement("th", null, "Tarif"), /*#__PURE__*/React.createElement("th", null, "Holat"), /*#__PURE__*/React.createElement("th", null, "Tugaydi"), /*#__PURE__*/React.createElement("th", null, "Bloklash sanasi"), /*#__PURE__*/React.createElement("th", null, "Kompaniya"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, subs.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 7,
+    style: {
+      textAlign: 'center',
+      padding: '30px',
+      color: 'var(--text-muted)'
+    }
+  }, "Obunalar yo'q")), subs.map(s => /*#__PURE__*/React.createElement("tr", {
+    key: s.id,
+    style: s.is_overdue ? {
+      background: 'rgba(239,68,68,0.05)'
+    } : undefined
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 600
+    }
+  }, s.company_name), /*#__PURE__*/React.createElement("td", null, s.plan_name ? /*#__PURE__*/React.createElement(React.Fragment, null, s.plan_name, " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-muted)',
+      fontSize: '11px'
+    }
+  }, "(", billMoney(s.plan_price), " UZS)")) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 0.4
+    }
+  }, "\u2014")), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(BillBadge, {
+    s: s.status
+  })), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: '12px',
+      color: s.is_overdue ? '#ef4444' : 'var(--text-secondary)',
+      fontWeight: s.is_overdue ? 700 : 400
+    }
+  }, billDate(s.expires_at)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)'
+    }
+  }, billDate(s.grace_until)), /*#__PURE__*/React.createElement("td", null, s.company_active ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#01a750',
+      fontSize: '12px',
+      fontWeight: 600
+    }
+  }, "Faol") : /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#ef4444',
+      fontSize: '12px',
+      fontWeight: 600
+    }
+  }, "Bloklangan")), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      padding: '4px 10px',
+      fontSize: '11px'
+    },
+    onClick: () => newInvoice(s.company_id),
+    disabled: !s.plan_id
+  }, "\uD83E\uDDFE Faktura")))))))), tab === 'invoices' && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Kompaniya"), /*#__PURE__*/React.createElement("th", null, "Summa"), /*#__PURE__*/React.createElement("th", null, "Holat"), /*#__PURE__*/React.createElement("th", null, "Davr"), /*#__PURE__*/React.createElement("th", null, "To'langan"), /*#__PURE__*/React.createElement("th", null))), /*#__PURE__*/React.createElement("tbody", null, invoices.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 6,
+    style: {
+      textAlign: 'center',
+      padding: '30px',
+      color: 'var(--text-muted)'
+    }
+  }, "Hisob-fakturalar yo'q")), invoices.map(i => /*#__PURE__*/React.createElement("tr", {
+    key: i.id
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 600
+    }
+  }, i.company_name), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 700
+    }
+  }, billMoney(i.amount), " ", i.currency), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(BillBadge, {
+    s: i.status
+  })), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)'
+    }
+  }, billDate(i.period_start), " \u2013 ", billDate(i.period_end)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)'
+    }
+  }, i.paid_at ? billDate(i.paid_at) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 0.4
+    }
+  }, "\u2014")), /*#__PURE__*/React.createElement("td", null, i.status === 'pending' && /*#__PURE__*/React.createElement("button", {
+    className: "btn-primary",
+    style: {
+      padding: '4px 12px',
+      fontSize: '11px'
+    },
+    onClick: () => payInvoice(i)
+  }, "\u2705 To'landi"))))))));
+};
+
+// ── BillingCEO — CEO uchun o'z obunasi (faqat o'qish) ─────────────────────
+const BillingCEO = () => {
+  const token = localStorage.getItem('mizon_token');
+  const H = {
+    'Authorization': 'Bearer ' + token
+  };
+  const [data, setData] = useState({
+    subscription: null,
+    invoices: []
+  });
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/billing/me', {
+      headers: H
+    }).then(r => r.json()).then(d => {
+      setData(d && typeof d === 'object' ? d : {
+        subscription: null,
+        invoices: []
+      });
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: 'center',
+      padding: '60px',
+      color: 'var(--text-muted)'
+    }
+  }, "Yuklanmoqda...");
+  const sub = data.subscription;
+  const overdue = sub && sub.expires_at && new Date(sub.expires_at) < new Date();
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: '820px'
+    }
+  }, !sub ? /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: '30px',
+      textAlign: 'center',
+      color: 'var(--text-muted)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '34px',
+      marginBottom: '10px'
+    }
+  }, "\uD83D\uDCB3"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: '15px',
+      marginBottom: '6px'
+    }
+  }, "Obuna biriktirilmagan"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '13px'
+    }
+  }, "Tarif tanlash uchun administrator bilan bog'laning.")) : /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: '24px',
+      marginBottom: '20px',
+      border: overdue ? '1px solid rgba(239,68,68,0.4)' : undefined
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      flexWrap: 'wrap',
+      gap: '12px'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px'
+    }
+  }, "Joriy tarif"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 800,
+      fontSize: '24px',
+      marginTop: '4px'
+    }
+  }, sub.plan_name || '—'), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '15px',
+      color: 'var(--primary)',
+      fontWeight: 700,
+      marginTop: '2px'
+    }
+  }, billMoney(sub.plan_price), " UZS ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-muted)',
+      fontWeight: 400,
+      fontSize: '13px'
+    }
+  }, "/ ", billPeriod(sub.plan_period)))), /*#__PURE__*/React.createElement(BillBadge, {
+    s: sub.status
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(3,1fr)',
+      gap: '12px',
+      marginTop: '20px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini-label"
+  }, "Qo'ng'iroq limiti"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini-value",
+    style: {
+      fontSize: '18px'
+    }
+  }, sub.call_limit ?? '∞')), /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini-label"
+  }, "Xodim limiti"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini-value",
+    style: {
+      fontSize: '18px'
+    }
+  }, sub.user_limit ?? '∞')), /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini-label"
+  }, "Lead limiti"), /*#__PURE__*/React.createElement("div", {
+    className: "stat-mini-value",
+    style: {
+      fontSize: '18px'
+    }
+  }, sub.lead_limit ?? '∞'))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: '18px',
+      padding: '12px 16px',
+      borderRadius: '8px',
+      background: overdue ? 'rgba(239,68,68,0.08)' : 'var(--surface-variant)',
+      fontSize: '13px'
+    }
+  }, overdue ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: '#ef4444',
+      fontWeight: 600
+    }
+  }, "\u26A0\uFE0F Obuna muddati tugagan (", billDate(sub.expires_at), "). To'lov qilinmasa ", billDate(sub.grace_until), " dan keyin akkaunt bloklanadi.") : /*#__PURE__*/React.createElement("span", null, "\u2705 Obuna ", /*#__PURE__*/React.createElement("b", null, billDate(sub.expires_at)), " gacha amal qiladi."))), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '14px 20px',
+      borderBottom: '1px solid var(--outline-variant)',
+      fontWeight: 600,
+      fontSize: '14px'
+    }
+  }, "\uD83E\uDDFE To'lovlar tarixi"), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Summa"), /*#__PURE__*/React.createElement("th", null, "Holat"), /*#__PURE__*/React.createElement("th", null, "Davr"), /*#__PURE__*/React.createElement("th", null, "To'langan sana"))), /*#__PURE__*/React.createElement("tbody", null, (data.invoices || []).length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: 4,
+    style: {
+      textAlign: 'center',
+      padding: '24px',
+      color: 'var(--text-muted)'
+    }
+  }, "Hozircha to'lovlar yo'q")), (data.invoices || []).map(i => /*#__PURE__*/React.createElement("tr", {
+    key: i.id
+  }, /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontWeight: 700
+    }
+  }, billMoney(i.amount), " ", i.currency), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(BillBadge, {
+    s: i.status
+  })), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)'
+    }
+  }, billDate(i.period_start), " \u2013 ", billDate(i.period_end)), /*#__PURE__*/React.createElement("td", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)'
+    }
+  }, i.paid_at ? billDate(i.paid_at) : /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 0.4
+    }
+  }, "\u2014"))))))));
+};
 const SuperAdminPanel = ({
   authUser,
   onLogout
@@ -8321,7 +9160,7 @@ const SuperAdminPanel = ({
       gap: '10px',
       alignItems: 'center'
     }
-  }, view !== 'list' && /*#__PURE__*/React.createElement("button", {
+  }, saView === 'companies' && view !== 'list' && /*#__PURE__*/React.createElement("button", {
     className: "btn-outline",
     style: {
       padding: '6px 14px',
@@ -8336,13 +9175,27 @@ const SuperAdminPanel = ({
     },
     onClick: () => setView('create')
   }, "+ Kompaniya qo'shish"), /*#__PURE__*/React.createElement("button", {
-    className: `btn-outline`,
+    className: saView === 'companies' ? 'btn-primary' : 'btn-outline',
     style: {
       padding: '6px 14px',
       fontSize: '12px'
     },
-    onClick: () => setSaView(saView === 'settings' ? 'companies' : 'settings')
-  }, saView === 'settings' ? '← Kompaniyalar' : '⚙️ Sozlamalar'), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSaView('companies')
+  }, "\uD83C\uDFE2 Kompaniyalar"), /*#__PURE__*/React.createElement("button", {
+    className: saView === 'billing' ? 'btn-primary' : 'btn-outline',
+    style: {
+      padding: '6px 14px',
+      fontSize: '12px'
+    },
+    onClick: () => setSaView('billing')
+  }, "\uD83D\uDCB3 Billing"), /*#__PURE__*/React.createElement("button", {
+    className: saView === 'settings' ? 'btn-primary' : 'btn-outline',
+    style: {
+      padding: '6px 14px',
+      fontSize: '12px'
+    },
+    onClick: () => setSaView('settings')
+  }, "\u2699\uFE0F Sozlamalar"), /*#__PURE__*/React.createElement("button", {
     className: "btn-outline",
     style: {
       padding: '6px 14px',
@@ -9363,7 +10216,7 @@ const SuperAdminPanel = ({
       fontSize: '11px'
     },
     onClick: () => toggleActive(c)
-  }, c.is_active ? 'Bloklash' : 'Faollashtirish')))))))), editCompModal && /*#__PURE__*/React.createElement("div", {
+  }, c.is_active ? 'Bloklash' : 'Faollashtirish'))))))), saView === 'billing' && /*#__PURE__*/React.createElement(BillingAdmin, null)), editCompModal && /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'fixed',
       inset: 0,
@@ -11005,7 +11858,8 @@ const App = () => {
     reports: 'Hisobotlar',
     marketing: 'Marketing Analitika',
     integrations: 'Integratsiyalar',
-    settings: 'Sozlamalar'
+    settings: 'Sozlamalar',
+    billing: 'Obuna va to\'lovlar'
   };
 
   // Filtered leads for search
@@ -11121,6 +11975,19 @@ const App = () => {
     n: "plug",
     s: 17
   }), " Integratsiyalar"), /*#__PURE__*/React.createElement("div", {
+    className: `nav-item ${activeTab === 'billing' ? 'active' : ''}`,
+    onClick: () => {
+      setActiveTab('billing');
+      setSelectedLeadId(null);
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '18px',
+      lineHeight: 1,
+      flexShrink: 0
+    }
+  }, "credit_card"), " Obuna va to'lov"), /*#__PURE__*/React.createElement("div", {
     className: `nav-item ${activeTab === 'settings' ? 'active' : ''}`,
     onClick: () => {
       setActiveTab('settings');
@@ -12506,7 +13373,7 @@ const App = () => {
         s: 10
       }), " Vazifa belgilanmagan!"));
     })));
-  }))), activeTab === 'settings' && role === 'CEO' && /*#__PURE__*/React.createElement("div", {
+  }))), activeTab === 'billing' && role === 'CEO' && /*#__PURE__*/React.createElement(BillingCEO, null), activeTab === 'settings' && role === 'CEO' && /*#__PURE__*/React.createElement("div", {
     style: {
       maxWidth: '780px',
       margin: '0 auto'

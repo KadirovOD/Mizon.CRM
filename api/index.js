@@ -257,6 +257,48 @@ async function initDb() {
       );
     `);
 
+    // ── Billing: tariflar, obunalar, hisob-fakturalar ──────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS billing_plans (
+        id         SERIAL PRIMARY KEY,
+        name       VARCHAR(100)  NOT NULL,
+        price      NUMERIC(14,2) NOT NULL DEFAULT 0,
+        period     VARCHAR(10)   DEFAULT 'month',
+        call_limit INT,
+        user_limit INT,
+        lead_limit INT,
+        features   JSONB    DEFAULT '{}'::jsonb,
+        is_active  BOOLEAN  DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS billing_subscriptions (
+        id         SERIAL PRIMARY KEY,
+        company_id INT UNIQUE REFERENCES companies(id) ON DELETE CASCADE,
+        plan_id    INT REFERENCES billing_plans(id) ON DELETE SET NULL,
+        status     VARCHAR(20) DEFAULT 'pending',
+        started_at TIMESTAMP DEFAULT NOW(),
+        expires_at TIMESTAMP,
+        auto_renew BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS billing_invoices (
+        id              SERIAL PRIMARY KEY,
+        company_id      INT REFERENCES companies(id) ON DELETE CASCADE,
+        subscription_id INT REFERENCES billing_subscriptions(id) ON DELETE SET NULL,
+        amount          NUMERIC(14,2) NOT NULL DEFAULT 0,
+        currency        VARCHAR(8) DEFAULT 'UZS',
+        status          VARCHAR(20) DEFAULT 'pending',
+        period_start    TIMESTAMP,
+        period_end      TIMESTAMP,
+        paid_at         TIMESTAMP,
+        payment_method  VARCHAR(50),
+        note            TEXT,
+        created_at      TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     // ── Mavjud bosqichlarda is_won / is_lost ni yangilash ───────────────────────
     await client.query("UPDATE crm_stage SET is_won=true  WHERE name='Yutildi'         AND (is_won  IS NULL OR is_won=false)");
     await client.query("UPDATE crm_stage SET is_lost=true WHERE name='Muvaffaqiyatsiz' AND (is_lost IS NULL OR is_lost=false)");
@@ -318,6 +360,11 @@ initDb().then(() => {
   if (pool) {
     const saCtrl = require('./controllers/superAdminController');
     saCtrl.loadSaPassword(pool).catch(() => {});
+
+    // Billing: muddati tugagan obunalarni tekshirish (start'da + har soatda)
+    const billingCtrl = require('./controllers/billingController');
+    billingCtrl.runExpiryCheck(pool);
+    setInterval(() => billingCtrl.runExpiryCheck(pool), 60 * 60 * 1000);
   }
 });
 
@@ -330,6 +377,7 @@ const superAdminController = require('./controllers/superAdminController');
 const companyController    = require('./controllers/companyController');
 const oauthController      = require('./controllers/oauthController');
 const automationCtrl       = require('./controllers/automationController');
+const billingController    = require('./controllers/billingController');
 
 // leadController va webhookController ga runTrigger uzatish
 leadController._setAutomation(automationCtrl.runTrigger);
@@ -337,7 +385,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V15', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V16', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -667,6 +715,18 @@ app.delete('/api/api-keys/:id', async (req, res) => {
 });
 
 // (company/info is handled by authController above)
+
+// ── Billing (obuna / to'lov) ──────────────────────────────────────────────────
+app.get   ('/api/billing/plans',            billingController.listPlans);
+app.post  ('/api/billing/plans',            billingController.createPlan);
+app.put   ('/api/billing/plans/:id',        billingController.updatePlan);
+app.delete('/api/billing/plans/:id',        billingController.deletePlan);
+app.get   ('/api/billing/subscriptions',    billingController.listSubscriptions);
+app.post  ('/api/billing/subscriptions',    billingController.assignPlan);
+app.get   ('/api/billing/invoices',         billingController.listInvoices);
+app.post  ('/api/billing/invoices',         billingController.createInvoice);
+app.put   ('/api/billing/invoices/:id/pay', billingController.markInvoicePaid);
+app.get   ('/api/billing/me',               billingController.myBilling);
 
 // ── Frontend SPA fallback ─────────────────────────────────────────────────────
 app.get('*', (req, res) => {
