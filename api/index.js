@@ -337,7 +337,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V12', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V13', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────

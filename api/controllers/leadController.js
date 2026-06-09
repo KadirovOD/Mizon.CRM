@@ -126,6 +126,7 @@ exports.updateLeadFull = async (req, res) => {
   } = req.body;
 
   try {
+    console.log(`[PUT /leads/${id}] cid=${cid} deadline=${deadline} taskDesc=${taskDescription} chatLen=${Array.isArray(chatLogs)?chatLogs.length:'null'}`);
     const updated = await req.db.query(
       `UPDATE crm_lead
        SET name = COALESCE($1, name),
