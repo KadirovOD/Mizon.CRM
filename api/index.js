@@ -337,7 +337,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V13', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V14', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -357,6 +357,22 @@ app.put   ('/api/superadmin/users/:userId',          superAdminController.update
 app.delete('/api/superadmin/users/:userId',          superAdminController.deleteUser);
 // Task 4: Super admin parol o'zgartirish
 app.put   ('/api/superadmin/password',               superAdminController.changePassword);
+
+// ── Temp debug: superadmin uchun lead holati tekshirish ──────────────────────
+app.get('/api/superadmin/debug-leads/:companyId', async (req, res) => {
+  if (!req.user || req.user.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Faqat SUPERADMIN' });
+  if (!req.db) return res.status(503).json({ error: 'DB yo\'q' });
+  try {
+    const { rows } = await req.db.query(
+      `SELECT id, name, deadline, taskdescription,
+              jsonb_array_length(COALESCE(chatlogs,'[]'::jsonb)) as chatlen,
+              owner, company_id
+       FROM crm_lead WHERE company_id=$1 ORDER BY id DESC LIMIT 20`,
+      [req.params.companyId]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
 // ── Company user management (CEO) ────────────────────────────────────────────
 app.get   ('/api/company/users',      companyController.listUsers);
