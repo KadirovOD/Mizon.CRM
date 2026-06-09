@@ -4,7 +4,7 @@
   "description": "Mizon CRM — Lead Management, Kanban Board, Webhook Integrations",
   "main": "api/index.js",
   "scripts": {
-    "build": "babel frontend/src/modules.jsx -o frontend/modules.js && babel frontend/src/app.jsx -o frontend/app.js",
+    "build": "babel frontend/src/app.jsx -o frontend/app.js",
     "start": "node api/index.js",
     "dev": "node api/index.js"
   },
