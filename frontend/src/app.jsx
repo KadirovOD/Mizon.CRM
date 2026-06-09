@@ -4648,37 +4648,29 @@
         if(!taskDateInput) return alert("Sana va vaqt kiritilishi shart!");
         if(new Date(taskDateInput) <= new Date()) return alert("O'tib ketgan vaqt uchun vazifa belgilab bo'lmaydi!");
         const assignee = taskAssignee || authUser.username;
-        let targetLead = null;
-        setLeads(prev=>prev.map(l => {
-          if(l.id==id) {
-            targetLead={...l, deadline:taskDateInput, taskDescription:taskDescInput||'Izohsiz vazifa', taskAssignee:assignee,
-              chatLogs:[...l.chatLogs,{type:'sys', isTask:true, date:new Date().toISOString(), by:authUser.username, assignee,
-                text:`📌 Vazifa: "${taskDescInput||'Izohsiz vazifa'}" → ${new Date(taskDateInput).toLocaleString()}`}]};
-            return targetLead;
-          }
-          return l;
-        }));
+        const base = leads.find(l => l.id == id);
+        if(!base) return;
+        const targetLead = {...base, deadline:taskDateInput, taskDescription:taskDescInput||'Izohsiz vazifa', taskAssignee:assignee,
+          chatLogs:[...base.chatLogs,{type:'sys', isTask:true, date:new Date().toISOString(), by:authUser.username, assignee,
+            text:`📌 Vazifa: "${taskDescInput||'Izohsiz vazifa'}" → ${new Date(taskDateInput).toLocaleString()}`}]};
+        setLeads(prev=>prev.map(l => l.id==id ? targetLead : l));
         setTaskDateInput(''); setTaskDescInput(''); setTaskAssignee(''); setShowTaskInput(false); setHasUnsavedChanges(true);
         addNotif('task_assigned', '📌 Vazifa belgilandi', `${assignee} uchun: "${taskDescInput||'Izohsiz'}"`, id);
         playNotifSound();
-        if(targetLead) setTimeout(()=>syncLeadToAPI(targetLead), 100);
+        syncLeadToAPI(targetLead);
       };
 
       const handleTaskComplete = (id, noteOverride) => {
         const note = noteOverride !== undefined ? noteOverride : taskCompleteNote;
-        let targetLead = null;
-        setLeads(prev=>prev.map(l => {
-          if(l.id==id) {
-            targetLead={...l, deadline:null, taskDescription:null, taskAssignee:null,
-              chatLogs:[...l.chatLogs,{type:'sys', date:new Date().toISOString(), by:authUser.username,
-                text:`✅ Vazifa yakunlandi! Natija: "${note||'Izohsiz bajardi'}"`}]};
-            return targetLead;
-          }
-          return l;
-        }));
+        const base = leads.find(l => l.id == id);
+        if(!base) return;
+        const targetLead = {...base, deadline:null, taskDescription:null, taskAssignee:null,
+          chatLogs:[...base.chatLogs,{type:'sys', date:new Date().toISOString(), by:authUser.username,
+            text:`✅ Vazifa yakunlandi! Natija: "${note||'Izohsiz bajardi'}"`}]};
+        setLeads(prev=>prev.map(l => l.id==id ? targetLead : l));
         setShowCompleteModal(false); setTaskCompleteNote(''); setInlineCompleteId(null); setInlineCompleteNote('');
         setHasUnsavedChanges(true);
-        if(targetLead) setTimeout(()=>syncLeadToAPI(targetLead), 100);
+        syncLeadToAPI(targetLead);
       };
 
       // ---- VoIP: poll chatlogs until recording arrives (max ~2 min) ----
@@ -4752,30 +4744,26 @@
       };
 
       const handleStatusChange = (leadId, newStatus) => {
+        const base = leads.find(l => l.id == leadId);
+        if(!base) return;
+        const targetLead = {...base, status:newStatus, actualCallAttempts:0, chatLogs:[...base.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`🔄 Bosqich o'zgardi → ${newStatus}. Urinishlar nollashtirildi.`}]};
         setHasUnsavedChanges(true);
-        let targetLead = null;
-        setLeads(prev=>prev.map(l => {
-          if(l.id==leadId) { targetLead={...l, status:newStatus, actualCallAttempts:0, chatLogs:[...l.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`🔄 Bosqich o'zgardi → ${newStatus}. Urinishlar nollashtirildi.`}]}; return targetLead; }
-          return l;
-        }));
-        if(targetLead) {
-          setTimeout(()=>syncLeadToAPI(targetLead), 100);
-          if (newStatus === 'WON')       addNotif('stage_changed', '🏆 Bitim yutildi!',      `${targetLead.name} → WON bosqichiga o'tdi`, leadId);
-          else if (newStatus === 'LOST') addNotif('stage_changed', '❌ Bitim yo\'qotildi',   `${targetLead.name} → LOST bosqichiga o'tdi`, leadId);
-          else                           addNotif('stage_changed', '🔄 Bosqich o\'zgardi',   `${targetLead.name} → ${newStatus}`, leadId);
-        }
+        setLeads(prev=>prev.map(l => l.id==leadId ? targetLead : l));
+        syncLeadToAPI(targetLead);
+        if (newStatus === 'WON')       addNotif('stage_changed', '🏆 Bitim yutildi!',      `${targetLead.name} → WON bosqichiga o'tdi`, leadId);
+        else if (newStatus === 'LOST') addNotif('stage_changed', '❌ Bitim yo\'qotildi',   `${targetLead.name} → LOST bosqichiga o'tdi`, leadId);
+        else                           addNotif('stage_changed', '🔄 Bosqich o\'zgardi',   `${targetLead.name} → ${newStatus}`, leadId);
       };
 
       const handleSendChatMsg = (id) => {
         if(!chatMessageInput.trim()) return;
+        const base = leads.find(l => String(l.id) === String(id));
+        if(!base) return;
+        const targetLead = {...base, chatLogs:[...base.chatLogs,{type:'msg',dir:'out',date:new Date().toISOString(),text:chatMessageInput}]};
         setHasUnsavedChanges(true);
-        let targetLead = null;
-        setLeads(prev=>prev.map(l => {
-          if(String(l.id)===String(id)) { targetLead={...l, chatLogs:[...l.chatLogs,{type:'msg',dir:'out',date:new Date().toISOString(),text:chatMessageInput}]}; return targetLead; }
-          return l;
-        }));
+        setLeads(prev=>prev.map(l => String(l.id)===String(id) ? targetLead : l));
         setChatMessageInput('');
-        if(targetLead) setTimeout(()=>syncLeadToAPI(targetLead), 100);
+        syncLeadToAPI(targetLead);
       };
 
       const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); };
