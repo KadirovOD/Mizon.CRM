@@ -4,8 +4,14 @@
   "description": "Mizon CRM — Lead Management, Kanban Board, Webhook Integrations",
   "main": "api/index.js",
   "scripts": {
+    "build": "babel frontend/src/modules.jsx -o frontend/modules.js && babel frontend/src/app.jsx -o frontend/app.js",
     "start": "node api/index.js",
     "dev": "node api/index.js"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.24.0",
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.24.0"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
