@@ -11586,6 +11586,15 @@ const App = () => {
     const iv = setInterval(poll, 30000);
     return () => clearInterval(iv);
   }, [authUser, addNotif]);
+
+  // Veb-forma / tashqi lidlar — har 20 sek pipeline'ni avtomatik yangilash
+  useEffect(() => {
+    if (!authUser) return;
+    const iv = setInterval(() => {
+      if (document.visibilityState === 'visible') reloadLeadsFromApi();
+    }, 20000);
+    return () => clearInterval(iv);
+  }, [authUser]);
   const syncLeadToAPI = lead => {
     if (String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
     setSyncStatus('saving');
