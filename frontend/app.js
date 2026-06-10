@@ -2195,7 +2195,7 @@ const IntegrationsModule = ({
       color: '#8b5cf6',
       fontWeight: 600
     }
-  }, "Havola olish \u2192")))), activeModal && activeModal !== 'apikeys' && (() => {
+  }, "Havola olish \u2192")))), activeModal && typeof activeModal === 'object' && (() => {
     // ── Facebook OAuth multi-step flow ─────────────────────
     const FbOAuthFlow = () => {
       const [fbStep, setFbStep] = useState(0); // 0=list+btn, 1=waiting, 2=pages, 3=forms+mapping
