@@ -4468,28 +4468,48 @@
         const extSubtitle = extCompanyInfo?.form_subtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz.";
         const companyName = extCompanyInfo?.name || '';
 
+        const [extError, setExtError] = useState('');
+        const [extSending, setExtSending] = useState(false);
+
         const handleExtSubmit = async (e) => {
           e.preventDefault();
+          setExtError('');
           const nameField = formFields.find(f=>f.key==='name');
           const phoneField = formFields.find(f=>f.key==='phone');
           if(nameField && nameField.required && !extFormData.name) return alert("Ismingizni kiriting!");
           if(phoneField && phoneField.required && !extFormData.phone) return alert("Telefon raqamni kiriting!");
-          const cols = columnsMap[formPipeId] || [];
-          const initialStage = cols[0] ? cols[0].id : 'NEW';
-          const extraInfo = formFields.filter(f=>!['name','phone','region'].includes(f.key)).map(f=>`${f.label}: ${extFormData[f.key]||'-'}`).join(' | ');
-          // API ga yuborish
+          const extraInfo = formFields
+            .filter(f=>!['name','phone','region','email'].includes(f.key))
+            .map(f=>`${f.label}: ${extFormData[f.key]||'-'}`).join(' | ');
+          const slug = companySlug || new URLSearchParams(window.location.search).get('company') || '';
+          if (!slug) { setExtError("Havola noto'g'ri: kompaniya aniqlanmadi."); return; }
+          setExtSending(true);
           try {
-            await fetch('/api/leads', {
-              method:'POST', headers:{'Content-Type':'application/json'},
+            const r = await fetch('/api/public/leads', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
               body:JSON.stringify({
-                name:extFormData.name||"Noma'lum", phone:extFormData.phone||'',
-                region:extFormData.region||'Veb-Sayt', source:'website',
-                owner:'Navbatda', pipelineId:formPipeId||'p1',
-                status:stageMapRef.current.toDbId[initialStage]||null,
+                company_slug: slug,
+                name:  extFormData.name  || "Noma'lum",
+                phone: extFormData.phone || '',
+                email: extFormData.email || null,
+                region: extFormData.region || 'Veb-Sayt',
+                source: 'website',
+                pipelineId: formPipeId || 'p1',
+                extra: extraInfo,
               })
             });
-          } catch(err) { console.log('Forma yuborishda xato:', err.message); }
-          setExtSubmitted(true);
+            if (!r.ok) {
+              const d = await r.json().catch(()=>({error:'Server xatosi'}));
+              setExtError(d.error || `Xato: ${r.status}`);
+              setExtSending(false);
+              return;
+            }
+            setExtSubmitted(true);
+          } catch(err) {
+            setExtError('Tarmoq xatosi: ' + err.message);
+          }
+          setExtSending(false);
         };
 
         if (extSubmitted) return (
@@ -4514,7 +4534,14 @@
                   <input className="input-base" type={f.type||'text'} placeholder={f.placeholder||''} value={extFormData[f.key]||''} onChange={e=>setExtFormData({...extFormData,[f.key]:e.target.value})} />
                 </div>
               ))}
-              <button className="btn-primary" style={{width:'100%', marginTop:'16px', padding:'14px', fontSize:'15px'}} type="submit">Arizani Jo'natish →</button>
+              {extError && (
+                <div style={{padding:'10px 14px',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'8px',color:'#ef4444',fontSize:'13px',marginTop:'8px'}}>
+                  ❌ {extError}
+                </div>
+              )}
+              <button className="btn-primary" style={{width:'100%', marginTop:'16px', padding:'14px', fontSize:'15px'}} type="submit" disabled={extSending}>
+                {extSending ? 'Yuborilmoqda...' : "Arizani Jo'natish →"}
+              </button>
             </form>
           </div>
         );

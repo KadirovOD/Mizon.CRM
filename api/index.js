@@ -87,7 +87,7 @@ app.use(parseToken);
 
 // ── Auth enforcement: barcha /api/* marshrutlar (ochiq yo'llardan tashqari) JWT talab qiladi ──
 const _PUBLIC_PATHS    = new Set(['/api/health', '/api/auth/login', '/api/auth/me', '/api/company/info']);
-const _PUBLIC_PREFIXES = ['/api/webhook/', '/api/oauth/'];
+const _PUBLIC_PREFIXES = ['/api/webhook/', '/api/oauth/', '/api/public/'];
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api/')) return next();
   if (_PUBLIC_PATHS.has(req.path)) return next();
@@ -393,7 +393,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V17', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V18', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -735,6 +735,80 @@ app.get   ('/api/billing/invoices',         billingController.listInvoices);
 app.post  ('/api/billing/invoices',         billingController.createInvoice);
 app.put   ('/api/billing/invoices/:id/pay', billingController.markInvoicePaid);
 app.get   ('/api/billing/me',               billingController.myBilling);
+
+// ── Tashqi veb-forma: JWT talab qilinmaydi ────────────────────────────────────
+// POST /api/public/leads — mijoz veb-forma orqali lead yuboradi (company_slug bilan)
+app.post('/api/public/leads', async (req, res) => {
+  if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  const {
+    company_slug,
+    name,
+    phone  = null,
+    email  = null,
+    region = 'Veb-Sayt',
+    source = 'website',
+    pipelineId = 'p1',
+    extra  = '',
+  } = req.body || {};
+
+  if (!company_slug || !company_slug.trim())
+    return res.status(400).json({ error: 'company_slug majburiy' });
+  if (!name || !name.trim())
+    return res.status(400).json({ error: 'Ism majburiy' });
+
+  try {
+    // 1. Kompaniyani slug bo'yicha topish
+    const compRow = await req.db.query(
+      'SELECT id FROM companies WHERE slug=$1 AND is_active=true LIMIT 1',
+      [company_slug.trim()]
+    );
+    if (!compRow.rows.length)
+      return res.status(404).json({ error: 'Kompaniya topilmadi yoki faol emas' });
+    const cid = compRow.rows[0].id;
+
+    // 2. Kompaniyaning birinchi bosqichini olish
+    const firstStage = await req.db.query(
+      'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence ASC LIMIT 1',
+      [cid]
+    );
+    const stageId = firstStage.rows[0]?.id || null;
+
+    // 3. Lead ballini hisoblash
+    let score = 30; // website manbaasi
+    if (phone) score += 20;
+    if (email) score += 10;
+
+    const sysNote = extra
+      ? `Tashqi veb-forma: ${extra}`
+      : "Tashqi veb-forma orqali yuborildi";
+
+    // 4. Leadni yaratish
+    const newLead = await req.db.query(
+      `INSERT INTO crm_lead
+         (name, contact_name, phone, email, mizon_source, lead_score,
+          stage_id, region, owner, pipelineid, chatlogs, company_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       RETURNING id`,
+      [
+        name.trim(), name.trim(),
+        phone || null, email || null,
+        source, score,
+        stageId,
+        region || 'Veb-Sayt',
+        'Navbatda',
+        pipelineId || 'p1',
+        JSON.stringify([{ type:'sys', date: new Date().toISOString(), text: sysNote }]),
+        cid,
+      ]
+    );
+
+    console.log(`🌐 Tashqi forma lead: "${name}" → company=${company_slug} id=${newLead.rows[0].id}`);
+    res.status(201).json({ success: true, id: newLead.rows[0].id });
+  } catch (err) {
+    console.error('Public lead error:', err.message);
+    res.status(500).json({ error: 'Server xatosi' });
+  }
+});
 
 // ── Frontend SPA fallback ─────────────────────────────────────────────────────
 app.get('*', (req, res) => {
