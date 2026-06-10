@@ -46,7 +46,8 @@ app.use(cors({
       origin.includes('127.0.0.1') ||
       origin === 'https://mizon-crm.uz' ||
       origin === 'https://www.mizon-crm.uz' ||
-      /^https:\/\/[a-z0-9-]+\.mizon-crm\.uz$/.test(origin)
+      /^https:\/\/[a-z0-9-]+\.mizon-crm\.uz$/.test(origin) ||
+      /^https:\/\/yd-school-qabul[a-z0-9-]*\.vercel\.app$/.test(origin)
     ) return cb(null, true);
     cb(null, false); // reject unknown origins (not 403 — CORS just won't attach header)
   },
