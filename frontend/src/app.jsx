@@ -509,6 +509,17 @@
       const [msg,         setMsg]         = useState('');
       const [saving,      setSaving]      = useState(false);
 
+      // ── Webform modal state — IIFE ichida emas, top-level da (React hooks qoidasi) ──
+      const [wfPipe,        setWfPipe]        = useState('');
+      const [wfLink,        setWfLink]        = useState('');
+      const [wfCopied,      setWfCopied]      = useState(false);
+      const [wfSaving,      setWfSaving]      = useState(false);
+      const [wfSaved,       setWfSaved]       = useState(false);
+      const [localTitle,    setLocalTitle]    = useState('');
+      const [localSubtitle, setLocalSubtitle] = useState('');
+      const [localFields,   setLocalFields]   = useState([]);
+      const [activeWfTab,   setActiveWfTab]   = useState('design');
+
       const authH = () => {
         const t = localStorage.getItem('mizon_token');
         return {'Content-Type':'application/json', 'Authorization':'Bearer '+t};
@@ -579,6 +590,54 @@
           if (keys.length) { setApiKeys(keys); localStorage.setItem('mizon_api_keys_local', JSON.stringify(keys)); }
         }).catch(()=>{});
       }, []);
+
+      // Webform modal ochilganda local state ni yangilash
+      useEffect(() => {
+        if (activeModal === 'webformlink') {
+          setWfPipe(intgPipelines[0]?.id || '');
+          setWfLink(''); setWfCopied(false); setWfSaving(false); setWfSaved(false);
+          setLocalTitle(formSettings?.form_title || '');
+          setLocalSubtitle(formSettings?.form_subtitle || '');
+          setLocalFields(formFields ? [...formFields] : []);
+          setActiveWfTab('design');
+        }
+      }, [activeModal]);
+
+      // Webform modal funksiyalari (yuqoridagi state larga murojaat qiladi)
+      const generateLink = () => {
+        if (!wfPipe) return alert('Avval quvurni tanlang!');
+        const base = window.location.origin + window.location.pathname;
+        const slugParam = intgCompanySlug && !window.location.hostname.endsWith('.mizon-crm.uz')
+          ? `&company=${intgCompanySlug}` : '';
+        const link = `${base}?leadForm=true&pipe=${wfPipe}${slugParam}`;
+        setWfLink(link);
+        navigator.clipboard?.writeText(link).catch(()=>{});
+        setWfCopied(true); setTimeout(()=>setWfCopied(false), 2500);
+      };
+      const wfSaveAll = async () => {
+        setWfSaving(true);
+        const t = localStorage.getItem('mizon_token');
+        if (t) {
+          try {
+            await fetch('/api/company/settings', {
+              method:'PUT',
+              headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+              body:JSON.stringify({form_title:localTitle, form_subtitle:localSubtitle})
+            });
+            if (setFormSettings) setFormSettings({form_title:localTitle, form_subtitle:localSubtitle});
+          } catch(e) { console.error('Saqlashda xato:', e); }
+        }
+        if (setFormFields) setFormFields(localFields);
+        localStorage.setItem('mizon_formFields', JSON.stringify(localFields));
+        setWfSaving(false); setWfSaved(true);
+        setTimeout(()=>setWfSaved(false), 2500);
+      };
+      const wfTabSt = (id) => ({
+        padding:'8px 18px', fontSize:'12px', fontWeight:600, cursor:'pointer', borderRadius:'8px',
+        background: activeWfTab===id ? 'var(--primary-container)' : 'transparent',
+        color: activeWfTab===id ? '#fff' : 'var(--text-muted)',
+        border: 'none', transition:'all 0.15s'
+      });
 
       const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 3200); };
       const copyText = (text, id) => {
@@ -1515,205 +1574,148 @@
           )}
 
           {/* ── WEB FORM LINK MODAL ────────────────────────────── */}
-          {activeModal === 'webformlink' && (() => {
-            // ── Local state for the full webform editor ───────────────────────
-            const [wfPipe,    setWfPipe]    = useState(intgPipelines[0]?.id || '');
-            const [wfLink,    setWfLink]    = useState('');
-            const [wfCopied,  setWfCopied]  = useState(false);
-            const [wfSaving,  setWfSaving]  = useState(false);
-            const [wfSaved,   setWfSaved]   = useState(false);
-            // Local copies so changes are only applied on explicit save
-            const [localTitle,    setLocalTitle]    = useState(formSettings?.form_title    || '');
-            const [localSubtitle, setLocalSubtitle] = useState(formSettings?.form_subtitle || '');
-            const [localFields,   setLocalFields]   = useState(formFields ? [...formFields] : []);
-            const [activeWfTab,   setActiveWfTab]   = useState('design'); // 'design' | 'fields' | 'link'
+          {activeModal === 'webformlink' && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',overflowY:'auto'}}
+                 onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
+              <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:'680px',boxShadow:'0 24px 64px rgba(0,0,0,0.45)',display:'flex',flexDirection:'column',maxHeight:'90vh'}}>
 
-            const generateLink = () => {
-              if (!wfPipe) return alert('Avval quvurni tanlang!');
-              const base = window.location.origin + window.location.pathname;
-              const slugParam = intgCompanySlug && !window.location.hostname.endsWith('.mizon-crm.uz') ? `&company=${intgCompanySlug}` : '';
-              const link = `${base}?leadForm=true&pipe=${wfPipe}${slugParam}`;
-              setWfLink(link);
-              navigator.clipboard?.writeText(link).catch(()=>{});
-              setWfCopied(true); setTimeout(()=>setWfCopied(false), 2500);
-            };
+                {/* Header */}
+                <div style={{padding:'18px 22px 14px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)',flexShrink:0}}>
+                  <div style={{width:'42px',height:'42px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>🔗</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:'16px'}}>Tashqi Havola & Forma Sozlamalari</div>
+                    <div style={{fontSize:'11px',color:'var(--text-muted)'}}>Mijoz ro'yxatdan o'tish formasi — dizayn, savollar va URL</div>
+                  </div>
+                  <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1,padding:'4px'}}>✕</button>
+                </div>
 
-            const saveAll = async () => {
-              setWfSaving(true);
-              // 1. Sarlavhani API ga saqlash
-              const t = localStorage.getItem('mizon_token');
-              if (t) {
-                try {
-                  await fetch('/api/company/settings', {
-                    method:'PUT',
-                    headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
-                    body:JSON.stringify({form_title:localTitle, form_subtitle:localSubtitle})
-                  });
-                  if (setFormSettings) setFormSettings({form_title:localTitle, form_subtitle:localSubtitle});
-                } catch(e) { console.error('Saqlashda xato:', e); }
-              }
-              // 2. Forma savollarini localStorage ga saqlash
-              if (setFormFields) setFormFields(localFields);
-              localStorage.setItem('mizon_formFields', JSON.stringify(localFields));
-              setWfSaving(false); setWfSaved(true);
-              setTimeout(()=>setWfSaved(false), 2500);
-            };
+                {/* Tab bar */}
+                <div style={{display:'flex',gap:'4px',padding:'12px 22px 0',borderBottom:'1px solid var(--outline-variant)',flexShrink:0}}>
+                  {[['design','🎨 Dizayn'],['fields','📋 Forma Savollari'],['link','🔗 Havola Yaratish']].map(([id,label])=>(
+                    <button key={id} style={wfTabSt(id)} onClick={()=>setActiveWfTab(id)}>{label}</button>
+                  ))}
+                </div>
 
-            // Tab style helper
-            const tabSt = (id) => ({
-              padding:'8px 18px', fontSize:'12px', fontWeight:600, cursor:'pointer', borderRadius:'8px',
-              background: activeWfTab===id ? 'var(--primary-container)' : 'transparent',
-              color: activeWfTab===id ? '#fff' : 'var(--text-muted)',
-              border: 'none', transition:'all 0.15s'
-            });
+                {/* Body — scrollable */}
+                <div style={{padding:'20px 22px',overflowY:'auto',flex:1}}>
 
-            return (
-              <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',overflowY:'auto'}}
-                   onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
-                <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:'680px',boxShadow:'0 24px 64px rgba(0,0,0,0.45)',display:'flex',flexDirection:'column',maxHeight:'90vh'}}>
-
-                  {/* Header */}
-                  <div style={{padding:'18px 22px 14px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)',flexShrink:0}}>
-                    <div style={{width:'42px',height:'42px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>🔗</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:700,fontSize:'16px'}}>Tashqi Havola & Forma Sozlamalari</div>
-                      <div style={{fontSize:'11px',color:'var(--text-muted)'}}>Mijoz ro'yxatdan o'tish formasi — dizayn, savollar va URL</div>
+                  {/* ── TAB 1: Dizayn ── */}
+                  {activeWfTab === 'design' && (
+                    <div>
+                      <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'18px',lineHeight:'1.7'}}>
+                        Mijoz formangizning sarlavhasi va tavsifini sozlang. Bu ma'lumotlar formaning yuqori qismida ko'rsatiladi.
+                      </p>
+                      <div style={{padding:'16px',background:'var(--bg-base)',border:'1px solid var(--border-light)',borderRadius:'10px',marginBottom:'16px'}}>
+                        <div style={{fontWeight:600,fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                          <span className="material-symbols-outlined" style={{fontSize:'16px'}}>title</span> Forma Sarlavhasi
+                        </div>
+                        <span className="label-sm">Asosiy sarlavha (bo'sh bo'lsa kompaniya nomi ishlatiladi)</span>
+                        <input className="input-base" placeholder="Masalan: Bepul konsultatsiya olish" value={localTitle} onChange={e=>setLocalTitle(e.target.value)} />
+                        <span className="label-sm">Tavsif matni</span>
+                        <input className="input-base" placeholder="Masalan: Ma'lumotlaringizni qoldiring, 1 soat ichida aloqaga chiqamiz." value={localSubtitle} onChange={e=>setLocalSubtitle(e.target.value)} />
+                      </div>
+                      {/* Preview */}
+                      <div style={{padding:'20px',background:'linear-gradient(135deg,rgba(99,102,241,0.07),rgba(139,92,246,0.07))',border:'1px solid rgba(139,92,246,0.2)',borderRadius:'10px',textAlign:'center',marginBottom:'18px'}}>
+                        <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.08em'}}>Ko'rinish oldindan namunasi</div>
+                        <div style={{fontWeight:700,fontSize:'18px',marginBottom:'6px'}}>{localTitle || '(Kompaniya nomi)'}</div>
+                        <div style={{fontSize:'13px',color:'var(--text-muted)'}}>{localSubtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz."}</div>
+                      </div>
                     </div>
-                    <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1,padding:'4px'}}>✕</button>
-                  </div>
+                  )}
 
-                  {/* Tab bar */}
-                  <div style={{display:'flex',gap:'4px',padding:'12px 22px 0',borderBottom:'1px solid var(--outline-variant)',flexShrink:0}}>
-                    {[['design','🎨 Dizayn'],['fields','📋 Forma Savollari'],['link','🔗 Havola Yaratish']].map(([id,label])=>(
-                      <button key={id} style={tabSt(id)} onClick={()=>setActiveWfTab(id)}>{label}</button>
-                    ))}
-                  </div>
-
-                  {/* Body — scrollable */}
-                  <div style={{padding:'20px 22px',overflowY:'auto',flex:1}}>
-
-                    {/* ── TAB 1: Dizayn (sarlavha & ko'rinish) ── */}
-                    {activeWfTab === 'design' && (
-                      <div>
-                        <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'18px',lineHeight:'1.7'}}>
-                          Mijoz formangizning sarlavhasi va tavsifini sozlang. Bu ma'lumotlar formaning yuqori qismida ko'rsatiladi.
-                        </p>
-
-                        <div style={{padding:'16px',background:'var(--bg-base)',border:'1px solid var(--border-light)',borderRadius:'10px',marginBottom:'16px'}}>
-                          <div style={{fontWeight:600,fontSize:'13px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
-                            <span className="material-symbols-outlined" style={{fontSize:'16px'}}>title</span> Forma Sarlavhasi
+                  {/* ── TAB 2: Forma Savollari ── */}
+                  {activeWfTab === 'fields' && (
+                    <div>
+                      <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'14px',lineHeight:'1.7'}}>
+                        Formada foydalanuvchilarga ko'rsatiladigan savollarni sozlang. <b>Ism</b> va <b>Telefon</b> maydonlari doim mavjud bo'ladi.
+                      </p>
+                      {/* Tizimiy maydonlar */}
+                      <div style={{marginBottom:'10px'}}>
+                        {[{label:"Ism (majburiy)",ph:"Ismingizni kiriting"},{label:"Telefon (majburiy)",ph:"+998 90 000 00 00"}].map((f,i)=>(
+                          <div key={i} style={{display:'flex',gap:'8px',alignItems:'center',padding:'10px',background:'rgba(99,102,241,0.05)',border:'1px solid rgba(99,102,241,0.15)',borderRadius:'8px',marginBottom:'6px',opacity:0.75}}>
+                            <span style={{color:'var(--text-muted)',fontSize:'12px',width:'20px'}}>{i+1}</span>
+                            <input className="input-base" style={{marginBottom:0,flex:2}} value={f.label} disabled />
+                            <span style={{fontSize:'11px',color:'var(--text-muted)',background:'var(--surface-variant)',padding:'3px 8px',borderRadius:'4px',whiteSpace:'nowrap'}}>Tizimiy</span>
                           </div>
-                          <span className="label-sm">Asosiy sarlavha (bo'sh bo'lsa kompaniya nomi ishlatiladi)</span>
-                          <input className="input-base" placeholder="Masalan: Bepul konsultatsiya olish" value={localTitle} onChange={e=>setLocalTitle(e.target.value)} />
-                          <span className="label-sm">Tavsif matni</span>
-                          <input className="input-base" placeholder="Masalan: Ma'lumotlaringizni qoldiring, 1 soat ichida aloqaga chiqamiz." value={localSubtitle} onChange={e=>setLocalSubtitle(e.target.value)} />
-                        </div>
-
-                        {/* Preview */}
-                        <div style={{padding:'20px',background:'linear-gradient(135deg,rgba(99,102,241,0.07),rgba(139,92,246,0.07))',border:'1px solid rgba(139,92,246,0.2)',borderRadius:'10px',textAlign:'center',marginBottom:'18px'}}>
-                          <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.08em'}}>Ko'rinish oldindan namunasi</div>
-                          <div style={{fontWeight:700,fontSize:'18px',marginBottom:'6px'}}>{localTitle || '(Kompaniya nomi)'}</div>
-                          <div style={{fontSize:'13px',color:'var(--text-muted)'}}>{localSubtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz."}</div>
-                        </div>
+                        ))}
                       </div>
-                    )}
-
-                    {/* ── TAB 2: Forma Savollari ── */}
-                    {activeWfTab === 'fields' && (
-                      <div>
-                        <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'14px',lineHeight:'1.7'}}>
-                          Formada foydalanuvchilarga ko'rsatiladigan savollarni sozlang. <b>Ism</b> va <b>Telefon</b> maydonlari doim mavjud bo'ladi.
-                        </p>
-
-                        {/* Tizimiy (o'chirib bo'lmaydigan) maydonlar */}
-                        <div style={{marginBottom:'10px'}}>
-                          {[{label:"Ism (majburiy)",ph:"Ismingizni kiriting"},{label:"Telefon (majburiy)",ph:"+998 90 000 00 00"}].map((f,i)=>(
-                            <div key={i} style={{display:'flex',gap:'8px',alignItems:'center',padding:'10px',background:'rgba(99,102,241,0.05)',border:'1px solid rgba(99,102,241,0.15)',borderRadius:'8px',marginBottom:'6px',opacity:0.75}}>
-                              <span style={{color:'var(--text-muted)',fontSize:'12px',width:'20px'}}>{i+1}</span>
-                              <input className="input-base" style={{marginBottom:0,flex:2}} value={f.label} disabled />
-                              <span style={{fontSize:'11px',color:'var(--text-muted)',background:'var(--surface-variant)',padding:'3px 8px',borderRadius:'4px',whiteSpace:'nowrap'}}>Tizimiy</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Dinamik maydonlar */}
-                        <div style={{display:'flex',flexDirection:'column',gap:'6px',marginBottom:'14px'}}>
-                          {localFields.map((f,idx)=>(
-                            <div key={f.id} style={{display:'flex',gap:'8px',alignItems:'center',padding:'10px',background:'var(--bg-base)',border:'1px solid var(--border-light)',borderRadius:'8px'}}>
-                              <span style={{color:'var(--text-muted)',fontSize:'12px',width:'20px'}}>{idx+3}</span>
-                              <input className="input-base" style={{marginBottom:0,flex:2}} placeholder="Savol nomi" value={f.label}
-                                onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,label:e.target.value}:x))} />
-                              <input className="input-base" style={{marginBottom:0,flex:1}} placeholder="key" value={f.key}
-                                onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,key:e.target.value}:x))} />
-                              <select className="input-base" style={{marginBottom:0,width:'90px'}} value={f.type}
-                                onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,type:e.target.value}:x))}>
-                                <option value="text">Matn</option>
-                                <option value="tel">Telefon</option>
-                                <option value="email">Email</option>
-                                <option value="number">Raqam</option>
-                              </select>
-                              <label style={{fontSize:'11px',color:'var(--text-muted)',display:'flex',alignItems:'center',gap:'4px',cursor:'pointer',whiteSpace:'nowrap'}}>
-                                <input type="checkbox" checked={f.required} onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,required:e.target.checked}:x))}/> Majburiy
-                              </label>
-                              <button className="btn-danger" style={{padding:'4px 8px'}} onClick={()=>setLocalFields(localFields.filter(x=>x.id!==f.id))}>✕</button>
-                            </div>
-                          ))}
-                        </div>
-                        <button className="btn-outline" style={{width:'100%'}}
-                          onClick={()=>setLocalFields([...localFields,{id:'f_'+Date.now(),label:'',key:'field_'+Date.now(),type:'text',required:false,placeholder:''}])}>
-                          + Yangi savol qo'shish
-                        </button>
-                        {localFields.length === 0 && (
-                          <div style={{padding:'16px',textAlign:'center',color:'var(--text-muted)',fontSize:'12px',marginTop:'8px'}}>
-                            Qo'shimcha savol yo'q. Yuqoridagi tugmani bosib savol qo'shing.
+                      {/* Dinamik maydonlar */}
+                      <div style={{display:'flex',flexDirection:'column',gap:'6px',marginBottom:'14px'}}>
+                        {localFields.map((f,idx)=>(
+                          <div key={f.id} style={{display:'flex',gap:'8px',alignItems:'center',padding:'10px',background:'var(--bg-base)',border:'1px solid var(--border-light)',borderRadius:'8px'}}>
+                            <span style={{color:'var(--text-muted)',fontSize:'12px',width:'20px'}}>{idx+3}</span>
+                            <input className="input-base" style={{marginBottom:0,flex:2}} placeholder="Savol nomi" value={f.label}
+                              onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,label:e.target.value}:x))} />
+                            <input className="input-base" style={{marginBottom:0,flex:1}} placeholder="key" value={f.key}
+                              onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,key:e.target.value}:x))} />
+                            <select className="input-base" style={{marginBottom:0,width:'90px'}} value={f.type}
+                              onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,type:e.target.value}:x))}>
+                              <option value="text">Matn</option>
+                              <option value="tel">Telefon</option>
+                              <option value="email">Email</option>
+                              <option value="number">Raqam</option>
+                            </select>
+                            <label style={{fontSize:'11px',color:'var(--text-muted)',display:'flex',alignItems:'center',gap:'4px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                              <input type="checkbox" checked={f.required} onChange={e=>setLocalFields(localFields.map(x=>x.id===f.id?{...x,required:e.target.checked}:x))}/> Majburiy
+                            </label>
+                            <button className="btn-danger" style={{padding:'4px 8px'}} onClick={()=>setLocalFields(localFields.filter(x=>x.id!==f.id))}>✕</button>
                           </div>
-                        )}
+                        ))}
                       </div>
-                    )}
-
-                    {/* ── TAB 3: Havola Yaratish ── */}
-                    {activeWfTab === 'link' && (
-                      <div>
-                        <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'16px',lineHeight:'1.7'}}>
-                          Havolani ijtimoiy tarmoqlarda, saytda yoki WhatsApp da ulashing. Mijoz bosib kirsa, forma ochiladi va lead avtomatik CRM ga tushadi.
-                        </p>
-                        <span className="label-sm">Quvurni tanlang</span>
-                        <select className="input-base" value={wfPipe} onChange={e=>setWfPipe(e.target.value)}>
-                          <option value="" disabled>Quvurni tanlang...</option>
-                          {intgPipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        {intgPipelines.length === 0 && (
-                          <div style={{fontSize:'12px',color:'var(--warning)',marginBottom:'10px',padding:'10px',background:'rgba(245,158,11,0.08)',borderRadius:'6px'}}>
-                            ⚠️ Quvur topilmadi. Avval Sozlamalar → Varonkalar bo'limida quvur yarating.
-                          </div>
-                        )}
-                        <button className="btn-primary" style={{width:'100%',marginBottom:'14px'}} onClick={generateLink} disabled={!wfPipe}>
-                          🔗 Havola Yaratish va Nusxalash
-                        </button>
-                        {wfLink && (
-                          <div style={{display:'flex',gap:'8px',alignItems:'center',padding:'12px 14px',background:'var(--bg-base)',border:`1px solid ${wfCopied?'rgba(1,167,80,0.4)':'var(--border-light)'}`,borderRadius:'8px',transition:'border-color 0.3s',marginBottom:'12px'}}>
-                            <code style={{flex:1,fontSize:'11px',color:'var(--success)',wordBreak:'break-all'}}>{wfLink}</code>
-                            <span style={{fontSize:'11px',color:'var(--success)',fontWeight:700,whiteSpace:'nowrap',minWidth:'80px',textAlign:'right'}}>{wfCopied?'✓ Nusxalandi!':''}</span>
-                          </div>
-                        )}
-                        <div style={{padding:'12px',background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.15)',borderRadius:'8px',fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.7'}}>
-                          💡 Forma dizayni va sarlavhasini <b>🎨 Dizayn</b> tabida, savollarni <b>📋 Forma Savollari</b> tabida o'zgartiring. O'zgarishlar "<b>Saqlash</b>" tugmasini bosganingizda kuchga kiradi.
+                      <button className="btn-outline" style={{width:'100%'}}
+                        onClick={()=>setLocalFields([...localFields,{id:'f_'+Date.now(),label:'',key:'field_'+Date.now(),type:'text',required:false,placeholder:''}])}>
+                        + Yangi savol qo'shish
+                      </button>
+                      {localFields.length === 0 && (
+                        <div style={{padding:'16px',textAlign:'center',color:'var(--text-muted)',fontSize:'12px',marginTop:'8px'}}>
+                          Qo'shimcha savol yo'q. Yuqoridagi tugmani bosib savol qo'shing.
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Footer */}
-                  <div style={{padding:'14px 22px',borderTop:'1px solid var(--outline-variant)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-                    <button className="btn-outline" onClick={()=>setActiveModal(null)}>Yopish</button>
-                    <button className="btn-primary" onClick={saveAll} disabled={wfSaving}>
-                      {wfSaving ? 'Saqlanmoqda...' : wfSaved ? '✓ Saqlandi!' : '💾 Saqlash'}
-                    </button>
-                  </div>
+                  {/* ── TAB 3: Havola Yaratish ── */}
+                  {activeWfTab === 'link' && (
+                    <div>
+                      <p style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'16px',lineHeight:'1.7'}}>
+                        Havolani ijtimoiy tarmoqlarda, saytda yoki WhatsApp da ulashing. Mijoz bosib kirsa, forma ochiladi va lead avtomatik CRM ga tushadi.
+                      </p>
+                      <span className="label-sm">Quvurni tanlang</span>
+                      <select className="input-base" value={wfPipe} onChange={e=>setWfPipe(e.target.value)}>
+                        <option value="" disabled>Quvurni tanlang...</option>
+                        {intgPipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      {intgPipelines.length === 0 && (
+                        <div style={{fontSize:'12px',color:'var(--warning)',marginBottom:'10px',padding:'10px',background:'rgba(245,158,11,0.08)',borderRadius:'6px'}}>
+                          ⚠️ Quvur topilmadi. Avval Sozlamalar → Varonkalar bo'limida quvur yarating.
+                        </div>
+                      )}
+                      <button className="btn-primary" style={{width:'100%',marginBottom:'14px'}} onClick={generateLink} disabled={!wfPipe}>
+                        🔗 Havola Yaratish va Nusxalash
+                      </button>
+                      {wfLink && (
+                        <div style={{display:'flex',gap:'8px',alignItems:'center',padding:'12px 14px',background:'var(--bg-base)',border:`1px solid ${wfCopied?'rgba(1,167,80,0.4)':'var(--border-light)'}`,borderRadius:'8px',transition:'border-color 0.3s',marginBottom:'12px'}}>
+                          <code style={{flex:1,fontSize:'11px',color:'var(--success)',wordBreak:'break-all'}}>{wfLink}</code>
+                          <span style={{fontSize:'11px',color:'var(--success)',fontWeight:700,whiteSpace:'nowrap',minWidth:'80px',textAlign:'right'}}>{wfCopied?'✓ Nusxalandi!':''}</span>
+                        </div>
+                      )}
+                      <div style={{padding:'12px',background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.15)',borderRadius:'8px',fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.7'}}>
+                        💡 Forma dizayni va sarlavhasini <b>🎨 Dizayn</b> tabida, savollarni <b>📋 Forma Savollari</b> tabida o'zgartiring. O'zgarishlar "<b>Saqlash</b>" tugmasini bosganingizda kuchga kiradi.
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div style={{padding:'14px 22px',borderTop:'1px solid var(--outline-variant)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                  <button className="btn-outline" onClick={()=>setActiveModal(null)}>Yopish</button>
+                  <button className="btn-primary" onClick={wfSaveAll} disabled={wfSaving}>
+                    {wfSaving ? 'Saqlanmoqda...' : wfSaved ? '✓ Saqlandi!' : '💾 Saqlash'}
+                  </button>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
       );
     };

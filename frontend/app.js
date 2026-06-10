@@ -1197,6 +1197,17 @@ const IntegrationsModule = ({
   const [copiedItem, setCopiedItem] = useState(null);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // ── Webform modal state — IIFE ichida emas, top-level da (React hooks qoidasi) ──
+  const [wfPipe, setWfPipe] = useState('');
+  const [wfLink, setWfLink] = useState('');
+  const [wfCopied, setWfCopied] = useState(false);
+  const [wfSaving, setWfSaving] = useState(false);
+  const [wfSaved, setWfSaved] = useState(false);
+  const [localTitle, setLocalTitle] = useState('');
+  const [localSubtitle, setLocalSubtitle] = useState('');
+  const [localFields, setLocalFields] = useState([]);
+  const [activeWfTab, setActiveWfTab] = useState('design');
   const authH = () => {
     const t = localStorage.getItem('mizon_token');
     return {
@@ -1299,6 +1310,74 @@ const IntegrationsModule = ({
       }
     }).catch(() => {});
   }, []);
+
+  // Webform modal ochilganda local state ni yangilash
+  useEffect(() => {
+    if (activeModal === 'webformlink') {
+      setWfPipe(intgPipelines[0]?.id || '');
+      setWfLink('');
+      setWfCopied(false);
+      setWfSaving(false);
+      setWfSaved(false);
+      setLocalTitle(formSettings?.form_title || '');
+      setLocalSubtitle(formSettings?.form_subtitle || '');
+      setLocalFields(formFields ? [...formFields] : []);
+      setActiveWfTab('design');
+    }
+  }, [activeModal]);
+
+  // Webform modal funksiyalari (yuqoridagi state larga murojaat qiladi)
+  const generateLink = () => {
+    if (!wfPipe) return alert('Avval quvurni tanlang!');
+    const base = window.location.origin + window.location.pathname;
+    const slugParam = intgCompanySlug && !window.location.hostname.endsWith('.mizon-crm.uz') ? `&company=${intgCompanySlug}` : '';
+    const link = `${base}?leadForm=true&pipe=${wfPipe}${slugParam}`;
+    setWfLink(link);
+    navigator.clipboard?.writeText(link).catch(() => {});
+    setWfCopied(true);
+    setTimeout(() => setWfCopied(false), 2500);
+  };
+  const wfSaveAll = async () => {
+    setWfSaving(true);
+    const t = localStorage.getItem('mizon_token');
+    if (t) {
+      try {
+        await fetch('/api/company/settings', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + t
+          },
+          body: JSON.stringify({
+            form_title: localTitle,
+            form_subtitle: localSubtitle
+          })
+        });
+        if (setFormSettings) setFormSettings({
+          form_title: localTitle,
+          form_subtitle: localSubtitle
+        });
+      } catch (e) {
+        console.error('Saqlashda xato:', e);
+      }
+    }
+    if (setFormFields) setFormFields(localFields);
+    localStorage.setItem('mizon_formFields', JSON.stringify(localFields));
+    setWfSaving(false);
+    setWfSaved(true);
+    setTimeout(() => setWfSaved(false), 2500);
+  };
+  const wfTabSt = id => ({
+    padding: '8px 18px',
+    fontSize: '12px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    borderRadius: '8px',
+    background: activeWfTab === id ? 'var(--primary-container)' : 'transparent',
+    color: activeWfTab === id ? '#fff' : 'var(--text-muted)',
+    border: 'none',
+    transition: 'all 0.15s'
+  });
   const flash = m => {
     setMsg(m);
     setTimeout(() => setMsg(''), 3200);
@@ -3855,490 +3934,421 @@ const IntegrationsModule = ({
       borderRadius: '5px',
       cursor: 'pointer'
     }
-  }, "\u2715"))))))), activeModal === 'webformlink' && (() => {
-    // ── Local state for the full webform editor ───────────────────────
-    const [wfPipe, setWfPipe] = useState(intgPipelines[0]?.id || '');
-    const [wfLink, setWfLink] = useState('');
-    const [wfCopied, setWfCopied] = useState(false);
-    const [wfSaving, setWfSaving] = useState(false);
-    const [wfSaved, setWfSaved] = useState(false);
-    // Local copies so changes are only applied on explicit save
-    const [localTitle, setLocalTitle] = useState(formSettings?.form_title || '');
-    const [localSubtitle, setLocalSubtitle] = useState(formSettings?.form_subtitle || '');
-    const [localFields, setLocalFields] = useState(formFields ? [...formFields] : []);
-    const [activeWfTab, setActiveWfTab] = useState('design'); // 'design' | 'fields' | 'link'
-
-    const generateLink = () => {
-      if (!wfPipe) return alert('Avval quvurni tanlang!');
-      const base = window.location.origin + window.location.pathname;
-      const slugParam = intgCompanySlug && !window.location.hostname.endsWith('.mizon-crm.uz') ? `&company=${intgCompanySlug}` : '';
-      const link = `${base}?leadForm=true&pipe=${wfPipe}${slugParam}`;
-      setWfLink(link);
-      navigator.clipboard?.writeText(link).catch(() => {});
-      setWfCopied(true);
-      setTimeout(() => setWfCopied(false), 2500);
-    };
-    const saveAll = async () => {
-      setWfSaving(true);
-      // 1. Sarlavhani API ga saqlash
-      const t = localStorage.getItem('mizon_token');
-      if (t) {
-        try {
-          await fetch('/api/company/settings', {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + t
-            },
-            body: JSON.stringify({
-              form_title: localTitle,
-              form_subtitle: localSubtitle
-            })
-          });
-          if (setFormSettings) setFormSettings({
-            form_title: localTitle,
-            form_subtitle: localSubtitle
-          });
-        } catch (e) {
-          console.error('Saqlashda xato:', e);
-        }
-      }
-      // 2. Forma savollarini localStorage ga saqlash
-      if (setFormFields) setFormFields(localFields);
-      localStorage.setItem('mizon_formFields', JSON.stringify(localFields));
-      setWfSaving(false);
-      setWfSaved(true);
-      setTimeout(() => setWfSaved(false), 2500);
-    };
-
-    // Tab style helper
-    const tabSt = id => ({
-      padding: '8px 18px',
-      fontSize: '12px',
-      fontWeight: 600,
-      cursor: 'pointer',
-      borderRadius: '8px',
-      background: activeWfTab === id ? 'var(--primary-container)' : 'transparent',
-      color: activeWfTab === id ? '#fff' : 'var(--text-muted)',
+  }, "\u2715"))))))), activeModal === 'webformlink' && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(0,0,0,0.6)',
+      zIndex: 1000,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+      overflowY: 'auto'
+    },
+    onClick: e => {
+      if (e.target === e.currentTarget) setActiveModal(null);
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: 'var(--bg-surface)',
+      borderRadius: '16px',
+      width: '100%',
+      maxWidth: '680px',
+      boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+      display: 'flex',
+      flexDirection: 'column',
+      maxHeight: '90vh'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '18px 22px 14px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      borderBottom: '1px solid var(--outline-variant)',
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: '42px',
+      height: '42px',
+      background: 'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',
+      borderRadius: '11px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '21px'
+    }
+  }, "\uD83D\uDD17"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: '16px'
+    }
+  }, "Tashqi Havola & Forma Sozlamalari"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)'
+    }
+  }, "Mijoz ro'yxatdan o'tish formasi \u2014 dizayn, savollar va URL")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setActiveModal(null),
+    style: {
+      background: 'none',
       border: 'none',
-      transition: 'all 0.15s'
-    });
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        zIndex: 1000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '20px',
-        overflowY: 'auto'
-      },
-      onClick: e => {
-        if (e.target === e.currentTarget) setActiveModal(null);
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: 'var(--bg-surface)',
-        borderRadius: '16px',
-        width: '100%',
-        maxWidth: '680px',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
-        display: 'flex',
-        flexDirection: 'column',
-        maxHeight: '90vh'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '18px 22px 14px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        borderBottom: '1px solid var(--outline-variant)',
-        flexShrink: 0
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: '42px',
-        height: '42px',
-        background: 'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',
-        borderRadius: '11px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: '21px'
-      }
-    }, "\uD83D\uDD17"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        fontSize: '16px'
-      }
-    }, "Tashqi Havola & Forma Sozlamalari"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: '11px',
-        color: 'var(--text-muted)'
-      }
-    }, "Mijoz ro'yxatdan o'tish formasi \u2014 dizayn, savollar va URL")), /*#__PURE__*/React.createElement("button", {
-      onClick: () => setActiveModal(null),
-      style: {
-        background: 'none',
-        border: 'none',
-        fontSize: '22px',
-        cursor: 'pointer',
-        color: 'var(--text-muted)',
-        lineHeight: 1,
-        padding: '4px'
-      }
-    }, "\u2715")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: '4px',
-        padding: '12px 22px 0',
-        borderBottom: '1px solid var(--outline-variant)',
-        flexShrink: 0
-      }
-    }, [['design', '🎨 Dizayn'], ['fields', '📋 Forma Savollari'], ['link', '🔗 Havola Yaratish']].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
-      key: id,
-      style: tabSt(id),
-      onClick: () => setActiveWfTab(id)
-    }, label))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '20px 22px',
-        overflowY: 'auto',
-        flex: 1
-      }
-    }, activeWfTab === 'design' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: '12px',
-        color: 'var(--text-muted)',
-        marginBottom: '18px',
-        lineHeight: '1.7'
-      }
-    }, "Mijoz formangizning sarlavhasi va tavsifini sozlang. Bu ma'lumotlar formaning yuqori qismida ko'rsatiladi."), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '16px',
-        background: 'var(--bg-base)',
-        border: '1px solid var(--border-light)',
-        borderRadius: '10px',
-        marginBottom: '16px'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 600,
-        fontSize: '13px',
-        marginBottom: '12px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px'
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      className: "material-symbols-outlined",
-      style: {
-        fontSize: '16px'
-      }
-    }, "title"), " Forma Sarlavhasi"), /*#__PURE__*/React.createElement("span", {
-      className: "label-sm"
-    }, "Asosiy sarlavha (bo'sh bo'lsa kompaniya nomi ishlatiladi)"), /*#__PURE__*/React.createElement("input", {
-      className: "input-base",
-      placeholder: "Masalan: Bepul konsultatsiya olish",
-      value: localTitle,
-      onChange: e => setLocalTitle(e.target.value)
-    }), /*#__PURE__*/React.createElement("span", {
-      className: "label-sm"
-    }, "Tavsif matni"), /*#__PURE__*/React.createElement("input", {
-      className: "input-base",
-      placeholder: "Masalan: Ma'lumotlaringizni qoldiring, 1 soat ichida aloqaga chiqamiz.",
-      value: localSubtitle,
-      onChange: e => setLocalSubtitle(e.target.value)
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '20px',
-        background: 'linear-gradient(135deg,rgba(99,102,241,0.07),rgba(139,92,246,0.07))',
-        border: '1px solid rgba(139,92,246,0.2)',
-        borderRadius: '10px',
-        textAlign: 'center',
-        marginBottom: '18px'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: '11px',
-        color: 'var(--text-muted)',
-        marginBottom: '8px',
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em'
-      }
-    }, "Ko'rinish oldindan namunasi"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontWeight: 700,
-        fontSize: '18px',
-        marginBottom: '6px'
-      }
-    }, localTitle || '(Kompaniya nomi)'), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: '13px',
-        color: 'var(--text-muted)'
-      }
-    }, localSubtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz."))), activeWfTab === 'fields' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: '12px',
-        color: 'var(--text-muted)',
-        marginBottom: '14px',
-        lineHeight: '1.7'
-      }
-    }, "Formada foydalanuvchilarga ko'rsatiladigan savollarni sozlang. ", /*#__PURE__*/React.createElement("b", null, "Ism"), " va ", /*#__PURE__*/React.createElement("b", null, "Telefon"), " maydonlari doim mavjud bo'ladi."), /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginBottom: '10px'
-      }
-    }, [{
-      label: "Ism (majburiy)",
-      ph: "Ismingizni kiriting"
-    }, {
-      label: "Telefon (majburiy)",
-      ph: "+998 90 000 00 00"
-    }].map((f, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      style: {
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-        padding: '10px',
-        background: 'rgba(99,102,241,0.05)',
-        border: '1px solid rgba(99,102,241,0.15)',
-        borderRadius: '8px',
-        marginBottom: '6px',
-        opacity: 0.75
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: 'var(--text-muted)',
-        fontSize: '12px',
-        width: '20px'
-      }
-    }, i + 1), /*#__PURE__*/React.createElement("input", {
-      className: "input-base",
-      style: {
-        marginBottom: 0,
-        flex: 2
-      },
-      value: f.label,
-      disabled: true
-    }), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: '11px',
-        color: 'var(--text-muted)',
-        background: 'var(--surface-variant)',
-        padding: '3px 8px',
-        borderRadius: '4px',
-        whiteSpace: 'nowrap'
-      }
-    }, "Tizimiy")))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px',
-        marginBottom: '14px'
-      }
-    }, localFields.map((f, idx) => /*#__PURE__*/React.createElement("div", {
-      key: f.id,
-      style: {
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-        padding: '10px',
-        background: 'var(--bg-base)',
-        border: '1px solid var(--border-light)',
-        borderRadius: '8px'
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: 'var(--text-muted)',
-        fontSize: '12px',
-        width: '20px'
-      }
-    }, idx + 3), /*#__PURE__*/React.createElement("input", {
-      className: "input-base",
-      style: {
-        marginBottom: 0,
-        flex: 2
-      },
-      placeholder: "Savol nomi",
-      value: f.label,
-      onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
-        ...x,
-        label: e.target.value
-      } : x))
-    }), /*#__PURE__*/React.createElement("input", {
-      className: "input-base",
-      style: {
-        marginBottom: 0,
-        flex: 1
-      },
-      placeholder: "key",
-      value: f.key,
-      onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
-        ...x,
-        key: e.target.value
-      } : x))
-    }), /*#__PURE__*/React.createElement("select", {
-      className: "input-base",
-      style: {
-        marginBottom: 0,
-        width: '90px'
-      },
-      value: f.type,
-      onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
-        ...x,
-        type: e.target.value
-      } : x))
-    }, /*#__PURE__*/React.createElement("option", {
-      value: "text"
-    }, "Matn"), /*#__PURE__*/React.createElement("option", {
-      value: "tel"
-    }, "Telefon"), /*#__PURE__*/React.createElement("option", {
-      value: "email"
-    }, "Email"), /*#__PURE__*/React.createElement("option", {
-      value: "number"
-    }, "Raqam")), /*#__PURE__*/React.createElement("label", {
-      style: {
-        fontSize: '11px',
-        color: 'var(--text-muted)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '4px',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap'
-      }
-    }, /*#__PURE__*/React.createElement("input", {
-      type: "checkbox",
-      checked: f.required,
-      onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
-        ...x,
-        required: e.target.checked
-      } : x))
-    }), " Majburiy"), /*#__PURE__*/React.createElement("button", {
-      className: "btn-danger",
-      style: {
-        padding: '4px 8px'
-      },
-      onClick: () => setLocalFields(localFields.filter(x => x.id !== f.id))
-    }, "\u2715")))), /*#__PURE__*/React.createElement("button", {
-      className: "btn-outline",
-      style: {
-        width: '100%'
-      },
-      onClick: () => setLocalFields([...localFields, {
-        id: 'f_' + Date.now(),
-        label: '',
-        key: 'field_' + Date.now(),
-        type: 'text',
-        required: false,
-        placeholder: ''
-      }])
-    }, "+ Yangi savol qo'shish"), localFields.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '16px',
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        fontSize: '12px',
-        marginTop: '8px'
-      }
-    }, "Qo'shimcha savol yo'q. Yuqoridagi tugmani bosib savol qo'shing.")), activeWfTab === 'link' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
-      style: {
-        fontSize: '12px',
-        color: 'var(--text-muted)',
-        marginBottom: '16px',
-        lineHeight: '1.7'
-      }
-    }, "Havolani ijtimoiy tarmoqlarda, saytda yoki WhatsApp da ulashing. Mijoz bosib kirsa, forma ochiladi va lead avtomatik CRM ga tushadi."), /*#__PURE__*/React.createElement("span", {
-      className: "label-sm"
-    }, "Quvurni tanlang"), /*#__PURE__*/React.createElement("select", {
-      className: "input-base",
-      value: wfPipe,
-      onChange: e => setWfPipe(e.target.value)
-    }, /*#__PURE__*/React.createElement("option", {
-      value: "",
-      disabled: true
-    }, "Quvurni tanlang..."), intgPipelines.map(p => /*#__PURE__*/React.createElement("option", {
-      key: p.id,
-      value: p.id
-    }, p.name))), intgPipelines.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: '12px',
-        color: 'var(--warning)',
-        marginBottom: '10px',
-        padding: '10px',
-        background: 'rgba(245,158,11,0.08)',
-        borderRadius: '6px'
-      }
-    }, "\u26A0\uFE0F Quvur topilmadi. Avval Sozlamalar \u2192 Varonkalar bo'limida quvur yarating."), /*#__PURE__*/React.createElement("button", {
-      className: "btn-primary",
-      style: {
-        width: '100%',
-        marginBottom: '14px'
-      },
-      onClick: generateLink,
-      disabled: !wfPipe
-    }, "\uD83D\uDD17 Havola Yaratish va Nusxalash"), wfLink && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-        padding: '12px 14px',
-        background: 'var(--bg-base)',
-        border: `1px solid ${wfCopied ? 'rgba(1,167,80,0.4)' : 'var(--border-light)'}`,
-        borderRadius: '8px',
-        transition: 'border-color 0.3s',
-        marginBottom: '12px'
-      }
-    }, /*#__PURE__*/React.createElement("code", {
-      style: {
-        flex: 1,
-        fontSize: '11px',
-        color: 'var(--success)',
-        wordBreak: 'break-all'
-      }
-    }, wfLink), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: '11px',
-        color: 'var(--success)',
-        fontWeight: 700,
-        whiteSpace: 'nowrap',
-        minWidth: '80px',
-        textAlign: 'right'
-      }
-    }, wfCopied ? '✓ Nusxalandi!' : '')), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '12px',
-        background: 'rgba(99,102,241,0.07)',
-        border: '1px solid rgba(99,102,241,0.15)',
-        borderRadius: '8px',
-        fontSize: '12px',
-        color: 'var(--text-muted)',
-        lineHeight: '1.7'
-      }
-    }, "\uD83D\uDCA1 Forma dizayni va sarlavhasini ", /*#__PURE__*/React.createElement("b", null, "\uD83C\uDFA8 Dizayn"), " tabida, savollarni ", /*#__PURE__*/React.createElement("b", null, "\uD83D\uDCCB Forma Savollari"), " tabida o'zgartiring. O'zgarishlar \"", /*#__PURE__*/React.createElement("b", null, "Saqlash"), "\" tugmasini bosganingizda kuchga kiradi."))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '14px 22px',
-        borderTop: '1px solid var(--outline-variant)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexShrink: 0
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      className: "btn-outline",
-      onClick: () => setActiveModal(null)
-    }, "Yopish"), /*#__PURE__*/React.createElement("button", {
-      className: "btn-primary",
-      onClick: saveAll,
-      disabled: wfSaving
-    }, wfSaving ? 'Saqlanmoqda...' : wfSaved ? '✓ Saqlandi!' : '💾 Saqlash'))));
-  })());
+      fontSize: '22px',
+      cursor: 'pointer',
+      color: 'var(--text-muted)',
+      lineHeight: 1,
+      padding: '4px'
+    }
+  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '4px',
+      padding: '12px 22px 0',
+      borderBottom: '1px solid var(--outline-variant)',
+      flexShrink: 0
+    }
+  }, [['design', '🎨 Dizayn'], ['fields', '📋 Forma Savollari'], ['link', '🔗 Havola Yaratish']].map(([id, label]) => /*#__PURE__*/React.createElement("button", {
+    key: id,
+    style: wfTabSt(id),
+    onClick: () => setActiveWfTab(id)
+  }, label))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '20px 22px',
+      overflowY: 'auto',
+      flex: 1
+    }
+  }, activeWfTab === 'design' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      marginBottom: '18px',
+      lineHeight: '1.7'
+    }
+  }, "Mijoz formangizning sarlavhasi va tavsifini sozlang. Bu ma'lumotlar formaning yuqori qismida ko'rsatiladi."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '16px',
+      background: 'var(--bg-base)',
+      border: '1px solid var(--border-light)',
+      borderRadius: '10px',
+      marginBottom: '16px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 600,
+      fontSize: '13px',
+      marginBottom: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '16px'
+    }
+  }, "title"), " Forma Sarlavhasi"), /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Asosiy sarlavha (bo'sh bo'lsa kompaniya nomi ishlatiladi)"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    placeholder: "Masalan: Bepul konsultatsiya olish",
+    value: localTitle,
+    onChange: e => setLocalTitle(e.target.value)
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Tavsif matni"), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    placeholder: "Masalan: Ma'lumotlaringizni qoldiring, 1 soat ichida aloqaga chiqamiz.",
+    value: localSubtitle,
+    onChange: e => setLocalSubtitle(e.target.value)
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '20px',
+      background: 'linear-gradient(135deg,rgba(99,102,241,0.07),rgba(139,92,246,0.07))',
+      border: '1px solid rgba(139,92,246,0.2)',
+      borderRadius: '10px',
+      textAlign: 'center',
+      marginBottom: '18px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      marginBottom: '8px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.08em'
+    }
+  }, "Ko'rinish oldindan namunasi"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: '18px',
+      marginBottom: '6px'
+    }
+  }, localTitle || '(Kompaniya nomi)'), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '13px',
+      color: 'var(--text-muted)'
+    }
+  }, localSubtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz."))), activeWfTab === 'fields' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      marginBottom: '14px',
+      lineHeight: '1.7'
+    }
+  }, "Formada foydalanuvchilarga ko'rsatiladigan savollarni sozlang. ", /*#__PURE__*/React.createElement("b", null, "Ism"), " va ", /*#__PURE__*/React.createElement("b", null, "Telefon"), " maydonlari doim mavjud bo'ladi."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: '10px'
+    }
+  }, [{
+    label: "Ism (majburiy)",
+    ph: "Ismingizni kiriting"
+  }, {
+    label: "Telefon (majburiy)",
+    ph: "+998 90 000 00 00"
+  }].map((f, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: 'flex',
+      gap: '8px',
+      alignItems: 'center',
+      padding: '10px',
+      background: 'rgba(99,102,241,0.05)',
+      border: '1px solid rgba(99,102,241,0.15)',
+      borderRadius: '8px',
+      marginBottom: '6px',
+      opacity: 0.75
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-muted)',
+      fontSize: '12px',
+      width: '20px'
+    }
+  }, i + 1), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      flex: 2
+    },
+    value: f.label,
+    disabled: true
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      background: 'var(--surface-variant)',
+      padding: '3px 8px',
+      borderRadius: '4px',
+      whiteSpace: 'nowrap'
+    }
+  }, "Tizimiy")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '6px',
+      marginBottom: '14px'
+    }
+  }, localFields.map((f, idx) => /*#__PURE__*/React.createElement("div", {
+    key: f.id,
+    style: {
+      display: 'flex',
+      gap: '8px',
+      alignItems: 'center',
+      padding: '10px',
+      background: 'var(--bg-base)',
+      border: '1px solid var(--border-light)',
+      borderRadius: '8px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-muted)',
+      fontSize: '12px',
+      width: '20px'
+    }
+  }, idx + 3), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      flex: 2
+    },
+    placeholder: "Savol nomi",
+    value: f.label,
+    onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
+      ...x,
+      label: e.target.value
+    } : x))
+  }), /*#__PURE__*/React.createElement("input", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      flex: 1
+    },
+    placeholder: "key",
+    value: f.key,
+    onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
+      ...x,
+      key: e.target.value
+    } : x))
+  }), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      width: '90px'
+    },
+    value: f.type,
+    onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
+      ...x,
+      type: e.target.value
+    } : x))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "text"
+  }, "Matn"), /*#__PURE__*/React.createElement("option", {
+    value: "tel"
+  }, "Telefon"), /*#__PURE__*/React.createElement("option", {
+    value: "email"
+  }, "Email"), /*#__PURE__*/React.createElement("option", {
+    value: "number"
+  }, "Raqam")), /*#__PURE__*/React.createElement("label", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      cursor: 'pointer',
+      whiteSpace: 'nowrap'
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: f.required,
+    onChange: e => setLocalFields(localFields.map(x => x.id === f.id ? {
+      ...x,
+      required: e.target.checked
+    } : x))
+  }), " Majburiy"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-danger",
+    style: {
+      padding: '4px 8px'
+    },
+    onClick: () => setLocalFields(localFields.filter(x => x.id !== f.id))
+  }, "\u2715")))), /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      width: '100%'
+    },
+    onClick: () => setLocalFields([...localFields, {
+      id: 'f_' + Date.now(),
+      label: '',
+      key: 'field_' + Date.now(),
+      type: 'text',
+      required: false,
+      placeholder: ''
+    }])
+  }, "+ Yangi savol qo'shish"), localFields.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '16px',
+      textAlign: 'center',
+      color: 'var(--text-muted)',
+      fontSize: '12px',
+      marginTop: '8px'
+    }
+  }, "Qo'shimcha savol yo'q. Yuqoridagi tugmani bosib savol qo'shing.")), activeWfTab === 'link' && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      marginBottom: '16px',
+      lineHeight: '1.7'
+    }
+  }, "Havolani ijtimoiy tarmoqlarda, saytda yoki WhatsApp da ulashing. Mijoz bosib kirsa, forma ochiladi va lead avtomatik CRM ga tushadi."), /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Quvurni tanlang"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    value: wfPipe,
+    onChange: e => setWfPipe(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "",
+    disabled: true
+  }, "Quvurni tanlang..."), intgPipelines.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.name))), intgPipelines.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--warning)',
+      marginBottom: '10px',
+      padding: '10px',
+      background: 'rgba(245,158,11,0.08)',
+      borderRadius: '6px'
+    }
+  }, "\u26A0\uFE0F Quvur topilmadi. Avval Sozlamalar \u2192 Varonkalar bo'limida quvur yarating."), /*#__PURE__*/React.createElement("button", {
+    className: "btn-primary",
+    style: {
+      width: '100%',
+      marginBottom: '14px'
+    },
+    onClick: generateLink,
+    disabled: !wfPipe
+  }, "\uD83D\uDD17 Havola Yaratish va Nusxalash"), wfLink && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '8px',
+      alignItems: 'center',
+      padding: '12px 14px',
+      background: 'var(--bg-base)',
+      border: `1px solid ${wfCopied ? 'rgba(1,167,80,0.4)' : 'var(--border-light)'}`,
+      borderRadius: '8px',
+      transition: 'border-color 0.3s',
+      marginBottom: '12px'
+    }
+  }, /*#__PURE__*/React.createElement("code", {
+    style: {
+      flex: 1,
+      fontSize: '11px',
+      color: 'var(--success)',
+      wordBreak: 'break-all'
+    }
+  }, wfLink), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--success)',
+      fontWeight: 700,
+      whiteSpace: 'nowrap',
+      minWidth: '80px',
+      textAlign: 'right'
+    }
+  }, wfCopied ? '✓ Nusxalandi!' : '')), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px',
+      background: 'rgba(99,102,241,0.07)',
+      border: '1px solid rgba(99,102,241,0.15)',
+      borderRadius: '8px',
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      lineHeight: '1.7'
+    }
+  }, "\uD83D\uDCA1 Forma dizayni va sarlavhasini ", /*#__PURE__*/React.createElement("b", null, "\uD83C\uDFA8 Dizayn"), " tabida, savollarni ", /*#__PURE__*/React.createElement("b", null, "\uD83D\uDCCB Forma Savollari"), " tabida o'zgartiring. O'zgarishlar \"", /*#__PURE__*/React.createElement("b", null, "Saqlash"), "\" tugmasini bosganingizda kuchga kiradi."))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '14px 22px',
+      borderTop: '1px solid var(--outline-variant)',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    onClick: () => setActiveModal(null)
+  }, "Yopish"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-primary",
+    onClick: wfSaveAll,
+    disabled: wfSaving
+  }, wfSaving ? 'Saqlanmoqda...' : wfSaved ? '✓ Saqlandi!' : '💾 Saqlash')))));
 };
 
 // ===== CALL CENTER MODULE (fully functional) =====
