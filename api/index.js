@@ -65,7 +65,15 @@ app.use('/api/webhook/meta', express.raw({ type: 'application/json' }), (req, _r
 app.use(express.json());
 
 // ========== SERVE FRONTEND (local dev only) ==========
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
+app.use(express.static(path.join(__dirname, '..', 'frontend'), {
+  setHeaders: (res, filePath) => {
+    if (/react(-dom)?\.production\.min\.js$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (/(app\.js|index\.html)$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
 
 // ========== JWT MIDDLEWARE ==========
 const parseToken = (req, res, next) => {
@@ -385,7 +393,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V16', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V17', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
