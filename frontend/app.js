@@ -528,9 +528,10 @@ const PipelineEditor = ({
   const [isAddingPipe, setIsAddingPipe] = useState(false);
   const [newPipeName, setNewPipeName] = useState('');
   const [saving, setSaving] = useState(false);
+  // faqat pId o'zganda reset — columnsMap tashqi yangilanishi lokal tahririyatni o'chirmaydi
   useEffect(() => {
     setLocalCols(columnsMap[pId] || []);
-  }, [pId, columnsMap]);
+  }, [pId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!pipe) return null;
   const addCol = () => setLocalCols([...localCols, {
     id: 'STAGE_' + Date.now(),
