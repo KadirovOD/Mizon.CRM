@@ -394,7 +394,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V21', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V22', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -448,7 +448,7 @@ app.post('/api/webhook/sheets', async (req, res) => {
     const body        = req.body || {};
     const slug        = (body.company_slug || req.query.company || req.query.slug || '').trim();
     const name        = (body.name  || '').trim();
-    const phone       = (body.phone || '').trim();
+    const phone       = (body.phone || '').trim().replace(/^p\s*:/i, '').trim();
     const email       = (body.email || '').trim();
     const region      = (body.region || body.city || '').trim();
     const note        = (body.note  || body.comment || '').trim();
