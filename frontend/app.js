@@ -10622,7 +10622,7 @@ const App = () => {
           name: l.name,
           owner: l.owner || 'ceo',
           phone: l.phone,
-          region: l.region || 'Toshkent',
+          region: l.region || '',
           source: l.mizon_source || 'manual',
           status: stageMapRef.current.toFrontend[l.stage_id] || 'NEW',
           actualCallAttempts: l.actualcallattempts || 0,
