@@ -4265,6 +4265,7 @@
               source: l.mizon_source || 'manual',
               status: stageMapRef.current.toFrontend[l.stage_id] || 'NEW',
               actualCallAttempts: l.actualcallattempts || 0,
+              createdAt: l.created_at || null,
               deadline: l.deadline || null,
               taskDescription: l.taskdescription || null,
               customData: (typeof l.custom_data === 'string' ? JSON.parse(l.custom_data) : l.custom_data) || {},
@@ -5750,6 +5751,20 @@
                                     <span style={{width:'3px', height:'3px', borderRadius:'50%', background:'var(--text-muted)', display:'inline-block'}}></span>
                                     <Ico n="user" s={11}/> {lead.owner}
                                   </div>
+                                  {lead.createdAt && (
+                                    <div style={{fontSize:'10px', color:'var(--text-muted)', marginBottom:'6px', display:'flex', alignItems:'center', gap:'4px', opacity:0.7}}>
+                                      <Ico n="clock" s={10}/>
+                                      {(() => {
+                                        const d = new Date(lead.createdAt);
+                                        const now = new Date();
+                                        const diff = Math.floor((now - d) / 60000);
+                                        if (diff < 1)   return 'Hozirgina';
+                                        if (diff < 60)  return `${diff} daqiqa oldin`;
+                                        if (diff < 1440) return `${Math.floor(diff/60)} soat oldin`;
+                                        return d.toLocaleDateString('uz-UZ', {day:'2-digit', month:'2-digit', year:'numeric'}) + ' ' + d.toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'});
+                                      })()}
+                                    </div>
+                                  )}
                                   {(lead.taskDescription||lead.deadline) ? (
                                     <div style={{fontSize:'11px', background:'rgba(255,255,255,0.04)', padding:'5px 8px', borderRadius:'5px', border:'1px solid rgba(255,255,255,0.08)', color:'var(--text-secondary)'}}>
                                       {lead.taskDescription ? <span><Ico n="message" s={10}/> {lead.taskDescription.substring(0,32)}...</span> : <span style={{color:'var(--text-muted)'}}><Ico n="clock" s={10}/> Muddat belgilangan</span>}
