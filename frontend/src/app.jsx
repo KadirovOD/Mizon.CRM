@@ -5112,6 +5112,27 @@
         syncLeadToAPI(targetLead);
       };
 
+      const kanbanBoardRef = React.useRef(null);
+      const [kanbanCanScrollLeft,  setKanbanCanScrollLeft]  = React.useState(false);
+      const [kanbanCanScrollRight, setKanbanCanScrollRight] = React.useState(false);
+      const updateKanbanScroll = () => {
+        const el = kanbanBoardRef.current;
+        if (!el) return;
+        setKanbanCanScrollLeft(el.scrollLeft > 8);
+        setKanbanCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
+      };
+      React.useEffect(() => {
+        const el = kanbanBoardRef.current;
+        if (!el) return;
+        el.addEventListener('scroll', updateKanbanScroll);
+        updateKanbanScroll();
+        return () => el.removeEventListener('scroll', updateKanbanScroll);
+      }, [activeColumns.length]);
+      const scrollKanban = (dir) => {
+        const el = kanbanBoardRef.current;
+        if (el) el.scrollBy({ left: dir * 310, behavior:'smooth' });
+      };
+
       const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); e.dataTransfer.setData('type','lead'); };
       const draggingColRef = React.useRef(null);
       const [dragOverColId, setDragOverColId] = React.useState(null);
@@ -5850,7 +5871,14 @@
                     )}
                   </div>
 
-                  <div className="kanban-board">
+                  <div style={{position:'relative', flex:1, minHeight:0, display:'flex', flexDirection:'column'}}>
+                    {kanbanCanScrollLeft && (
+                      <button onClick={()=>scrollKanban(-1)} style={{position:'absolute',left:0,top:'50%',transform:'translateY(-50%)',zIndex:10,width:'36px',height:'64px',background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:'0 10px 10px 0',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'4px 0 12px rgba(0,0,0,0.18)',color:'var(--text-main)',fontSize:'20px'}}>‹</button>
+                    )}
+                    {kanbanCanScrollRight && (
+                      <button onClick={()=>scrollKanban(1)} style={{position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',zIndex:10,width:'36px',height:'64px',background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:'10px 0 0 10px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'-4px 0 12px rgba(0,0,0,0.18)',color:'var(--text-main)',fontSize:'20px'}}>›</button>
+                    )}
+                  <div className="kanban-board" ref={kanbanBoardRef}>
                     {activeColumns.map(col => {
                       const colLeads = filteredActiveLeads.filter(l => l.status === col.id);
                       const dotColor = colColors[col.id] || '#888';
@@ -5929,6 +5957,7 @@
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 </div>
               )}
