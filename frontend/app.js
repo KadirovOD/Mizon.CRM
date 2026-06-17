@@ -13390,7 +13390,47 @@ const App = () => {
       borderBottom: '1px solid var(--border-light)',
       flexWrap: 'wrap'
     }
-  }, /*#__PURE__*/React.createElement("select", {
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      background: 'var(--bg-hover)',
+      border: '1px solid var(--border-light)',
+      borderRadius: '7px',
+      padding: '4px 10px',
+      minWidth: '200px',
+      flex: '1',
+      maxWidth: '280px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '15px',
+      color: 'var(--text-muted)',
+      flexShrink: 0
+    }
+  }, "search"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      background: 'none',
+      border: 'none',
+      outline: 'none',
+      fontSize: '12px',
+      color: 'var(--text-main)',
+      width: '100%'
+    },
+    placeholder: "Ism yoki telefon raqam...",
+    value: searchQuery,
+    onChange: e => setSearchQuery(e.target.value)
+  }), searchQuery && /*#__PURE__*/React.createElement("span", {
+    style: {
+      cursor: 'pointer',
+      color: 'var(--text-muted)',
+      fontSize: '14px',
+      flexShrink: 0
+    },
+    onClick: () => setSearchQuery('')
+  }, "\u2715")), /*#__PURE__*/React.createElement("select", {
     className: "pipeline-selector",
     style: {
       fontSize: '12px',
