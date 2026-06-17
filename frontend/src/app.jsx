@@ -4995,7 +4995,8 @@
         const assignee = taskAssignee || authUser.username;
         const base = leads.find(l => l.id == id);
         if(!base) return;
-        const targetLead = {...base, deadline:taskDateInput, taskDescription:taskDescInput||'Izohsiz vazifa', taskAssignee:assignee,
+        const deadlineISO = new Date(taskDateInput).toISOString(); // local → UTC ISO (timezone xatosini tuzatadi)
+        const targetLead = {...base, deadline:deadlineISO, taskDescription:taskDescInput||'Izohsiz vazifa', taskAssignee:assignee,
           chatLogs:[...base.chatLogs,{type:'sys', isTask:true, date:new Date().toISOString(), by:authUser.username, assignee,
             description: taskDescInput||'',
             text:`📌 Vazifa: "${taskDescInput||'Izohsiz vazifa'}" → ${new Date(taskDateInput).toLocaleString()}`}]};

@@ -11731,9 +11731,10 @@ const App = () => {
     const assignee = taskAssignee || authUser.username;
     const base = leads.find(l => l.id == id);
     if (!base) return;
+    const deadlineISO = new Date(taskDateInput).toISOString(); // local → UTC ISO (timezone xatosini tuzatadi)
     const targetLead = {
       ...base,
-      deadline: taskDateInput,
+      deadline: deadlineISO,
       taskDescription: taskDescInput || 'Izohsiz vazifa',
       taskAssignee: assignee,
       chatLogs: [...base.chatLogs, {
