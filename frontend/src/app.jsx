@@ -4978,6 +4978,7 @@
         if(!base) return;
         const targetLead = {...base, deadline:taskDateInput, taskDescription:taskDescInput||'Izohsiz vazifa', taskAssignee:assignee,
           chatLogs:[...base.chatLogs,{type:'sys', isTask:true, date:new Date().toISOString(), by:authUser.username, assignee,
+            description: taskDescInput||'',
             text:`📌 Vazifa: "${taskDescInput||'Izohsiz vazifa'}" → ${new Date(taskDateInput).toLocaleString()}`}]};
         setLeads(prev=>prev.map(l => l.id==id ? targetLead : l));
         setTaskDateInput(''); setTaskDescInput(''); setTaskAssignee(''); setShowTaskInput(false); setHasUnsavedChanges(true);
@@ -4991,7 +4992,7 @@
         const base = leads.find(l => l.id == id);
         if(!base) return;
         const targetLead = {...base, deadline:null, taskDescription:null, taskAssignee:null,
-          chatLogs:[...base.chatLogs,{type:'sys', date:new Date().toISOString(), by:authUser.username,
+          chatLogs:[...base.chatLogs,{type:'sys', isTaskComplete:true, note:note||'', date:new Date().toISOString(), by:authUser.username,
             text:`✅ Vazifa yakunlandi! Natija: "${note||'Izohsiz bajardi'}"`}]};
         setLeads(prev=>prev.map(l => l.id==id ? targetLead : l));
         setShowCompleteModal(false); setTaskCompleteNote(''); setInlineCompleteId(null); setInlineCompleteNote('');
@@ -5559,9 +5560,11 @@
                                         {new Date(log.date).toLocaleTimeString()}
                                       </span>
                                     </div>
-                                    <div style={{fontSize:'12px', color:'var(--text-main)', lineHeight:1.4, marginTop:'3px'}}>
-                                      {taskStillActive ? selectedLeadData.taskDescription : log.text.replace(/^📌 Vazifa:\s*/,'')}
-                                    </div>
+                                    {(() => {
+                                      const desc = log.description !== undefined ? log.description
+                                        : log.text.replace(/^📌 Vazifa:\s*"?/,'').replace(/"?\s*→.*$/,'').trim();
+                                      return desc ? <div style={{fontSize:'12px',color:'var(--text-main)',lineHeight:1.4,marginTop:'3px'}}>📝 {desc}</div> : null;
+                                    })()}
                                     {taskStillActive && selectedLeadData.deadline && (
                                       <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'3px'}}>
                                         ⏰ {new Date(selectedLeadData.deadline).toLocaleString('uz-UZ', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}
@@ -5588,6 +5591,33 @@
                                             onClick={()=>setInlineCompleteId(null)}>Bekor</button>
                                         </div>
                                       </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                          // ---- Vazifa yakunlandi karta ----
+                          const isTaskCompleteLog = log.type==='sys' && (log.isTaskComplete || (log.text && log.text.startsWith('✅ Vazifa yakunlandi')));
+                          if (isTaskCompleteLog) {
+                            const completionNote = log.note !== undefined ? log.note
+                              : log.text.replace(/^✅ Vazifa yakunlandi!\s*Natija:\s*"?/,'').replace(/"?\s*$/,'').trim();
+                            return (
+                              <div key={idx} style={{padding:'10px 14px',background:'rgba(1,167,80,0.08)',border:'1px solid rgba(1,167,80,0.3)',borderRadius:'10px'}}>
+                                <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
+                                  <span className="material-symbols-outlined" style={{fontSize:'16px',color:'#01a750',flexShrink:0,marginTop:'1px'}}>check_circle</span>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+                                      <div style={{fontSize:'11px',fontWeight:700,color:'#01a750'}}>Vazifa yakunlandi</div>
+                                      <span style={{fontSize:'10px',color:'var(--text-muted)',whiteSpace:'nowrap',flexShrink:0}}>
+                                        {log.by && <span style={{color:'var(--primary)',fontWeight:600}}>{log.by} · </span>}
+                                        {new Date(log.date).toLocaleTimeString()}
+                                      </span>
+                                    </div>
+                                    {completionNote ? (
+                                      <div style={{fontSize:'12px',color:'var(--text-main)',lineHeight:1.4,marginTop:'3px'}}>💬 {completionNote}</div>
+                                    ) : (
+                                      <div style={{fontSize:'12px',color:'var(--text-muted)',lineHeight:1.4,marginTop:'3px',fontStyle:'italic'}}>Izohsiz yakunlandi</div>
                                     )}
                                   </div>
                                 </div>

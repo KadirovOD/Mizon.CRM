@@ -11708,6 +11708,7 @@ const App = () => {
         date: new Date().toISOString(),
         by: authUser.username,
         assignee,
+        description: taskDescInput || '',
         text: `📌 Vazifa: "${taskDescInput || 'Izohsiz vazifa'}" → ${new Date(taskDateInput).toLocaleString()}`
       }]
     };
@@ -11732,6 +11733,8 @@ const App = () => {
       taskAssignee: null,
       chatLogs: [...base.chatLogs, {
         type: 'sys',
+        isTaskComplete: true,
+        note: note || '',
         date: new Date().toISOString(),
         by: authUser.username,
         text: `✅ Vazifa yakunlandi! Natija: "${note || 'Izohsiz bajardi'}"`
@@ -12891,14 +12894,17 @@ const App = () => {
           color: 'var(--primary)',
           fontWeight: 600
         }
-      }, log.by, " \xB7 "), new Date(log.date).toLocaleTimeString())), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '12px',
-          color: 'var(--text-main)',
-          lineHeight: 1.4,
-          marginTop: '3px'
-        }
-      }, taskStillActive ? selectedLeadData.taskDescription : log.text.replace(/^📌 Vazifa:\s*/, '')), taskStillActive && selectedLeadData.deadline && /*#__PURE__*/React.createElement("div", {
+      }, log.by, " \xB7 "), new Date(log.date).toLocaleTimeString())), (() => {
+        const desc = log.description !== undefined ? log.description : log.text.replace(/^📌 Vazifa:\s*"?/, '').replace(/"?\s*→.*$/, '').trim();
+        return desc ? /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '12px',
+            color: 'var(--text-main)',
+            lineHeight: 1.4,
+            marginTop: '3px'
+          }
+        }, "\uD83D\uDCDD ", desc) : null;
+      })(), taskStillActive && selectedLeadData.deadline && /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: '10px',
           color: 'var(--text-muted)',
@@ -12964,6 +12970,80 @@ const App = () => {
         },
         onClick: () => setInlineCompleteId(null)
       }, "Bekor"))))));
+    }
+    // ---- Vazifa yakunlandi karta ----
+    const isTaskCompleteLog = log.type === 'sys' && (log.isTaskComplete || log.text && log.text.startsWith('✅ Vazifa yakunlandi'));
+    if (isTaskCompleteLog) {
+      const completionNote = log.note !== undefined ? log.note : log.text.replace(/^✅ Vazifa yakunlandi!\s*Natija:\s*"?/, '').replace(/"?\s*$/, '').trim();
+      return /*#__PURE__*/React.createElement("div", {
+        key: idx,
+        style: {
+          padding: '10px 14px',
+          background: 'rgba(1,167,80,0.08)',
+          border: '1px solid rgba(1,167,80,0.3)',
+          borderRadius: '10px'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '8px'
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "material-symbols-outlined",
+        style: {
+          fontSize: '16px',
+          color: '#01a750',
+          flexShrink: 0,
+          marginTop: '1px'
+        }
+      }, "check_circle"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1,
+          minWidth: 0
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '8px',
+          flexWrap: 'wrap'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '11px',
+          fontWeight: 700,
+          color: '#01a750'
+        }
+      }, "Vazifa yakunlandi"), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: '10px',
+          color: 'var(--text-muted)',
+          whiteSpace: 'nowrap',
+          flexShrink: 0
+        }
+      }, log.by && /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: 'var(--primary)',
+          fontWeight: 600
+        }
+      }, log.by, " \xB7 "), new Date(log.date).toLocaleTimeString())), completionNote ? /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '12px',
+          color: 'var(--text-main)',
+          lineHeight: 1.4,
+          marginTop: '3px'
+        }
+      }, "\uD83D\uDCAC ", completionNote) : /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '12px',
+          color: 'var(--text-muted)',
+          lineHeight: 1.4,
+          marginTop: '3px',
+          fontStyle: 'italic'
+        }
+      }, "Izohsiz yakunlandi"))));
     }
     // ---- System log ----
     if (log.type === 'sys') return /*#__PURE__*/React.createElement("div", {
