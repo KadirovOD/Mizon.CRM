@@ -5137,42 +5137,31 @@
         if (el) el.scrollBy({ left: dir * 310, behavior:'smooth' });
       };
 
-      const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); e.dataTransfer.setData('type','lead'); };
-      const draggingColRef = React.useRef(null);
-      const [dragOverColId, setDragOverColId] = React.useState(null);
-      const handleColDragStart = (e, colId) => {
-        e.stopPropagation();
-        draggingColRef.current = colId;
-        e.dataTransfer.setData('type','col');
-        e.dataTransfer.effectAllowed = 'move';
+      // Sichqoncha bosib-suring scroll
+      const kanbanDragScroll = React.useRef({ active:false, startX:0, scrollLeft:0 });
+      const [kanbanGrabbing, setKanbanGrabbing] = React.useState(false);
+      const onKanbanMouseDown = (e) => {
+        // Faqat karta emas, bo'sh joyni bossagina ishlaydi
+        if (e.target.closest('.k-card') || e.target.closest('.kanban-col-header')) return;
+        const el = kanbanBoardRef.current;
+        if (!el) return;
+        kanbanDragScroll.current = { active:true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft };
+        setKanbanGrabbing(true);
       };
-      const handleColDrop = (targetColId) => {
-        const srcColId = draggingColRef.current;
-        draggingColRef.current = null; setDragOverColId(null);
-        if (!srcColId || srcColId === targetColId) return;
-        const cols = [...(columnsMap[activePipe] || [])];
-        const from = cols.findIndex(c => c.id === srcColId);
-        const to   = cols.findIndex(c => c.id === targetColId);
-        if (from === -1 || to === -1) return;
-        const [item] = cols.splice(from, 1);
-        cols.splice(to, 0, item);
-        setColumnsMap(prev => ({...prev, [activePipe]: cols}));
-        const token = localStorage.getItem('mizon_token');
-        if (token) {
-          const toDbId = stageMapRef?.current?.toDbId || {};
-          fetch('/api/stages/sync', { method:'PUT',
-            headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-            body: JSON.stringify({ stages: cols.map((c,i) => ({
-              ...(toDbId[c.id]!=null?{id:toDbId[c.id]}:{}),
-              name:c.title, sequence:i+1, is_won:c.id==='WON', is_lost:c.id==='LOST'
-            }))})
-          }).catch(()=>{});
-        }
+      const onKanbanMouseMove = (e) => {
+        if (!kanbanDragScroll.current.active) return;
+        e.preventDefault();
+        const el = kanbanBoardRef.current;
+        if (!el) return;
+        const x = e.pageX - el.offsetLeft;
+        const dist = x - kanbanDragScroll.current.startX;
+        el.scrollLeft = kanbanDragScroll.current.scrollLeft - dist;
       };
+      const onKanbanMouseUp = () => { kanbanDragScroll.current.active = false; setKanbanGrabbing(false); };
+
+      const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); };
       const handleDrop = (e, targetStatus) => {
         e.preventDefault();
-        const type = e.dataTransfer.getData('type');
-        if (type === 'col') { handleColDrop(targetStatus); return; }
         const leadId = e.dataTransfer.getData('leadId');
         if (leadId) handleStatusChange(leadId, targetStatus);
       };
@@ -5882,23 +5871,21 @@
                     {kanbanCanScrollRight && (
                       <button onClick={()=>scrollKanban(1)} style={{position:'absolute',right:0,top:'50%',transform:'translateY(-50%)',zIndex:10,width:'36px',height:'64px',background:'var(--bg-surface)',border:'1px solid var(--border-light)',borderRadius:'10px 0 0 10px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'-4px 0 12px rgba(0,0,0,0.18)',color:'var(--text-main)',fontSize:'20px'}}>›</button>
                     )}
-                  <div className="kanban-board" ref={kanbanBoardRef}>
+                  <div className="kanban-board" ref={kanbanBoardRef}
+                    onMouseDown={onKanbanMouseDown}
+                    onMouseMove={onKanbanMouseMove}
+                    onMouseUp={onKanbanMouseUp}
+                    onMouseLeave={onKanbanMouseUp}
+                    style={{cursor: kanbanGrabbing ? 'grabbing' : 'grab', userSelect: kanbanGrabbing ? 'none' : undefined}}>
                     {activeColumns.map(col => {
                       const colLeads = filteredActiveLeads.filter(l => l.status === col.id);
                       const dotColor = colColors[col.id] || '#888';
                       return (
                         <div key={col.id} className="kanban-col"
-                          onDragOver={role!=='WATCHER'?e=>{e.preventDefault(); if(draggingColRef.current && draggingColRef.current!==col.id) setDragOverColId(col.id);}:undefined}
-                          onDragLeave={()=>setDragOverColId(null)}
-                          onDrop={role!=='WATCHER'?e=>handleDrop(e, col.id):undefined}
-                          style={{outline: dragOverColId===col.id && draggingColRef.current ? '2px dashed var(--primary)' : 'none', borderRadius:'10px', transition:'outline 0.1s'}}>
-                          <div className="kanban-col-header"
-                            draggable={role!=='WATCHER'}
-                            onDragStart={role!=='WATCHER'?e=>handleColDragStart(e, col.id):undefined}
-                            onDragEnd={()=>{draggingColRef.current=null; setDragOverColId(null);}}
-                            style={{cursor: role!=='WATCHER' ? 'grab' : 'default'}}>
+                          onDragOver={role!=='WATCHER'?e=>e.preventDefault():undefined}
+                          onDrop={role!=='WATCHER'?e=>handleDrop(e, col.id):undefined}>
+                          <div className="kanban-col-header">
                             <span className="kanban-col-title">
-                              {role!=='WATCHER' && <span style={{color:'var(--text-muted)', fontSize:'14px', marginRight:'4px', letterSpacing:'-2px', userSelect:'none'}}>⠿</span>}
                               <span className="col-dot" style={{background:dotColor}}></span>
                               {col.title}
                             </span>
