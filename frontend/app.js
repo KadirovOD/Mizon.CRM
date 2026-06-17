@@ -528,6 +528,13 @@ const PipelineEditor = ({
   const [isAddingPipe, setIsAddingPipe] = useState(false);
   const [newPipeName, setNewPipeName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [dragIdx, setDragIdx] = useState(null);
+  const moveStage = (from, to) => {
+    const arr = [...localCols];
+    const [item] = arr.splice(from, 1);
+    arr.splice(to, 0, item);
+    setLocalCols(arr);
+  };
   // faqat pId o'zganda reset — columnsMap tashqi yangilanishi lokal tahririyatni o'chirmaydi
   useEffect(() => {
     setLocalCols(columnsMap[pId] || []);
@@ -665,17 +672,41 @@ const PipelineEditor = ({
     }
   }, localCols.map((col, idx) => /*#__PURE__*/React.createElement("div", {
     key: col.id,
+    draggable: true,
+    onDragStart: () => setDragIdx(idx),
+    onDragOver: e => e.preventDefault(),
+    onDrop: () => {
+      if (dragIdx !== null && dragIdx !== idx) {
+        moveStage(dragIdx, idx);
+        setDragIdx(null);
+      }
+    },
+    onDragEnd: () => setDragIdx(null),
     style: {
       display: 'flex',
       gap: '8px',
-      alignItems: 'center'
+      alignItems: 'center',
+      opacity: dragIdx === idx ? 0.4 : 1,
+      transition: 'opacity 0.15s',
+      background: dragIdx !== null && dragIdx !== idx ? 'rgba(99,102,241,0.06)' : 'transparent',
+      borderRadius: '6px',
+      padding: '2px 0'
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
-      padding: '8px',
       color: 'var(--text-muted)',
-      fontSize: '12px',
-      width: '24px'
+      fontSize: '18px',
+      cursor: 'grab',
+      userSelect: 'none',
+      padding: '0 6px',
+      letterSpacing: '-2px'
+    }
+  }, "\u283F"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-muted)',
+      fontSize: '11px',
+      minWidth: '18px',
+      textAlign: 'center'
     }
   }, idx + 1), /*#__PURE__*/React.createElement("input", {
     className: "input-base",
@@ -11899,9 +11930,61 @@ const App = () => {
   };
   const handleDragStart = (e, leadId) => {
     e.dataTransfer.setData('leadId', String(leadId));
+    e.dataTransfer.setData('type', 'lead');
+  };
+  const draggingColRef = React.useRef(null);
+  const [dragOverColId, setDragOverColId] = React.useState(null);
+  const handleColDragStart = (e, colId) => {
+    e.stopPropagation();
+    draggingColRef.current = colId;
+    e.dataTransfer.setData('type', 'col');
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleColDrop = targetColId => {
+    const srcColId = draggingColRef.current;
+    draggingColRef.current = null;
+    setDragOverColId(null);
+    if (!srcColId || srcColId === targetColId) return;
+    const cols = [...(columnsMap[activePipe] || [])];
+    const from = cols.findIndex(c => c.id === srcColId);
+    const to = cols.findIndex(c => c.id === targetColId);
+    if (from === -1 || to === -1) return;
+    const [item] = cols.splice(from, 1);
+    cols.splice(to, 0, item);
+    setColumnsMap(prev => ({
+      ...prev,
+      [activePipe]: cols
+    }));
+    const token = localStorage.getItem('mizon_token');
+    if (token) {
+      const toDbId = stageMapRef?.current?.toDbId || {};
+      fetch('/api/stages/sync', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          stages: cols.map((c, i) => ({
+            ...(toDbId[c.id] != null ? {
+              id: toDbId[c.id]
+            } : {}),
+            name: c.title,
+            sequence: i + 1,
+            is_won: c.id === 'WON',
+            is_lost: c.id === 'LOST'
+          }))
+        })
+      }).catch(() => {});
+    }
   };
   const handleDrop = (e, targetStatus) => {
     e.preventDefault();
+    const type = e.dataTransfer.getData('type');
+    if (type === 'col') {
+      handleColDrop(targetStatus);
+      return;
+    }
     const leadId = e.dataTransfer.getData('leadId');
     if (leadId) handleStatusChange(leadId, targetStatus);
   };
@@ -13500,13 +13583,39 @@ const App = () => {
     return /*#__PURE__*/React.createElement("div", {
       key: col.id,
       className: "kanban-col",
-      onDragOver: role !== 'WATCHER' ? e => e.preventDefault() : undefined,
-      onDrop: role !== 'WATCHER' ? e => handleDrop(e, col.id) : undefined
+      onDragOver: role !== 'WATCHER' ? e => {
+        e.preventDefault();
+        if (draggingColRef.current && draggingColRef.current !== col.id) setDragOverColId(col.id);
+      } : undefined,
+      onDragLeave: () => setDragOverColId(null),
+      onDrop: role !== 'WATCHER' ? e => handleDrop(e, col.id) : undefined,
+      style: {
+        outline: dragOverColId === col.id && draggingColRef.current ? '2px dashed var(--primary)' : 'none',
+        borderRadius: '10px',
+        transition: 'outline 0.1s'
+      }
     }, /*#__PURE__*/React.createElement("div", {
-      className: "kanban-col-header"
+      className: "kanban-col-header",
+      draggable: role !== 'WATCHER',
+      onDragStart: role !== 'WATCHER' ? e => handleColDragStart(e, col.id) : undefined,
+      onDragEnd: () => {
+        draggingColRef.current = null;
+        setDragOverColId(null);
+      },
+      style: {
+        cursor: role !== 'WATCHER' ? 'grab' : 'default'
+      }
     }, /*#__PURE__*/React.createElement("span", {
       className: "kanban-col-title"
-    }, /*#__PURE__*/React.createElement("span", {
+    }, role !== 'WATCHER' && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--text-muted)',
+        fontSize: '14px',
+        marginRight: '4px',
+        letterSpacing: '-2px',
+        userSelect: 'none'
+      }
+    }, "\u283F"), /*#__PURE__*/React.createElement("span", {
       className: "col-dot",
       style: {
         background: dotColor

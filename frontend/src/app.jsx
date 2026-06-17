@@ -218,6 +218,13 @@
       const [isAddingPipe, setIsAddingPipe] = useState(false);
       const [newPipeName, setNewPipeName] = useState('');
       const [saving, setSaving] = useState(false);
+      const [dragIdx, setDragIdx] = useState(null);
+      const moveStage = (from, to) => {
+        const arr = [...localCols];
+        const [item] = arr.splice(from, 1);
+        arr.splice(to, 0, item);
+        setLocalCols(arr);
+      };
       // faqat pId o'zganda reset — columnsMap tashqi yangilanishi lokal tahririyatni o'chirmaydi
       useEffect(() => { setLocalCols(columnsMap[pId] || []); }, [pId]); // eslint-disable-line react-hooks/exhaustive-deps
       if(!pipe) return null;
@@ -289,8 +296,17 @@
             <span className="label-sm" style={{marginTop:'8px'}}>Bosqichlar:</span>
             <div style={{display:'flex', flexDirection:'column', gap:'7px', marginBottom:'14px'}}>
               {localCols.map((col, idx) => (
-                <div key={col.id} style={{display:'flex', gap:'8px', alignItems:'center'}}>
-                  <span style={{padding:'8px', color:'var(--text-muted)', fontSize:'12px', width:'24px'}}>{idx+1}</span>
+                <div key={col.id}
+                  draggable
+                  onDragStart={()=>setDragIdx(idx)}
+                  onDragOver={e=>e.preventDefault()}
+                  onDrop={()=>{ if(dragIdx!==null && dragIdx!==idx){ moveStage(dragIdx,idx); setDragIdx(null); } }}
+                  onDragEnd={()=>setDragIdx(null)}
+                  style={{display:'flex', gap:'8px', alignItems:'center', opacity:dragIdx===idx?0.4:1, transition:'opacity 0.15s',
+                    background: dragIdx!==null && dragIdx!==idx ? 'rgba(99,102,241,0.06)' : 'transparent',
+                    borderRadius:'6px', padding:'2px 0'}}>
+                  <span style={{color:'var(--text-muted)', fontSize:'18px', cursor:'grab', userSelect:'none', padding:'0 6px', letterSpacing:'-2px'}}>⠿</span>
+                  <span style={{color:'var(--text-muted)', fontSize:'11px', minWidth:'18px', textAlign:'center'}}>{idx+1}</span>
                   <input className="input-base" style={{marginBottom:0, flex:1}} value={col.title} onChange={e=>updateColTitle(col.id, e.target.value)} />
                   <button className="btn-danger" style={{padding:'7px 10px'}} onClick={()=>removeCol(col.id)}>O'chirish</button>
                 </div>
@@ -5096,8 +5112,45 @@
         syncLeadToAPI(targetLead);
       };
 
-      const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); };
-      const handleDrop = (e, targetStatus) => { e.preventDefault(); const leadId = e.dataTransfer.getData('leadId'); if(leadId) handleStatusChange(leadId, targetStatus); };
+      const handleDragStart = (e, leadId) => { e.dataTransfer.setData('leadId', String(leadId)); e.dataTransfer.setData('type','lead'); };
+      const draggingColRef = React.useRef(null);
+      const [dragOverColId, setDragOverColId] = React.useState(null);
+      const handleColDragStart = (e, colId) => {
+        e.stopPropagation();
+        draggingColRef.current = colId;
+        e.dataTransfer.setData('type','col');
+        e.dataTransfer.effectAllowed = 'move';
+      };
+      const handleColDrop = (targetColId) => {
+        const srcColId = draggingColRef.current;
+        draggingColRef.current = null; setDragOverColId(null);
+        if (!srcColId || srcColId === targetColId) return;
+        const cols = [...(columnsMap[activePipe] || [])];
+        const from = cols.findIndex(c => c.id === srcColId);
+        const to   = cols.findIndex(c => c.id === targetColId);
+        if (from === -1 || to === -1) return;
+        const [item] = cols.splice(from, 1);
+        cols.splice(to, 0, item);
+        setColumnsMap(prev => ({...prev, [activePipe]: cols}));
+        const token = localStorage.getItem('mizon_token');
+        if (token) {
+          const toDbId = stageMapRef?.current?.toDbId || {};
+          fetch('/api/stages/sync', { method:'PUT',
+            headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+            body: JSON.stringify({ stages: cols.map((c,i) => ({
+              ...(toDbId[c.id]!=null?{id:toDbId[c.id]}:{}),
+              name:c.title, sequence:i+1, is_won:c.id==='WON', is_lost:c.id==='LOST'
+            }))})
+          }).catch(()=>{});
+        }
+      };
+      const handleDrop = (e, targetStatus) => {
+        e.preventDefault();
+        const type = e.dataTransfer.getData('type');
+        if (type === 'col') { handleColDrop(targetStatus); return; }
+        const leadId = e.dataTransfer.getData('leadId');
+        if (leadId) handleStatusChange(leadId, targetStatus);
+      };
 
       const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
 
@@ -5802,9 +5855,18 @@
                       const colLeads = filteredActiveLeads.filter(l => l.status === col.id);
                       const dotColor = colColors[col.id] || '#888';
                       return (
-                        <div key={col.id} className="kanban-col" onDragOver={role!=='WATCHER'?e=>e.preventDefault():undefined} onDrop={role!=='WATCHER'?e=>handleDrop(e, col.id):undefined}>
-                          <div className="kanban-col-header">
+                        <div key={col.id} className="kanban-col"
+                          onDragOver={role!=='WATCHER'?e=>{e.preventDefault(); if(draggingColRef.current && draggingColRef.current!==col.id) setDragOverColId(col.id);}:undefined}
+                          onDragLeave={()=>setDragOverColId(null)}
+                          onDrop={role!=='WATCHER'?e=>handleDrop(e, col.id):undefined}
+                          style={{outline: dragOverColId===col.id && draggingColRef.current ? '2px dashed var(--primary)' : 'none', borderRadius:'10px', transition:'outline 0.1s'}}>
+                          <div className="kanban-col-header"
+                            draggable={role!=='WATCHER'}
+                            onDragStart={role!=='WATCHER'?e=>handleColDragStart(e, col.id):undefined}
+                            onDragEnd={()=>{draggingColRef.current=null; setDragOverColId(null);}}
+                            style={{cursor: role!=='WATCHER' ? 'grab' : 'default'}}>
                             <span className="kanban-col-title">
+                              {role!=='WATCHER' && <span style={{color:'var(--text-muted)', fontSize:'14px', marginRight:'4px', letterSpacing:'-2px', userSelect:'none'}}>⠿</span>}
                               <span className="col-dot" style={{background:dotColor}}></span>
                               {col.title}
                             </span>
