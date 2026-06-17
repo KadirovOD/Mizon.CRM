@@ -5093,13 +5093,16 @@
       const handleStatusChange = (leadId, newStatus) => {
         const base = leads.find(l => l.id == leadId);
         if(!base) return;
-        const targetLead = {...base, status:newStatus, actualCallAttempts:0, chatLogs:[...base.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`🔄 Bosqich o'zgardi → ${newStatus}. Urinishlar nollashtirildi.`}]};
+        // Bosqich nomini ID dan emas, columnsMap dan o'zbek tilida olamiz
+        const pipeId = base.pipelineId || activePipe;
+        const stageTitle = (columnsMap[pipeId] || []).find(c => c.id === newStatus)?.title || newStatus;
+        const targetLead = {...base, status:newStatus, actualCallAttempts:0, chatLogs:[...base.chatLogs,{type:'sys',date:new Date().toISOString(),by:authUser.username,text:`🔄 Bosqich o'zgardi → ${stageTitle}. Urinishlar nollashtirildi.`}]};
         setHasUnsavedChanges(true);
         setLeads(prev=>prev.map(l => l.id==leadId ? targetLead : l));
         syncLeadToAPI(targetLead);
-        if (newStatus === 'WON')       addNotif('stage_changed', '🏆 Bitim yutildi!',      `${targetLead.name} → WON bosqichiga o'tdi`, leadId);
-        else if (newStatus === 'LOST') addNotif('stage_changed', '❌ Bitim yo\'qotildi',   `${targetLead.name} → LOST bosqichiga o'tdi`, leadId);
-        else                           addNotif('stage_changed', '🔄 Bosqich o\'zgardi',   `${targetLead.name} → ${newStatus}`, leadId);
+        if (newStatus === 'WON')       addNotif('stage_changed', '🏆 Bitim yutildi!',      `${targetLead.name} → ${stageTitle} bosqichiga o'tdi`, leadId);
+        else if (newStatus === 'LOST') addNotif('stage_changed', '❌ Bitim yo\'qotildi',   `${targetLead.name} → ${stageTitle} bosqichiga o'tdi`, leadId);
+        else                           addNotif('stage_changed', '🔄 Bosqich o\'zgardi',   `${targetLead.name} → ${stageTitle}`, leadId);
       };
 
       const handleSendChatMsg = (id) => {
