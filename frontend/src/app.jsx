@@ -4455,6 +4455,9 @@
       };
 
       const [searchQuery, setSearchQuery] = useState('');
+      const [filterSource, setFilterSource] = useState('all');
+      const [filterOwner,  setFilterOwner]  = useState('all');
+      const [filterSla,    setFilterSla]    = useState('all');
       const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
 
       // isFormMode — tashqi forma
@@ -5098,10 +5101,25 @@
 
       const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
 
-      // Filtered leads for search
-      const filteredActiveLeads = searchQuery.trim()
-        ? activeLeads.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || (l.phone||'').includes(searchQuery))
-        : activeLeads;
+      // Filtered leads — qidiruv + manba + mas'ul + SLA
+      const filteredActiveLeads = activeLeads.filter(l => {
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          if (!l.name.toLowerCase().includes(q) && !(l.phone||'').includes(searchQuery) && !(l.region||'').toLowerCase().includes(q)) return false;
+        }
+        if (filterSource !== 'all' && l.source !== filterSource) return false;
+        if (filterOwner  !== 'all' && l.owner  !== filterOwner)  return false;
+        if (filterSla !== 'all') {
+          const sla = determineSLAType(l.deadline);
+          if (filterSla === 'danger'  && sla !== 'danger')  return false;
+          if (filterSla === 'warning' && sla !== 'warning') return false;
+          if (filterSla === 'notask'  && (l.deadline || l.taskDescription || ['NEW','LOST','WON'].includes(l.status))) return false;
+        }
+        return true;
+      });
+      const uniqueSources = [...new Set(activeLeads.map(l => l.source).filter(Boolean))];
+      const uniqueOwners  = [...new Set(activeLeads.map(l => l.owner).filter(Boolean))];
+      const hasActiveFilter = filterSource !== 'all' || filterOwner !== 'all' || filterSla !== 'all' || searchQuery.trim();
 
       return (
         <div className="app-container">
@@ -5741,6 +5759,35 @@
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* ── Filter bar ── */}
+                  <div style={{display:'flex', gap:'8px', alignItems:'center', padding:'8px 16px', background:'var(--bg-base)', borderBottom:'1px solid var(--border-light)', flexWrap:'wrap'}}>
+                    <select className="pipeline-selector" style={{fontSize:'12px', minWidth:'130px'}} value={filterSource} onChange={e=>setFilterSource(e.target.value)}>
+                      <option value="all">🌐 Barcha manba</option>
+                      {uniqueSources.map(s=><option key={s} value={s}>{s.replace('meta_','').replace('_',' ')}</option>)}
+                    </select>
+                    <select className="pipeline-selector" style={{fontSize:'12px', minWidth:'130px'}} value={filterOwner} onChange={e=>setFilterOwner(e.target.value)}>
+                      <option value="all">👤 Barcha mas'ul</option>
+                      {uniqueOwners.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                    <select className="pipeline-selector" style={{fontSize:'12px', minWidth:'140px'}} value={filterSla} onChange={e=>setFilterSla(e.target.value)}>
+                      <option value="all">📋 Barcha holat</option>
+                      <option value="danger">🔴 Kechikkan</option>
+                      <option value="warning">🟡 Tez orada</option>
+                      <option value="notask">⚠️ Vazifa yo'q</option>
+                    </select>
+                    {hasActiveFilter && (
+                      <button className="btn-outline" style={{fontSize:'11px', padding:'5px 10px', color:'var(--danger)', borderColor:'var(--danger)'}}
+                        onClick={()=>{setFilterSource('all');setFilterOwner('all');setFilterSla('all');setSearchQuery('');}}>
+                        ✕ Tozalash
+                      </button>
+                    )}
+                    {hasActiveFilter && (
+                      <span style={{fontSize:'11px', color:'var(--text-muted)', marginLeft:'4px'}}>
+                        {filteredActiveLeads.length} / {activeLeads.length} lid
+                      </span>
+                    )}
                   </div>
 
                   <div className="kanban-board">

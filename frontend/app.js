@@ -10895,6 +10895,9 @@ const App = () => {
     }).catch(err => alert("Tarmoq xatosi — o'chirib bo'lmadi: " + err.message));
   };
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterSource, setFilterSource] = useState('all');
+  const [filterOwner, setFilterOwner] = useState('all');
+  const [filterSla, setFilterSla] = useState('all');
   const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
 
   // isFormMode — tashqi forma
@@ -11913,8 +11916,25 @@ const App = () => {
     billing: 'Obuna va to\'lovlar'
   };
 
-  // Filtered leads for search
-  const filteredActiveLeads = searchQuery.trim() ? activeLeads.filter(l => l.name.toLowerCase().includes(searchQuery.toLowerCase()) || (l.phone || '').includes(searchQuery)) : activeLeads;
+  // Filtered leads — qidiruv + manba + mas'ul + SLA
+  const filteredActiveLeads = activeLeads.filter(l => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      if (!l.name.toLowerCase().includes(q) && !(l.phone || '').includes(searchQuery) && !(l.region || '').toLowerCase().includes(q)) return false;
+    }
+    if (filterSource !== 'all' && l.source !== filterSource) return false;
+    if (filterOwner !== 'all' && l.owner !== filterOwner) return false;
+    if (filterSla !== 'all') {
+      const sla = determineSLAType(l.deadline);
+      if (filterSla === 'danger' && sla !== 'danger') return false;
+      if (filterSla === 'warning' && sla !== 'warning') return false;
+      if (filterSla === 'notask' && (l.deadline || l.taskDescription || ['NEW', 'LOST', 'WON'].includes(l.status))) return false;
+    }
+    return true;
+  });
+  const uniqueSources = [...new Set(activeLeads.map(l => l.source).filter(Boolean))];
+  const uniqueOwners = [...new Set(activeLeads.map(l => l.owner).filter(Boolean))];
+  const hasActiveFilter = filterSource !== 'all' || filterOwner !== 'all' || filterSla !== 'all' || searchQuery.trim();
   return /*#__PURE__*/React.createElement("div", {
     className: "app-container"
   }, /*#__PURE__*/React.createElement("aside", {
@@ -13361,6 +13381,78 @@ const App = () => {
     n: "plus",
     s: 14
   }), " Yangi Lead"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '8px',
+      alignItems: 'center',
+      padding: '8px 16px',
+      background: 'var(--bg-base)',
+      borderBottom: '1px solid var(--border-light)',
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("select", {
+    className: "pipeline-selector",
+    style: {
+      fontSize: '12px',
+      minWidth: '130px'
+    },
+    value: filterSource,
+    onChange: e => setFilterSource(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "\uD83C\uDF10 Barcha manba"), uniqueSources.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s,
+    value: s
+  }, s.replace('meta_', '').replace('_', ' ')))), /*#__PURE__*/React.createElement("select", {
+    className: "pipeline-selector",
+    style: {
+      fontSize: '12px',
+      minWidth: '130px'
+    },
+    value: filterOwner,
+    onChange: e => setFilterOwner(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "\uD83D\uDC64 Barcha mas'ul"), uniqueOwners.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o,
+    value: o
+  }, o))), /*#__PURE__*/React.createElement("select", {
+    className: "pipeline-selector",
+    style: {
+      fontSize: '12px',
+      minWidth: '140px'
+    },
+    value: filterSla,
+    onChange: e => setFilterSla(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "\uD83D\uDCCB Barcha holat"), /*#__PURE__*/React.createElement("option", {
+    value: "danger"
+  }, "\uD83D\uDD34 Kechikkan"), /*#__PURE__*/React.createElement("option", {
+    value: "warning"
+  }, "\uD83D\uDFE1 Tez orada"), /*#__PURE__*/React.createElement("option", {
+    value: "notask"
+  }, "\u26A0\uFE0F Vazifa yo'q")), hasActiveFilter && /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      fontSize: '11px',
+      padding: '5px 10px',
+      color: 'var(--danger)',
+      borderColor: 'var(--danger)'
+    },
+    onClick: () => {
+      setFilterSource('all');
+      setFilterOwner('all');
+      setFilterSla('all');
+      setSearchQuery('');
+    }
+  }, "\u2715 Tozalash"), hasActiveFilter && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      marginLeft: '4px'
+    }
+  }, filteredActiveLeads.length, " / ", activeLeads.length, " lid")), /*#__PURE__*/React.createElement("div", {
     className: "kanban-board"
   }, activeColumns.map(col => {
     const colLeads = filteredActiveLeads.filter(l => l.status === col.id);
