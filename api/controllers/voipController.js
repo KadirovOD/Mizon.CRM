@@ -121,9 +121,16 @@ exports.handleWebhook = async (req, res) => {
 
     if (!phone) return res.sendStatus(200);
 
-    // Kompaniyani VoIP konfiguratsiyasidan aniqlash
-    const cfgR = await req.db.query('SELECT company_id FROM crm_voip_config ORDER BY id DESC LIMIT 1');
-    const companyId = cfgR.rows[0]?.company_id || null;
+    // Kompaniyani aniqlash:
+    //  1) URL query: ?company_id=N
+    //  2) Header: X-Mizon-Company
+    //  3) Body: company_id
+    //  4) Fallback — VoIP konfiguratsiyasidagi oxirgi kompaniya (legacy)
+    let companyId = parseInt(req.query.company_id || req.headers['x-mizon-company'] || event.company_id || '', 10);
+    if (!companyId || isNaN(companyId)) {
+      const cfgR = await req.db.query('SELECT company_id FROM crm_voip_config ORDER BY id DESC LIMIT 1');
+      companyId = cfgR.rows[0]?.company_id || null;
+    }
 
     const cleanPhone = phone.replace(/\D/g, '');
     const lead = await req.db.query(

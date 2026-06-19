@@ -1819,7 +1819,14 @@ const IntegrationsModule = ({
     }],
     wh: {
       label: 'Callback Webhook — Moizvonki kabinetiga kiriting',
-      url: `${origin}/api/webhook/moizvonki`
+      url: `${origin}/api/webhook/moizvonki${(() => {
+        try {
+          const s = JSON.parse(localStorage.getItem('mizon_session') || 'null');
+          return s?.companyId ? '?company_id=' + s.companyId : '';
+        } catch {
+          return '';
+        }
+      })()}`
     }
   }, {
     key: 'google_sheets',
@@ -10662,6 +10669,9 @@ const App = () => {
   };
 
   // Leads + bosqichlarni API dan qayta yuklash (PipelineEditor saqlagandan keyin ham chaqiriladi)
+  // Yangi lead bildirishnomasi uchun — oldingi ID'lar va addNotif ref
+  const prevLeadIdsRef = React.useRef(null);
+  const addNotifRef = React.useRef(null);
   const reloadLeadsFromApi = React.useCallback(() => {
     const headers = {};
     const t = localStorage.getItem('mizon_token');
@@ -10703,8 +10713,25 @@ const App = () => {
             }))
           }));
         }
+        // Yangi kelgan lead'lar uchun bildirishnoma (faqat avvalgi yuklashdan keyin)
+        const incoming = data.leads || [];
+        const newIdSet = new Set(incoming.map(l => l.id));
+        if (prevLeadIdsRef.current && addNotifRef.current) {
+          const prev = prevLeadIdsRef.current;
+          incoming.forEach(l => {
+            if (!prev.has(l.id)) {
+              const src = l.mizon_source || 'manual';
+              // Qo'lda kiritilgan leadlar uchun emas — ular allaqachon UI'da xabar oladi
+              if (src !== 'manual') {
+                const icon = src === 'website' ? '🌐' : src === 'telegram_bot' ? '✈️' : src.startsWith('meta') ? '📘' : '📥';
+                addNotifRef.current('new_lead', `${icon} Yangi lid keldi`, `${l.name || "Noma'lum"} — ${src.replace('meta_', '').replace('_', ' ')}${l.phone ? ' • ' + l.phone : ''}`, l.id);
+              }
+            }
+          });
+        }
+        prevLeadIdsRef.current = newIdSet;
         // 0 lead bo'lsa ham DOIM yangilash (localStorage'dagi eski ma'lumotni tozalash uchun)
-        setLeads((data.leads || []).map(l => ({
+        setLeads(incoming.map(l => ({
           id: l.id,
           pipelineId: l.pipelineid || 'p1',
           name: l.name,
@@ -11591,6 +11618,10 @@ const App = () => {
       return [newN, ...prev].slice(0, 60);
     });
   }, []);
+  // reloadLeadsFromApi addNotif'ni ref orqali chaqirsin (closure muammosini chetlab o'tish)
+  React.useEffect(() => {
+    addNotifRef.current = addNotif;
+  }, [addNotif]);
 
   // Bildirishnoma ovozi (qisqa "ding")
   const playNotifSound = () => {
@@ -12102,6 +12133,36 @@ const App = () => {
     alert(`✅ ${okCount} ta lid o'chirildi${failCount ? `, ❌ ${failCount} ta xato` : ''}`);
   };
   const [draggingLeadId, setDraggingLeadId] = React.useState(null);
+  // CSV Export — filterlangan lidlarni yuklash
+  const exportLeadsToCsv = () => {
+    const rows = filteredActiveLeads;
+    if (!rows.length) {
+      alert("Eksport qilish uchun lid yo'q.");
+      return;
+    }
+    const stageTitle = id => activeColumns.find(c => c.id === id)?.title || id;
+    const esc = v => {
+      const s = (v == null ? '' : String(v)).replace(/"/g, '""');
+      return /[",\n;]/.test(s) ? `"${s}"` : s;
+    };
+    const headers = ['ID', 'Ism', 'Telefon', 'Hudud', 'Manba', 'Bosqich', 'Mas\'ul', 'Vazifa', 'Muddat', 'Yaratildi', 'Urinishlar'];
+    const lines = [headers.join(',')];
+    rows.forEach(l => {
+      lines.push([l.id, l.name, l.phone, l.region, l.source, stageTitle(l.status), l.owner || '', l.taskDescription || '', l.deadline ? new Date(l.deadline).toLocaleString('uz-UZ') : '', l.createdAt ? new Date(l.createdAt).toLocaleString('uz-UZ') : '', l.actualCallAttempts || 0].map(esc).join(','));
+    });
+    const csv = '\uFEFF' + lines.join('\n'); // BOM — Excel cyrillic uchun
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8;'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mizon-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
   const handleDragStart = (e, leadId) => {
     e.dataTransfer.setData('leadId', String(leadId));
     setDraggingLeadId(String(leadId));
@@ -13584,7 +13645,14 @@ const App = () => {
   }, pipelines.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.name))), role !== 'WATCHER' && /*#__PURE__*/React.createElement("button", {
+  }, p.name))), /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    onClick: exportLeadsToCsv,
+    title: "Filtrlangan lidlarni CSV/Excel sifatida yuklab olish"
+  }, /*#__PURE__*/React.createElement(Ico, {
+    n: "download",
+    s: 13
+  }), " Eksport (CSV)"), role !== 'WATCHER' && /*#__PURE__*/React.createElement("button", {
     className: "btn-primary",
     onClick: () => setShowAddLead(true)
   }, /*#__PURE__*/React.createElement(Ico, {
