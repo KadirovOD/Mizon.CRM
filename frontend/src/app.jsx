@@ -4280,6 +4280,7 @@
       }, [loginLock?.until]);
       const [activeTab, setActiveTab] = useState(() => localStorage.getItem('mizon_activeTab') || 'dashboard');
       const [settingsActiveTab, setSettingsActiveTab] = useState(() => localStorage.getItem('mizon_settingsTab') || 'users');
+      const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
       // ── Bildirishnomalar state ────────────────────────────────────────────────
       const [notifications,  setNotifications]  = useState([]);
@@ -5512,15 +5513,19 @@
 
       return (
         <div className="app-container">
+          {/* MOBILE BACKDROP */}
+          {mobileSidebarOpen && (
+            <div className="mobile-backdrop" onClick={()=>setMobileSidebarOpen(false)} />
+          )}
           {/* SIDEBAR */}
-          <aside className="sidebar">
+          <aside className={`sidebar ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
             <div className="sidebar-brand">
               <div className="brand-icon">M</div>
               <span className="brand-name">MIZON</span>
               <span className="brand-role" style={role==='WATCHER'?{background:'rgba(139,92,246,0.15)',color:'#8b5cf6',borderColor:'rgba(139,92,246,0.3)'}:undefined}>{role==='WATCHER'?'KUZATUVCHI':role}</span>
             </div>
 
-            <nav className="sidebar-nav">
+            <nav className="sidebar-nav" onClick={(e)=>{ if (e.target.closest('.nav-item')) setMobileSidebarOpen(false); }}>
               <span className="nav-section-label">Asosiy</span>
               <div className={`nav-item ${activeTab==='dashboard'?'active':''}`} onClick={()=>{setActiveTab('dashboard');setSelectedLeadId(null);}}>
                 <Ico n="chart" s={17}/> Boshqaruv paneli
@@ -5587,7 +5592,12 @@
           {/* MAIN */}
           <main className="main-wrapper">
             <header className="topbar">
-              <span className="topbar-title">{tabTitles[activeTab] || ''}</span>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',minWidth:0}}>
+                <button className="icon-btn mobile-hamburger" onClick={()=>setMobileSidebarOpen(true)} title="Menyu" aria-label="Menyu">
+                  <span className="material-symbols-outlined" style={{fontSize:'22px'}}>menu</span>
+                </button>
+                <span className="topbar-title" style={{overflow:'hidden',textOverflow:'ellipsis'}}>{tabTitles[activeTab] || ''}</span>
+              </div>
               <div className="topbar-right">
                 {activeTab === 'leads' && (
                   <div className="topbar-search">

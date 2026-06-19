@@ -10620,6 +10620,7 @@ const App = () => {
   }, [loginLock?.until]);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('mizon_activeTab') || 'dashboard');
   const [settingsActiveTab, setSettingsActiveTab] = useState(() => localStorage.getItem('mizon_settingsTab') || 'users');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // ── Bildirishnomalar state ────────────────────────────────────────────────
   const [notifications, setNotifications] = useState([]);
@@ -12404,8 +12405,11 @@ const App = () => {
   const hasActiveFilter = filterSource !== 'all' || filterOwner !== 'all' || filterSla !== 'all' || searchQuery.trim();
   return /*#__PURE__*/React.createElement("div", {
     className: "app-container"
-  }, /*#__PURE__*/React.createElement("aside", {
-    className: "sidebar"
+  }, mobileSidebarOpen && /*#__PURE__*/React.createElement("div", {
+    className: "mobile-backdrop",
+    onClick: () => setMobileSidebarOpen(false)
+  }), /*#__PURE__*/React.createElement("aside", {
+    className: `sidebar ${mobileSidebarOpen ? 'mobile-open' : ''}`
   }, /*#__PURE__*/React.createElement("div", {
     className: "sidebar-brand"
   }, /*#__PURE__*/React.createElement("div", {
@@ -12420,7 +12424,10 @@ const App = () => {
       borderColor: 'rgba(139,92,246,0.3)'
     } : undefined
   }, role === 'WATCHER' ? 'KUZATUVCHI' : role)), /*#__PURE__*/React.createElement("nav", {
-    className: "sidebar-nav"
+    className: "sidebar-nav",
+    onClick: e => {
+      if (e.target.closest('.nav-item')) setMobileSidebarOpen(false);
+    }
   }, /*#__PURE__*/React.createElement("span", {
     className: "nav-section-label"
   }, "Asosiy"), /*#__PURE__*/React.createElement("div", {
@@ -12567,9 +12574,30 @@ const App = () => {
     className: "main-wrapper"
   }, /*#__PURE__*/React.createElement("header", {
     className: "topbar"
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      minWidth: 0
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "icon-btn mobile-hamburger",
+    onClick: () => setMobileSidebarOpen(true),
+    title: "Menyu",
+    "aria-label": "Menyu"
   }, /*#__PURE__*/React.createElement("span", {
-    className: "topbar-title"
-  }, tabTitles[activeTab] || ''), /*#__PURE__*/React.createElement("div", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '22px'
+    }
+  }, "menu")), /*#__PURE__*/React.createElement("span", {
+    className: "topbar-title",
+    style: {
+      overflow: 'hidden',
+      textOverflow: 'ellipsis'
+    }
+  }, tabTitles[activeTab] || '')), /*#__PURE__*/React.createElement("div", {
     className: "topbar-right"
   }, activeTab === 'leads' && /*#__PURE__*/React.createElement("div", {
     className: "topbar-search"
