@@ -6913,6 +6913,35 @@ const MarketingModule = () => {
   const _cid = _mktSession.companyId || 'local';
   const CAMP_KEY = `mizon_campaigns_${_cid}`;
   const TG_KEY = `mizon_tg_${_cid}`;
+  const _mktToken = localStorage.getItem('mizon_token');
+  const _mktAuth = _mktToken ? {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + _mktToken
+  } : {
+    'Content-Type': 'application/json'
+  };
+  // Server-da saqlash uchun avtomatik debouncer
+  const _mktExtraRef = React.useRef({}); // backend'dan kelgan extra_settings nusxasi
+  const _mktSaveTimer = React.useRef(null);
+  const _mktLoaded = React.useRef(false);
+  const saveMktToServer = next => {
+    if (!_mktToken || !_mktLoaded.current) return;
+    clearTimeout(_mktSaveTimer.current);
+    _mktSaveTimer.current = setTimeout(() => {
+      const extra = {
+        ..._mktExtraRef.current,
+        marketing: next
+      };
+      _mktExtraRef.current = extra;
+      fetch('/api/company/settings', {
+        method: 'PUT',
+        headers: _mktAuth,
+        body: JSON.stringify({
+          extra_settings: extra
+        })
+      }).catch(() => {});
+    }, 600);
+  };
 
   // ── Facebook kampaniyalar ──────────────────────────────────────────────────
   const [campaigns, setCampaigns] = useState(() => {
@@ -6924,7 +6953,37 @@ const MarketingModule = () => {
   });
   useEffect(() => {
     localStorage.setItem(CAMP_KEY, JSON.stringify(campaigns));
+    saveMktToServer({
+      campaigns,
+      tgChannels: JSON.parse(localStorage.getItem(TG_KEY) || '[]')
+    });
   }, [campaigns]);
+  // Birinchi mount'da serverdan yuklash
+  useEffect(() => {
+    if (!_mktToken) {
+      _mktLoaded.current = true;
+      return;
+    }
+    fetch('/api/company/settings', {
+      headers: _mktAuth
+    }).then(r => r.ok ? r.json() : null).then(d => {
+      let extra = d?.extra_settings ?? {};
+      if (typeof extra === 'string') {
+        try {
+          extra = JSON.parse(extra);
+        } catch {
+          extra = {};
+        }
+      }
+      if (!extra || typeof extra !== 'object') extra = {};
+      _mktExtraRef.current = extra;
+      const mkt = extra.marketing || {};
+      if (Array.isArray(mkt.campaigns) && mkt.campaigns.length) setCampaigns(mkt.campaigns);
+      if (Array.isArray(mkt.tgChannels) && mkt.tgChannels.length) setTgChannels(mkt.tgChannels);
+    }).catch(() => {}).finally(() => {
+      _mktLoaded.current = true;
+    });
+  }, []);
   const [showNew, setShowNew] = useState(false);
   const [editBudget, setEditBudget] = useState(null); // {id, val}
   const [editSpent, setEditSpent] = useState(null); // {id, val}
@@ -7005,6 +7064,10 @@ const MarketingModule = () => {
   });
   useEffect(() => {
     localStorage.setItem(TG_KEY, JSON.stringify(tgChannels));
+    saveMktToServer({
+      campaigns,
+      tgChannels
+    });
   }, [tgChannels]);
   const [showNewTg, setShowNewTg] = useState(false);
   const [newTg, setNewTg] = useState({
@@ -11579,7 +11642,8 @@ const App = () => {
     call_logged: '📞',
     voip_incoming: '📲',
     ext_lead: '🌐',
-    task_assigned: '📌'
+    task_assigned: '📌',
+    billing: '💳'
   };
   const notifIcon = type => _notifTypes[type] || '🔔';
   const timeAgo = iso => {
@@ -11622,6 +11686,47 @@ const App = () => {
   React.useEffect(() => {
     addNotifRef.current = addNotif;
   }, [addNotif]);
+
+  // ── Obuna muddati tugashi haqida bildirishnoma (faqat CEO uchun) ─────────
+  React.useEffect(() => {
+    if (!authUser || authUser.role !== 'CEO') return;
+    const token = localStorage.getItem('mizon_token');
+    if (!token) return;
+    const cid = authUser.companyId || 'local';
+    const today = new Date().toISOString().slice(0, 10);
+    const seenKey = `mizon_billing_notif_${cid}_${today}`;
+    if (localStorage.getItem(seenKey)) return; // bugun aytildi
+    fetch('/api/billing/me', {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    }).then(r => r.ok ? r.json() : null).then(d => {
+      const sub = d?.subscription;
+      if (!sub || !sub.expires_at) return;
+      const exp = new Date(sub.expires_at);
+      const now = new Date();
+      const daysLeft = Math.ceil((exp - now) / 86400000);
+      let title = null,
+        body = null;
+      if (daysLeft < 0) {
+        const overdueDays = Math.abs(daysLeft);
+        const grace = sub.grace_until ? new Date(sub.grace_until) : null;
+        const graceLeft = grace ? Math.ceil((grace - now) / 86400000) : null;
+        title = '🔴 Obuna muddati tugagan!';
+        body = `${overdueDays} kun avval tugagan${graceLeft != null && graceLeft > 0 ? `. ${graceLeft} kun ichida to'lov qilinmasa akkaunt bloklanadi.` : '. Akkaunt yaqinda bloklanadi!'}`;
+      } else if (daysLeft === 0) {
+        title = '⏰ Obuna bugun tugaydi!';
+        body = "Bugun yangilash kerak — aks holda akkaunt bloklanadi.";
+      } else if (daysLeft <= 7) {
+        title = `📅 Obuna ${daysLeft} kun qoldi`;
+        body = `Tarifingiz ${exp.toLocaleDateString('uz-UZ')} kuni tugaydi. To'lov qilishni unutmang!`;
+      }
+      if (title) {
+        addNotif('billing', title, body, null);
+        localStorage.setItem(seenKey, '1');
+      }
+    }).catch(() => {});
+  }, [authUser, addNotif]);
 
   // Bildirishnoma ovozi (qisqa "ding")
   const playNotifSound = () => {
@@ -12133,6 +12238,97 @@ const App = () => {
     alert(`✅ ${okCount} ta lid o'chirildi${failCount ? `, ❌ ${failCount} ta xato` : ''}`);
   };
   const [draggingLeadId, setDraggingLeadId] = React.useState(null);
+  // CSV Import — fayldan lidlarni yuklash
+  const csvFileInputRef = React.useRef(null);
+  const parseCsvRow = line => {
+    const out = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inQ) {
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (ch === '"') inQ = false;else cur += ch;
+      } else {
+        if (ch === '"') inQ = true;else if (ch === ',' || ch === ';') {
+          out.push(cur);
+          cur = '';
+        } else cur += ch;
+      }
+    }
+    out.push(cur);
+    return out;
+  };
+  const importLeadsFromCsv = async file => {
+    if (!file) return;
+    const text = await file.text();
+    const cleaned = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = cleaned.split('\n').filter(l => l.trim());
+    if (lines.length < 2) {
+      alert("Fayl bo'sh yoki sarlavhasi yetishmaydi.");
+      return;
+    }
+    const headers = parseCsvRow(lines[0]).map(h => h.toLowerCase().trim());
+    const findIdx = (...names) => {
+      for (const n of names) {
+        const i = headers.findIndex(h => h.includes(n));
+        if (i !== -1) return i;
+      }
+      return -1;
+    };
+    const nameIdx = findIdx('ism', 'name', 'full');
+    const phoneIdx = findIdx('telefon', 'tel', 'phone', 'raqam');
+    const regionIdx = findIdx('hudud', 'manzil', 'region', 'shahar', 'city');
+    const emailIdx = findIdx('email', 'mail', 'pochta');
+    const noteIdx = findIdx('izoh', 'note', 'comment', 'sharh');
+    if (phoneIdx === -1 && nameIdx === -1) {
+      alert("Sarlavhada hech bo'lmasa 'ism' yoki 'telefon' ustuni topilmadi.");
+      return;
+    }
+    if (!window.confirm(`${lines.length - 1} ta qator topildi. Davom etamizmi?`)) return;
+    const token = localStorage.getItem('mizon_token');
+    const auth = token ? {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    } : {
+      'Content-Type': 'application/json'
+    };
+    let ok = 0,
+      skipped = 0,
+      failed = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const row = parseCsvRow(lines[i]);
+      const name = (nameIdx !== -1 ? row[nameIdx] : '').trim();
+      const phone = (phoneIdx !== -1 ? row[phoneIdx] : '').trim().replace(/^p\s*:/i, '').trim();
+      if (!name && !phone) {
+        skipped++;
+        continue;
+      }
+      const payload = {
+        name: name || "Noma'lum",
+        phone: phone || '',
+        region: (regionIdx !== -1 ? row[regionIdx] : '').trim() || null,
+        email: (emailIdx !== -1 ? row[emailIdx] : '').trim() || null,
+        source: 'csv_import',
+        note: (noteIdx !== -1 ? row[noteIdx] : '').trim() || null
+      };
+      try {
+        const r = await fetch('/api/leads', {
+          method: 'POST',
+          headers: auth,
+          body: JSON.stringify(payload)
+        });
+        if (r.ok) ok++;else failed++;
+      } catch {
+        failed++;
+      }
+    }
+    alert(`✅ ${ok} ta lid qo'shildi.${skipped ? ` ⏭ ${skipped} ta bo'sh qator.` : ''}${failed ? ` ❌ ${failed} ta xato.` : ''}`);
+    reloadLeadsFromApi();
+  };
+
   // CSV Export — filterlangan lidlarni yuklash
   const exportLeadsToCsv = () => {
     const rows = filteredActiveLeads;
@@ -13645,7 +13841,26 @@ const App = () => {
   }, pipelines.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.name))), /*#__PURE__*/React.createElement("button", {
+  }, p.name))), role === 'CEO' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    ref: csvFileInputRef,
+    accept: ".csv,text/csv",
+    style: {
+      display: 'none'
+    },
+    onChange: e => {
+      const f = e.target.files?.[0];
+      if (f) importLeadsFromCsv(f);
+      e.target.value = '';
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    onClick: () => csvFileInputRef.current?.click(),
+    title: "CSV faylidan lidlarni yuklash (ustunlar: ism, telefon, hudud, ...)"
+  }, /*#__PURE__*/React.createElement(Ico, {
+    n: "upload",
+    s: 13
+  }), " Import (CSV)")), /*#__PURE__*/React.createElement("button", {
     className: "btn-outline",
     onClick: exportLeadsToCsv,
     title: "Filtrlangan lidlarni CSV/Excel sifatida yuklab olish"
