@@ -3340,7 +3340,7 @@ const IntegrationsModule = ({
       const slug = intgCompanySlug || '';
 
       // Apps Script — sarlavha nomidan avtomatik ustun aniqlash
-      const script = [`// ╔════════════════════════════════════════════════════╗`, `// ║   Mizon CRM — Google Sheets (Meta Lead Ads)        ║`, `// ║   Extensions → Apps Script ga joylashtiring        ║`, `// ╚════════════════════════════════════════════════════╝`, ``, `const CRM_WEBHOOK  = '${webhookUrl}';`, `const COMPANY_SLUG = '${slug}';`, ``, `// Meta sheet sarlavhalaridan CRM maydonlariga avtomatik moslash`, `// Chap: sheetdagi ustun nomi | O'ng: CRM maydoni`, `const HEADER_MAP = {`, `  'full_name':    'name',`, `  'first_name':   'name',`, `  'last_name':    'name',`, `  'phone_number': 'phone',`, `  'phone':        'phone',`, `  'email':        'email',`, `  'city':         'region',`, `  'country':      'region',`, `  'comments':     'note',`, `  'message':      'note',`, `};`, ``, `// ─── Asosiy funksiya ──────────────────────────────────────`, `function syncNewLeads() {`, `  const sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();`, `  const lastRow = sheet.getLastRow();`, `  const props   = PropertiesService.getScriptProperties();`, `  const lastProcessed = parseInt(props.getProperty('mizon_last_row') || '1');`, `  if (lastRow <= lastProcessed) return;`, ``, `  // Sarlavha qatorini o'qib ustun indekslarini aniqlash`, `  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];`, `  const colIdx  = {};`, `  headers.forEach(function(h, i) {`, `    const field = HEADER_MAP[(h || '').toString().toLowerCase().trim()];`, `    if (field && colIdx[field] === undefined) colIdx[field] = i;`, `  });`, `  Logger.log('Aniqlangan ustunlar: ' + JSON.stringify(colIdx));`, ``, `  const startRow = lastProcessed + 1;`, `  const data = sheet.getRange(startRow, 1, lastRow - lastProcessed, sheet.getLastColumn()).getValues();`, ``, `  var processed = lastProcessed;`, `  for (var i = 0; i < data.length; i++) {`, `    var row = data[i];`, `    var firstName = colIdx['name'] !== undefined ? String(row[colIdx['name']] || '').trim() : '';`, `    var lastName  = colIdx['name_last'] !== undefined ? String(row[colIdx['name_last']] || '').trim() : '';`, `    var fullName  = [firstName, lastName].filter(Boolean).join(' ');`, `    var rawPhone = colIdx['phone'] !== undefined ? String(row[colIdx['phone']] || '').trim() : '';`, `    rawPhone = rawPhone.replace(/^p\\s*:/i, '').trim(); // Meta p: prefiksini tozalash`, `    var payload = {`, `      company_slug: COMPANY_SLUG,`, `      name:   fullName,`, `      phone:  rawPhone,`, `      email:  colIdx['email']  !== undefined ? String(row[colIdx['email']]  || '').trim() : '',`, `      region: colIdx['region'] !== undefined ? String(row[colIdx['region']] || '').trim() : '',`, `      note:   colIdx['note']   !== undefined ? String(row[colIdx['note']]   || '').trim() : '',`, `      row_index: startRow + i,`, `    };`, `    if (!payload.name && !payload.phone) { processed++; continue; }`, `    try {`, `      var resp   = UrlFetchApp.fetch(CRM_WEBHOOK, {`, `        method: 'post', contentType: 'application/json',`, `        payload: JSON.stringify(payload), muteHttpExceptions: true,`, `      });`, `      var result = JSON.parse(resp.getContentText());`, `      Logger.log('Qator '+(startRow+i)+': '+(result.duplicate?'⚠️ Takrorlangan':'✅ id='+result.id));`, `    } catch(e) { Logger.log('Xato: '+e.message); }`, `    processed++;`, `    props.setProperty('mizon_last_row', String(processed));`, `  }`, `}`, ``, `// ─── Trigger o'rnatish — BIR MARTA ishga tushiring ───────`, `function createTrigger() {`, `  ScriptApp.getProjectTriggers()`, `    .filter(function(t){ return t.getHandlerFunction() === 'syncNewLeads'; })`, `    .forEach(function(t){ ScriptApp.deleteTrigger(t); });`, `  ScriptApp.newTrigger('syncNewLeads').timeBased().everyMinutes(5).create();`, `  Logger.log("✅ Trigger o'rnatildi — har 5 daqiqada sinxronlanadi");`, `}`].join('\n');
+      const script = [`// ╔════════════════════════════════════════════════════╗`, `// ║   Mizon CRM — Google Sheets (Meta Lead Ads)        ║`, `// ║   Extensions → Apps Script ga joylashtiring        ║`, `// ╚════════════════════════════════════════════════════╝`, ``, `const CRM_WEBHOOK  = '${webhookUrl}';`, `const COMPANY_SLUG = '${slug}';`, ``, `// Meta sheet sarlavhalaridan CRM maydonlariga avtomatik moslash`, `// Chap: sheetdagi ustun nomi | O'ng: CRM maydoni`, `// Aniq Meta nomlari`, `const HEADER_MAP = {`, `  'full_name':    'name_meta',`, `  'first_name':   'name_meta',`, `  'last_name':    'name_last',`, `  'phone_number': 'phone_meta',`, `  'phone':        'phone_meta',`, `  'email':        'email_meta',`, `  'city':         'region_meta',`, `  'country':      'region_meta',`, `  'comments':     'note_meta',`, `  'message':      'note_meta',`, `};`, ``, `// Foydalanuvchi qo'lda yozgan custom maydonlar (Meta nomlardan USTUN qo'yiladi)`, `// Masalan: "telefon_raqamingizni_yozing!", "ismingizni_yozing!" va h.k.`, `const UZ_PATTERNS = [`, `  { rx: /(ism|name)/i,                     field: 'name_uz' },`, `  { rx: /(telefon|raqam|\\btel\\b|phone)/i, field: 'phone_uz' },`, `  { rx: /(manzil|shahar|hudud|viloyat|address|city)/i, field: 'region_uz' },`, `  { rx: /(email|mail|pochta)/i,            field: 'email_uz' },`, `  { rx: /(izoh|sharh|comment|message|xabar)/i, field: 'note_uz' },`, `];`, ``, `// Qiymat haqiqiy telefon raqamga o'xshashligini tekshirish`, `function looksLikePhone(s) {`, `  if (!s) return false;`, `  var digits = s.toString().replace(/\\D/g, '');`, `  return digits.length >= 7 && digits.length <= 15;`, `}`, `function cleanPhone(s) {`, `  return s.toString().trim().replace(/^p\\s*:/i, '').trim();`, `}`, ``, `// ─── Asosiy funksiya ──────────────────────────────────────`, `function syncNewLeads() {`, `  const sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();`, `  const lastRow = sheet.getLastRow();`, `  const props   = PropertiesService.getScriptProperties();`, `  const lastProcessed = parseInt(props.getProperty('mizon_last_row') || '1');`, `  if (lastRow <= lastProcessed) return;`, ``, `  // Sarlavha qatorini o'qib ustun indekslarini aniqlash`, `  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];`, `  const colIdx  = {};`, `  headers.forEach(function(h, i) {`, `    var hl = (h || '').toString().toLowerCase().trim();`, `    if (!hl) return;`, `    // 1) Aniq Meta nomlari`, `    var exact = HEADER_MAP[hl];`, `    if (exact && colIdx[exact] === undefined) colIdx[exact] = i;`, `    // 2) Custom (Uzbek/foydalanuvchi yozgan) maydonlar — bular ustunroq`, `    UZ_PATTERNS.forEach(function(p) {`, `      if (HEADER_MAP[hl]) return; // aniq Meta nomi bo'lsa custom emas`, `      if (p.rx.test(hl) && colIdx[p.field] === undefined) colIdx[p.field] = i;`, `    });`, `  });`, `  Logger.log('Aniqlangan ustunlar: ' + JSON.stringify(colIdx));`, ``, `  const startRow = lastProcessed + 1;`, `  const data = sheet.getRange(startRow, 1, lastRow - lastProcessed, sheet.getLastColumn()).getValues();`, ``, `  var processed = lastProcessed;`, `  for (var i = 0; i < data.length; i++) {`, `    var row = data[i];`, ``, `    // ISM: avval foydalanuvchi yozgan custom maydon, keyin Meta full_name`, `    var nmUz  = colIdx['name_uz']   !== undefined ? String(row[colIdx['name_uz']]   || '').trim() : '';`, `    var nmMt  = colIdx['name_meta'] !== undefined ? String(row[colIdx['name_meta']] || '').trim() : '';`, `    var lastN = colIdx['name_last'] !== undefined ? String(row[colIdx['name_last']] || '').trim() : '';`, `    var fullName = nmUz || [nmMt, lastN].filter(Boolean).join(' ').trim();`, ``, `    // TELEFON: bir nechta nomzodlar — birinchisi haqiqiy raqamga o'xshasa olamiz`, `    var phoneCandidates = [];`, `    if (colIdx['phone_uz']   !== undefined) phoneCandidates.push(cleanPhone(row[colIdx['phone_uz']]   || ''));`, `    if (colIdx['phone_meta'] !== undefined) phoneCandidates.push(cleanPhone(row[colIdx['phone_meta']] || ''));`, `    var rawPhone = '';`, `    for (var j = 0; j < phoneCandidates.length; j++) {`, `      if (looksLikePhone(phoneCandidates[j])) { rawPhone = phoneCandidates[j]; break; }`, `    }`, `    // Agar hech qaysisi to'g'ri ko'rinmasa, birinchi mavjudini olamiz (eski xulq)`, `    if (!rawPhone && phoneCandidates.length) rawPhone = phoneCandidates.find(function(x){return !!x;}) || '';`, ``, `    var email  = (colIdx['email_uz']  !== undefined ? row[colIdx['email_uz']]  : (colIdx['email_meta']  !== undefined ? row[colIdx['email_meta']]  : '')) || '';`, `    var region = (colIdx['region_uz'] !== undefined ? row[colIdx['region_uz']] : (colIdx['region_meta'] !== undefined ? row[colIdx['region_meta']] : '')) || '';`, `    var note   = (colIdx['note_uz']   !== undefined ? row[colIdx['note_uz']]   : (colIdx['note_meta']   !== undefined ? row[colIdx['note_meta']]   : '')) || '';`, ``, `    var payload = {`, `      company_slug: COMPANY_SLUG,`, `      name:   fullName,`, `      phone:  rawPhone,`, `      email:  String(email).trim(),`, `      region: String(region).trim(),`, `      note:   String(note).trim(),`, `      row_index: startRow + i,`, `    };`, `    if (!payload.name && !payload.phone) { processed++; continue; }`, `    try {`, `      var resp   = UrlFetchApp.fetch(CRM_WEBHOOK, {`, `        method: 'post', contentType: 'application/json',`, `        payload: JSON.stringify(payload), muteHttpExceptions: true,`, `      });`, `      var result = JSON.parse(resp.getContentText());`, `      Logger.log('Qator '+(startRow+i)+': '+(result.duplicate?'⚠️ Takrorlangan':'✅ id='+result.id));`, `    } catch(e) { Logger.log('Xato: '+e.message); }`, `    processed++;`, `    props.setProperty('mizon_last_row', String(processed));`, `  }`, `}`, ``, `// ─── Trigger o'rnatish — BIR MARTA ishga tushiring ───────`, `function createTrigger() {`, `  ScriptApp.getProjectTriggers()`, `    .filter(function(t){ return t.getHandlerFunction() === 'syncNewLeads'; })`, `    .forEach(function(t){ ScriptApp.deleteTrigger(t); });`, `  ScriptApp.newTrigger('syncNewLeads').timeBased().everyMinutes(5).create();`, `  Logger.log("✅ Trigger o'rnatildi — har 5 daqiqada sinxronlanadi");`, `}`].join('\n');
       const saveGs = async () => {
         setGsSaving(true);
         try {
@@ -11988,6 +11988,63 @@ const App = () => {
     kanbanDragScroll.current.active = false;
     setKanbanGrabbing(false);
   };
+
+  // Ko'p tanlash rejimi (faqat CEO uchun ommaviy o'chirish)
+  const [selectMode, setSelectMode] = React.useState(false);
+  const [selectedIds, setSelectedIds] = React.useState(() => new Set());
+  const toggleSelect = id => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(String(id))) next.delete(String(id));else next.add(String(id));
+      return next;
+    });
+  };
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    clearSelection();
+  };
+  const bulkDeleteSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    if (!window.confirm(`${ids.length} ta lidni butunlay o'chirmoqchimisiz? Bu amalni ortga qaytarib bo'lmaydi!`)) return;
+    let okCount = 0,
+      failCount = 0;
+    for (const id of ids) {
+      if (String(id).startsWith('L_') || String(id).startsWith('EXT_')) {
+        setLeads(prev => prev.filter(l => String(l.id) !== String(id)));
+        okCount++;
+        continue;
+      }
+      try {
+        const res = await fetch('/api/leads/' + id, {
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (res.status === 401) {
+          forceLogout();
+          return;
+        }
+        if (res.status === 403) {
+          alert("Faqat CEO lidlarni o'chira oladi");
+          return;
+        }
+        if (!res.ok) {
+          failCount++;
+          continue;
+        }
+        setLeads(prev => prev.filter(l => String(l.id) !== String(id)));
+        okCount++;
+      } catch (err) {
+        failCount++;
+      }
+    }
+    clearSelection();
+    setSelectMode(false);
+    alert(`✅ ${okCount} ta lid o'chirildi${failCount ? `, ❌ ${failCount} ta xato` : ''}`);
+  };
   const handleDragStart = (e, leadId) => {
     e.dataTransfer.setData('leadId', String(leadId));
   };
@@ -13583,7 +13640,18 @@ const App = () => {
       color: 'var(--text-muted)',
       marginLeft: '4px'
     }
-  }, filteredActiveLeads.length, " / ", activeLeads.length, " lid")), /*#__PURE__*/React.createElement("div", {
+  }, filteredActiveLeads.length, " / ", activeLeads.length, " lid"), role === 'CEO' && /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      fontSize: '11px',
+      padding: '5px 10px',
+      marginLeft: 'auto',
+      background: selectMode ? 'var(--primary-soft)' : undefined
+    },
+    onClick: () => {
+      if (selectMode) exitSelectMode();else setSelectMode(true);
+    }
+  }, selectMode ? '✕ Tanlashni bekor qilish' : '☑ Tanlash rejimi')), /*#__PURE__*/React.createElement("div", {
     style: {
       position: 'relative',
       flex: 1,
@@ -13670,16 +13738,33 @@ const App = () => {
       const hasTask = lead.deadline || lead.taskDescription;
       let customClass = '';
       if (sla === 'danger') customClass = 'status-danger';else if (sla === 'warning') customClass = 'status-warning';else if (!hasTask && !['NEW', 'LOST', 'WON'].includes(lead.status)) customClass = 'needs-attention';
+      const isSelected = selectedIds.has(String(lead.id));
       return /*#__PURE__*/React.createElement("div", {
         key: lead.id,
         className: `k-card ${customClass}`,
         style: {
-          borderLeftColor: customClass ? undefined : dotColor
+          borderLeftColor: customClass ? undefined : dotColor,
+          position: 'relative',
+          outline: isSelected ? '2px solid var(--primary)' : undefined,
+          background: isSelected ? 'var(--primary-soft)' : undefined
         },
-        draggable: role !== 'WATCHER',
-        onDragStart: role !== 'WATCHER' ? e => handleDragStart(e, lead.id) : undefined,
-        onClick: () => setSelectedLeadId(lead.id)
-      }, /*#__PURE__*/React.createElement("div", {
+        draggable: role !== 'WATCHER' && !selectMode,
+        onDragStart: role !== 'WATCHER' && !selectMode ? e => handleDragStart(e, lead.id) : undefined,
+        onClick: () => selectMode ? toggleSelect(lead.id) : setSelectedLeadId(lead.id)
+      }, selectMode && /*#__PURE__*/React.createElement("input", {
+        type: "checkbox",
+        checked: isSelected,
+        readOnly: true,
+        style: {
+          position: 'absolute',
+          top: '8px',
+          right: '8px',
+          width: '16px',
+          height: '16px',
+          cursor: 'pointer',
+          zIndex: 2
+        }
+      }), /*#__PURE__*/React.createElement("div", {
         style: {
           display: 'flex',
           justifyContent: 'space-between',
@@ -13811,7 +13896,46 @@ const App = () => {
         s: 10
       }), " Vazifa belgilanmagan!"));
     })));
-  })))), activeTab === 'billing' && role === 'CEO' && /*#__PURE__*/React.createElement(BillingCEO, null), activeTab === 'settings' && role === 'CEO' && /*#__PURE__*/React.createElement("div", {
+  }))), selectMode && selectedIds.size > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: 'absolute',
+      bottom: '16px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: 'var(--bg-surface)',
+      border: '1px solid var(--border-light)',
+      borderRadius: '10px',
+      padding: '10px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+      zIndex: 20
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '13px',
+      fontWeight: 600,
+      color: 'var(--text-main)'
+    }
+  }, "\u2611 ", selectedIds.size, " ta lid tanlandi"), /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    style: {
+      fontSize: '12px',
+      padding: '6px 12px'
+    },
+    onClick: () => {
+      const ids = filteredActiveLeads.map(l => String(l.id));
+      if (ids.every(id => selectedIds.has(id))) clearSelection();else setSelectedIds(new Set(ids));
+    }
+  }, filteredActiveLeads.every(l => selectedIds.has(String(l.id))) ? 'Barchasini bekor qilish' : 'Hammasini tanlash'), /*#__PURE__*/React.createElement("button", {
+    className: "btn-danger",
+    style: {
+      fontSize: '12px',
+      padding: '6px 12px'
+    },
+    onClick: bulkDeleteSelected
+  }, "\uD83D\uDDD1 O'chirish (", selectedIds.size, ")"))), activeTab === 'billing' && role === 'CEO' && /*#__PURE__*/React.createElement(BillingCEO, null), activeTab === 'settings' && role === 'CEO' && /*#__PURE__*/React.createElement("div", {
     style: {
       maxWidth: '780px',
       margin: '0 auto'

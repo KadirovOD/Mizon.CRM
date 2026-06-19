@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "avangard-otm",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8765", "/Users/kadirov_od/Documents/Avangard school"],
+      "port": 8765
+    },
+    {
+      "name": "kasbga-moyillik",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8767", "/Users/kadirov_od/Documents/Avangard school/kasbga moyillik"],
+      "port": 8767
+    },
+    {
+      "name": "yd-school",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8766", "/Users/kadirov_od/Documents/YD school"],
+      "port": 8766
+    },
+    {
+      "name": "mizon-crm",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["index.js"],
+      "port": 3000
+    }
+  ]
+}
