@@ -542,7 +542,9 @@ const PipelineEditor = ({
   if (!pipe) return null;
   const addCol = () => setLocalCols([...localCols, {
     id: 'STAGE_' + Date.now(),
-    title: 'Yangi bosqich'
+    title: 'Yangi bosqich',
+    is_won: false,
+    is_lost: false
   }]);
   const updateColTitle = (id, val) => setLocalCols(localCols.map(c => c.id === id ? {
     ...c,
@@ -551,6 +553,34 @@ const PipelineEditor = ({
   const removeCol = id => {
     if (localCols.length <= 1) return alert("Kamida 1 bosqich bo'lishi shart!");
     setLocalCols(localCols.filter(c => c.id !== id));
+  };
+  // Bosqichni Yutildi / Muvoffaqiyatsiz / Normal qilib belgilash
+  // Bir varonkada faqat bitta WON va bitta LOST bo'lishi mumkin
+  const setStageOutcome = (id, kind) => {
+    setLocalCols(localCols.map(c => {
+      if (c.id === id) {
+        if (kind === 'won') return {
+          ...c,
+          is_won: !c.is_won,
+          is_lost: false
+        };
+        if (kind === 'lost') return {
+          ...c,
+          is_lost: !c.is_lost,
+          is_won: false
+        };
+      }
+      // Boshqa bosqichlardan o'sha turdagi belgini olib tashlash
+      if (kind === 'won' && c.is_won) return {
+        ...c,
+        is_won: false
+      };
+      if (kind === 'lost' && c.is_lost) return {
+        ...c,
+        is_lost: false
+      };
+      return c;
+    }));
   };
   const savePipe = async () => {
     setSaving(true);
@@ -573,8 +603,8 @@ const PipelineEditor = ({
             } : {}),
             name: col.title,
             sequence: i + 1,
-            is_won: col.id === 'WON',
-            is_lost: col.id === 'LOST'
+            is_won: !!col.is_won || col.id === 'WON',
+            is_lost: !!col.is_lost || col.id === 'LOST'
           };
         });
         const r = await fetch('/api/stages/sync', {
@@ -717,6 +747,32 @@ const PipelineEditor = ({
     value: col.title,
     onChange: e => updateColTitle(col.id, e.target.value)
   }), /*#__PURE__*/React.createElement("button", {
+    title: "Yutilgan bosqich sifatida belgilash",
+    onClick: () => setStageOutcome(col.id, 'won'),
+    style: {
+      padding: '7px 10px',
+      fontSize: '12px',
+      fontWeight: 600,
+      borderRadius: '6px',
+      cursor: 'pointer',
+      border: '1px solid ' + (col.is_won ? '#22c55e' : 'var(--border-light)'),
+      background: col.is_won ? '#22c55e' : 'transparent',
+      color: col.is_won ? '#fff' : 'var(--text-secondary)'
+    }
+  }, "\uD83C\uDFC6 Yutildi"), /*#__PURE__*/React.createElement("button", {
+    title: "Muvoffaqiyatsiz bosqich sifatida belgilash",
+    onClick: () => setStageOutcome(col.id, 'lost'),
+    style: {
+      padding: '7px 10px',
+      fontSize: '12px',
+      fontWeight: 600,
+      borderRadius: '6px',
+      cursor: 'pointer',
+      border: '1px solid ' + (col.is_lost ? '#ef4444' : 'var(--border-light)'),
+      background: col.is_lost ? '#ef4444' : 'transparent',
+      color: col.is_lost ? '#fff' : 'var(--text-secondary)'
+    }
+  }, "\u274C Muvoffaqiyatsiz"), /*#__PURE__*/React.createElement("button", {
     className: "btn-danger",
     style: {
       padding: '7px 10px'
@@ -12045,12 +12101,18 @@ const App = () => {
     setSelectMode(false);
     alert(`✅ ${okCount} ta lid o'chirildi${failCount ? `, ❌ ${failCount} ta xato` : ''}`);
   };
+  const [draggingLeadId, setDraggingLeadId] = React.useState(null);
   const handleDragStart = (e, leadId) => {
     e.dataTransfer.setData('leadId', String(leadId));
+    setDraggingLeadId(String(leadId));
+  };
+  const handleDragEnd = () => {
+    setDraggingLeadId(null);
   };
   const handleDrop = (e, targetStatus) => {
     e.preventDefault();
     const leadId = e.dataTransfer.getData('leadId');
+    setDraggingLeadId(null);
     if (leadId) handleStatusChange(leadId, targetStatus);
   };
   const tabTitles = {
@@ -13712,7 +13774,7 @@ const App = () => {
       cursor: kanbanGrabbing ? 'grabbing' : 'grab',
       userSelect: kanbanGrabbing ? 'none' : undefined
     }
-  }, activeColumns.map(col => {
+  }, activeColumns.filter(c => !c.is_won && !c.is_lost && c.id !== 'WON' && c.id !== 'LOST').map(col => {
     const colLeads = filteredActiveLeads.filter(l => l.status === col.id);
     const dotColor = colColors[col.id] || '#888';
     return /*#__PURE__*/React.createElement("div", {
@@ -13750,6 +13812,7 @@ const App = () => {
         },
         draggable: role !== 'WATCHER' && !selectMode,
         onDragStart: role !== 'WATCHER' && !selectMode ? e => handleDragStart(e, lead.id) : undefined,
+        onDragEnd: role !== 'WATCHER' && !selectMode ? handleDragEnd : undefined,
         onClick: () => selectMode ? toggleSelect(lead.id) : setSelectedLeadId(lead.id)
       }, selectMode && /*#__PURE__*/React.createElement("input", {
         type: "checkbox",
@@ -13935,7 +13998,75 @@ const App = () => {
       padding: '6px 12px'
     },
     onClick: bulkDeleteSelected
-  }, "\uD83D\uDDD1 O'chirish (", selectedIds.size, ")"))), activeTab === 'billing' && role === 'CEO' && /*#__PURE__*/React.createElement(BillingCEO, null), activeTab === 'settings' && role === 'CEO' && /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDDD1 O'chirish (", selectedIds.size, ")")), draggingLeadId && role !== 'WATCHER' && (() => {
+    const wonCol = activeColumns.find(c => c.is_won) || activeColumns.find(c => c.id === 'WON');
+    const lostCol = activeColumns.find(c => c.is_lost) || activeColumns.find(c => c.id === 'LOST');
+    if (!wonCol && !lostCol) return null;
+    const zoneStyle = (color, bg) => ({
+      width: '150px',
+      height: '80px',
+      borderRadius: '12px',
+      border: `2px dashed ${color}`,
+      background: bg,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '13px',
+      fontWeight: 700,
+      color,
+      gap: '4px',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+      cursor: 'copy',
+      transition: 'transform 0.15s'
+    });
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: 'fixed',
+        right: '24px',
+        bottom: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+        zIndex: 9999,
+        pointerEvents: 'auto'
+      }
+    }, wonCol && /*#__PURE__*/React.createElement("div", {
+      onDragOver: e => {
+        e.preventDefault();
+        e.currentTarget.style.transform = 'scale(1.08)';
+      },
+      onDragLeave: e => {
+        e.currentTarget.style.transform = 'scale(1)';
+      },
+      onDrop: e => {
+        e.currentTarget.style.transform = 'scale(1)';
+        handleDrop(e, wonCol.id);
+      },
+      style: zoneStyle('#22c55e', 'rgba(34,197,94,0.12)')
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '26px'
+      }
+    }, "\uD83C\uDFC6"), /*#__PURE__*/React.createElement("span", null, "Yutildi")), lostCol && /*#__PURE__*/React.createElement("div", {
+      onDragOver: e => {
+        e.preventDefault();
+        e.currentTarget.style.transform = 'scale(1.08)';
+      },
+      onDragLeave: e => {
+        e.currentTarget.style.transform = 'scale(1)';
+      },
+      onDrop: e => {
+        e.currentTarget.style.transform = 'scale(1)';
+        handleDrop(e, lostCol.id);
+      },
+      style: zoneStyle('#ef4444', 'rgba(239,68,68,0.12)')
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '26px'
+      }
+    }, "\u274C"), /*#__PURE__*/React.createElement("span", null, "Muvoffaqiyatsiz")));
+  })()), activeTab === 'billing' && role === 'CEO' && /*#__PURE__*/React.createElement(BillingCEO, null), activeTab === 'settings' && role === 'CEO' && /*#__PURE__*/React.createElement("div", {
     style: {
       maxWidth: '780px',
       margin: '0 auto'
