@@ -139,8 +139,11 @@ const colColors = {
 const DashboardOverview = ({
   leads,
   role,
-  setSelectedLeadId
+  setSelectedLeadId,
+  importLeadsFromCsv,
+  exportLeadsToCsv
 }) => {
+  const dashCsvInputRef = React.useRef(null);
   const lostLeads = leads.filter(l => l.status === 'LOST');
   const wonLeads = leads.filter(l => l.status === 'WON');
   const tasksDanger = leads.filter(l => determineSLAType(l.deadline) === 'danger');
@@ -443,13 +446,30 @@ const DashboardOverview = ({
       paddingBottom: '16px',
       borderBottom: '1px solid var(--border-light)'
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    className: "btn-outline"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    ref: dashCsvInputRef,
+    accept: ".csv,text/csv",
+    style: {
+      display: 'none'
+    },
+    onChange: e => {
+      const f = e.target.files?.[0];
+      if (f && importLeadsFromCsv) importLeadsFromCsv(f);
+      e.target.value = '';
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    onClick: () => dashCsvInputRef.current?.click(),
+    title: "CSV (.csv) faylidan lidlarni yuklash"
   }, /*#__PURE__*/React.createElement(Ico, {
     n: "download",
     s: 13
   }), " Excel Import"), /*#__PURE__*/React.createElement("button", {
-    className: "btn-outline"
+    className: "btn-outline",
+    onClick: () => {
+      if (exportLeadsToCsv) exportLeadsToCsv(viewModal.items);
+    }
   }, /*#__PURE__*/React.createElement(Ico, {
     n: "upload",
     s: 13
@@ -12330,9 +12350,9 @@ const App = () => {
     reloadLeadsFromApi();
   };
 
-  // CSV Export — filterlangan lidlarni yuklash
-  const exportLeadsToCsv = () => {
-    const rows = filteredActiveLeads;
+  // CSV Export — filterlangan lidlarni yuklash (argument berilsa undan, aks holda filteredActiveLeads)
+  const exportLeadsToCsv = customRows => {
+    const rows = Array.isArray(customRows) && customRows.length ? customRows : filteredActiveLeads;
     if (!rows.length) {
       alert("Eksport qilish uchun lid yo'q.");
       return;
@@ -13821,7 +13841,9 @@ const App = () => {
   }, "Bekor")))), activeTab === 'dashboard' && /*#__PURE__*/React.createElement(DashboardOverview, {
     leads: leads,
     role: role,
-    setSelectedLeadId: setSelectedLeadId
+    setSelectedLeadId: setSelectedLeadId,
+    importLeadsFromCsv: importLeadsFromCsv,
+    exportLeadsToCsv: exportLeadsToCsv
   }), activeTab === 'callcenter' && /*#__PURE__*/React.createElement(CallCenterModule, {
     leads: leads,
     setLeads: setLeads,

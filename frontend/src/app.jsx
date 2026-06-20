@@ -54,7 +54,8 @@
     const colColors = { NEW:'#6366f1', CONTACTED:'#3b82f6', QUALIFIED:'#8b5cf6', PROPOSAL:'#f59e0b', NEGOTIATION:'#f97316', WON:'#01a750', LOST:'#ef4444', MEETING:'#06b6d4', CONTRACT:'#8b5cf6' };
 
     // ===== DASHBOARD =====
-    const DashboardOverview = ({ leads, role, setSelectedLeadId }) => {
+    const DashboardOverview = ({ leads, role, setSelectedLeadId, importLeadsFromCsv, exportLeadsToCsv }) => {
+      const dashCsvInputRef = React.useRef(null);
       const lostLeads = leads.filter(l => l.status === 'LOST');
       const wonLeads = leads.filter(l => l.status === 'WON');
       const tasksDanger = leads.filter(l => determineSLAType(l.deadline) === 'danger');
@@ -182,8 +183,14 @@
                 </div>
                 {viewModal.withImportExport && (
                   <div style={{display:'flex', gap:'10px', marginBottom:'18px', paddingBottom:'16px', borderBottom:'1px solid var(--border-light)'}}>
-                    <button className="btn-outline"><Ico n="download" s={13}/> Excel Import</button>
-                    <button className="btn-outline"><Ico n="upload" s={13}/> Export</button>
+                    <input type="file" ref={dashCsvInputRef} accept=".csv,text/csv" style={{display:'none'}}
+                      onChange={e => { const f = e.target.files?.[0]; if (f && importLeadsFromCsv) importLeadsFromCsv(f); e.target.value=''; }} />
+                    <button className="btn-outline" onClick={()=>dashCsvInputRef.current?.click()} title="CSV (.csv) faylidan lidlarni yuklash">
+                      <Ico n="download" s={13}/> Excel Import
+                    </button>
+                    <button className="btn-outline" onClick={()=>{ if (exportLeadsToCsv) exportLeadsToCsv(viewModal.items); }}>
+                      <Ico n="upload" s={13}/> Export
+                    </button>
                   </div>
                 )}
                 <table>
@@ -5478,9 +5485,9 @@
         reloadLeadsFromApi();
       };
 
-      // CSV Export — filterlangan lidlarni yuklash
-      const exportLeadsToCsv = () => {
-        const rows = filteredActiveLeads;
+      // CSV Export — filterlangan lidlarni yuklash (argument berilsa undan, aks holda filteredActiveLeads)
+      const exportLeadsToCsv = (customRows) => {
+        const rows = Array.isArray(customRows) && customRows.length ? customRows : filteredActiveLeads;
         if (!rows.length) { alert("Eksport qilish uchun lid yo'q."); return; }
         const stageTitle = (id) => (activeColumns.find(c => c.id === id)?.title || id);
         const esc = (v) => {
@@ -6165,7 +6172,7 @@
               )}
 
               {/* TAB CONTENT */}
-              {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} />}
+              {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} importLeadsFromCsv={importLeadsFromCsv} exportLeadsToCsv={exportLeadsToCsv} />}
 
               {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} syncLeadToAPI={syncLeadToAPI} addNotif={addNotif} voipConfigured={voipConfigured} />}
 
