@@ -394,7 +394,7 @@ webhookController._setAutomation(automationCtrl.runTrigger);
 
 // ── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status:'ok', dbConnected:!!pool, version:'V37', timestamp:new Date().toISOString() });
+  res.json({ status:'ok', dbConnected:!!pool, version:'V38', timestamp:new Date().toISOString() });
 });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -447,16 +447,41 @@ app.post('/api/webhook/sheets', async (req, res) => {
   try {
     const body        = req.body || {};
     const slug        = (body.company_slug || req.query.company || req.query.slug || '').trim();
-    const name        = (body.name  || '').trim();
-    const phone       = (body.phone || '').trim().replace(/^p\s*:/i, '').trim();
-    const email       = (body.email || '').trim();
-    const region      = (body.region || body.city || '').trim();
-    const note        = (body.note  || body.comment || '').trim();
+    let   name        = (body.name  || '').trim();
+    let   phone       = (body.phone || '').trim().replace(/^p\s*:/i, '').trim();
+    let   email       = (body.email || '').trim();
+    let   region      = (body.region || body.city || '').trim();
+    let   note        = (body.note  || body.comment || '').trim();
     const rowIndex    = body.row_index || null; // Takrorlanishni aniqlash uchun
+
+    // ── Defensive: eski/noto'g'ri Apps Script yuborgan "axlat" qiymatlarni tozalash
+    //   Misol: name=`l:2615049168914961` (Meta lead_id), phone=`2026-06-19T03:26:16-05:00`
+    const looksLikeMetaId = (s) => /^[a-z]+\s*:\s*\d{6,}$/i.test(s);
+    const looksLikeIsoTs  = (s) => /^\d{4}-\d{2}-\d{2}[T ]/.test(s);
+    const phoneDigits     = (s) => (s||'').replace(/\D/g,'');
+
+    const badJunk = [];
+    if (name && (looksLikeMetaId(name) || looksLikeIsoTs(name))) {
+      badJunk.push(`ism="${name}"`);
+      name = '';
+    }
+    if (phone && (looksLikeIsoTs(phone) || phoneDigits(phone).length < 7 || phoneDigits(phone).length > 15)) {
+      badJunk.push(`tel="${phone}"`);
+      phone = '';
+    }
+    // Agar region ham timestamp/id bo'lsa — tozalaymiz
+    if (region && (looksLikeMetaId(region) || looksLikeIsoTs(region))) { badJunk.push(`region="${region}"`); region=''; }
+    if (badJunk.length) {
+      console.warn(`⚠️ Sheets webhook tozalash (slug=${slug} row=${rowIndex}):`, badJunk.join(', '));
+      note = (note ? note + ' | ' : '') + 'Apps Script eski versiya - ustunlar aralash keldi: ' + badJunk.join(', ');
+    }
 
     if (!req.db)  return res.status(503).json({ error: 'DB disabled' });
     if (!slug)    return res.status(400).json({ error: 'company_slug majburiy' });
-    if (!name && !phone) return res.status(400).json({ error: 'name yoki phone majburiy' });
+    if (!name && !phone) {
+      console.warn(`⚠️ Sheets webhook: name va phone ikkalasi ham yo'q (slug=${slug} row=${rowIndex})`);
+      return res.status(400).json({ error: 'name yoki phone majburiy', hint: 'Apps Script ustunlarini tekshiring' });
+    }
 
     // Kompaniyani topish
     const cR = await req.db.query(
