@@ -8151,7 +8151,8 @@ const BillingAdmin = () => {
   const [editPlanId, setEditPlanId] = useState(null);
   const [assignForm, setAssignForm] = useState({
     company_id: '',
-    plan_id: ''
+    plan_id: '',
+    duration_months: ''
   });
   const flash = m => {
     setMsg(m);
@@ -8250,24 +8251,27 @@ const BillingAdmin = () => {
   const assignPlan = async e => {
     e.preventDefault();
     if (!assignForm.company_id || !assignForm.plan_id) return flash('❌ Kompaniya va tarifni tanlang');
+    const body = {
+      company_id: Number(assignForm.company_id),
+      plan_id: Number(assignForm.plan_id),
+      duration_months: assignForm.duration_months ? Number(assignForm.duration_months) : null
+    };
     const r = await fetch('/api/billing/subscriptions', {
       method: 'POST',
       headers: H,
-      body: JSON.stringify({
-        company_id: Number(assignForm.company_id),
-        plan_id: Number(assignForm.plan_id)
-      })
+      body: JSON.stringify(body)
     });
     const d = await r.json();
     if (!r.ok) return flash('❌ ' + (d.error || 'Xato'));
-    flash('✅ Tarif biriktirildi va hisob-faktura yaratildi');
+    flash(assignForm.duration_months ? '✅ Tarif biriktirildi va darhol faollashtirildi' : '✅ Tarif biriktirildi va pending hisob-faktura yaratildi');
     setAssignForm({
       company_id: '',
-      plan_id: ''
+      plan_id: '',
+      duration_months: ''
     });
     loadSubs();
     loadInvoices();
-    setTab('invoices');
+    setTab(assignForm.duration_months ? 'subs' : 'invoices');
   };
   const newInvoice = async companyId => {
     const r = await fetch('/api/billing/invoices', {
@@ -8548,7 +8552,7 @@ const BillingAdmin = () => {
     style: {
       padding: '16px 20px',
       display: 'grid',
-      gridTemplateColumns: '1fr 1fr auto',
+      gridTemplateColumns: '1fr 1fr 1fr auto',
       gap: '12px',
       alignItems: 'end',
       marginBottom: '18px'
@@ -8589,7 +8593,31 @@ const BillingAdmin = () => {
   }, "\u2014 Tarifni tanlang \u2014"), plans.filter(p => p.is_active).map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, p.name, " \u2014 ", billMoney(p.price), " UZS/", billPeriod(p.period))))), /*#__PURE__*/React.createElement("button", {
+  }, p.name, " \u2014 ", billMoney(p.price), " UZS/", billPeriod(p.period))))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Muddat"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    value: assignForm.duration_months,
+    onChange: e => setAssignForm({
+      ...assignForm,
+      duration_months: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Standart (to'lov kutiladi)"), /*#__PURE__*/React.createElement("option", {
+    value: "1"
+  }, "1 oy (faollashtirish)"), /*#__PURE__*/React.createElement("option", {
+    value: "3"
+  }, "3 oy"), /*#__PURE__*/React.createElement("option", {
+    value: "6"
+  }, "6 oy"), /*#__PURE__*/React.createElement("option", {
+    value: "12"
+  }, "1 yil"), /*#__PURE__*/React.createElement("option", {
+    value: "24"
+  }, "2 yil"))), /*#__PURE__*/React.createElement("button", {
     className: "btn-primary",
     type: "submit",
     style: {
@@ -8913,6 +8941,7 @@ const SuperAdminPanel = ({
     name: '',
     slug: '',
     plan_id: '',
+    duration_months: '',
     call_limit: 5,
     admin_username: '',
     admin_password: '',
@@ -8952,6 +8981,7 @@ const SuperAdminPanel = ({
     name: '',
     slug: '',
     plan_id: '',
+    duration_months: '',
     call_limit: 5,
     email: ''
   });
@@ -9115,7 +9145,8 @@ const SuperAdminPanel = ({
     setSaving(true);
     const payload = {
       ...createForm,
-      plan_id: createForm.plan_id ? Number(createForm.plan_id) : null
+      plan_id: createForm.plan_id ? Number(createForm.plan_id) : null,
+      duration_months: createForm.duration_months ? Number(createForm.duration_months) : null
     };
     const r = await fetch('/api/superadmin/companies', {
       method: 'POST',
@@ -9139,6 +9170,7 @@ const SuperAdminPanel = ({
       name: '',
       slug: '',
       plan_id: '',
+      duration_months: '',
       call_limit: 5,
       admin_username: '',
       admin_password: '',
@@ -9283,6 +9315,7 @@ const SuperAdminPanel = ({
       name: comp.name || '',
       slug: comp.slug || '',
       plan_id: comp.plan_id ? String(comp.plan_id) : '',
+      duration_months: '',
       call_limit: comp.call_limit || 5,
       email: comp.email || ''
     });
@@ -9293,7 +9326,8 @@ const SuperAdminPanel = ({
     setEditCompSaving(true);
     const payload = {
       ...editCompForm,
-      plan_id: editCompForm.plan_id ? Number(editCompForm.plan_id) : null
+      plan_id: editCompForm.plan_id ? Number(editCompForm.plan_id) : null,
+      duration_months: editCompForm.duration_months ? Number(editCompForm.duration_months) : null
     };
     const r = await fetch(`/api/superadmin/companies/${editCompModal.id}`, {
       method: 'PUT',
@@ -9600,6 +9634,34 @@ const SuperAdminPanel = ({
       marginTop: '4px'
     }
   }, "\u26A0\uFE0F Hali tarif yo'q. Avval Billing tabidan tarif yarating.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Muddat ", createForm.plan_id ? '*' : '(tarif tanlangach)'), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    value: createForm.duration_months,
+    onChange: e => setCreateForm({
+      ...createForm,
+      duration_months: e.target.value
+    }),
+    disabled: !createForm.plan_id
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\u2014 Standart davr (to'lov kutiladi) \u2014"), /*#__PURE__*/React.createElement("option", {
+    value: "1"
+  }, "1 oy (darhol faollashtirish)"), /*#__PURE__*/React.createElement("option", {
+    value: "3"
+  }, "3 oy (darhol faollashtirish)"), /*#__PURE__*/React.createElement("option", {
+    value: "6"
+  }, "6 oy (darhol faollashtirish)"), /*#__PURE__*/React.createElement("option", {
+    value: "12"
+  }, "1 yil (darhol faollashtirish)"), /*#__PURE__*/React.createElement("option", {
+    value: "24"
+  }, "2 yil (darhol faollashtirish)")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      marginTop: '3px'
+    }
+  }, createForm.duration_months ? `✅ Obuna darhol faol bo'ladi, ${createForm.duration_months} oydan keyin tugaydi` : 'Bo\'sh qoldirilsa — pending hisob-faktura yaratiladi, to\'lovdan keyin faollashadi')), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "label-sm"
   }, "Qo'ng'iroq limiti"), /*#__PURE__*/React.createElement("input", {
     className: "input-base",
@@ -10564,7 +10626,42 @@ const SuperAdminPanel = ({
       color: '#f59e0b',
       marginTop: '3px'
     }
-  }, "\u26A0\uFE0F Hali tarif yo'q. Billing tabidan yarating.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+  }, "\u26A0\uFE0F Hali tarif yo'q. Billing tabidan yarating.")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      gridColumn: '1/-1'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Yangi muddat berish (ixtiyoriy)"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0
+    },
+    value: editCompForm.duration_months,
+    onChange: e => setEditCompForm({
+      ...editCompForm,
+      duration_months: e.target.value
+    }),
+    disabled: !editCompForm.plan_id
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\u2014 O'zgarishsiz \u2014"), /*#__PURE__*/React.createElement("option", {
+    value: "1"
+  }, "+1 oy (uzaytirib darhol faollashtirish)"), /*#__PURE__*/React.createElement("option", {
+    value: "3"
+  }, "+3 oy"), /*#__PURE__*/React.createElement("option", {
+    value: "6"
+  }, "+6 oy"), /*#__PURE__*/React.createElement("option", {
+    value: "12"
+  }, "+1 yil"), /*#__PURE__*/React.createElement("option", {
+    value: "24"
+  }, "+2 yil")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '10px',
+      color: 'var(--text-muted)',
+      marginTop: '3px'
+    }
+  }, editCompForm.duration_months ? `✅ Obuna ${editCompForm.duration_months} oyga uzaytiriladi/faollashtiriladi` : `Tarif almashtirilsa, pending invoice yaratiladi. Muddat tanlansa — darhol faollashadi`)), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "label-sm"
   }, "Qo'ng'iroq limiti"), /*#__PURE__*/React.createElement("input", {
     className: "input-base",

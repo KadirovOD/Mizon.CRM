@@ -49,7 +49,7 @@ exports.listCompanies = async (req, res) => {
 // ── POST /api/superadmin/companies ────────────────────────────────────────────
 exports.createCompany = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { name, slug, plan, plan_id, call_limit, admin_username, admin_password, admin_email } = req.body || {};
+  const { name, slug, plan, plan_id, duration_months, duration_days, call_limit, admin_username, admin_password, admin_email } = req.body || {};
   if (!name || !slug || !admin_username || !admin_password)
     return res.status(400).json({ error: 'name, slug, admin_username, admin_password majburiy' });
 
@@ -116,7 +116,10 @@ exports.createCompany = async (req, res) => {
       let attached = null;
       if (plan_id) {
         try {
-          attached = await billingController._attachPlanToCompany(req.db, company.id, Number(plan_id));
+          attached = await billingController._attachPlanToCompany(
+            req.db, company.id, Number(plan_id),
+            { duration_months, duration_days }
+          );
           company.plan = attached.plan.name;
           company.plan_id = attached.plan.id;
         } catch (e) {
@@ -144,7 +147,7 @@ exports.createCompany = async (req, res) => {
 // ── PUT /api/superadmin/companies/:id ─────────────────────────────────────────
 exports.updateCompany = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { is_active, plan, plan_id, call_limit, name, slug, email } = req.body || {};
+  const { is_active, plan, plan_id, duration_months, duration_days, call_limit, name, slug, email } = req.body || {};
   const cleanSlug = slug ? slug.toLowerCase().replace(/[^a-z0-9-]/g, '-') : undefined;
   try {
     if (ec.isAvailable()) {
@@ -189,7 +192,10 @@ exports.updateCompany = async (req, res) => {
       let attached = null;
       if (plan_id) {
         try {
-          attached = await billingController._attachPlanToCompany(req.db, Number(req.params.id), Number(plan_id));
+          attached = await billingController._attachPlanToCompany(
+            req.db, Number(req.params.id), Number(plan_id),
+            { duration_months, duration_days }
+          );
         } catch (e) {
           return res.status(400).json({ error: 'Tarif biriktirishda xato: ' + e.message });
         }

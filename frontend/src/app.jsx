@@ -3398,7 +3398,7 @@
       const [msg,       setMsg]       = useState('');
       const [planForm,  setPlanForm]  = useState({name:'', price:'', period:'month', call_limit:'', user_limit:'', lead_limit:''});
       const [editPlanId,setEditPlanId]= useState(null);
-      const [assignForm,setAssignForm]= useState({company_id:'', plan_id:''});
+      const [assignForm,setAssignForm]= useState({company_id:'', plan_id:'', duration_months:''});
 
       const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 3500); };
       const loadPlans     = () => fetch('/api/billing/plans',         {headers:H}).then(r=>r.json()).then(d=>setPlans(Array.isArray(d)?d:[]));
@@ -3439,11 +3439,16 @@
       const assignPlan = async (e) => {
         e.preventDefault();
         if (!assignForm.company_id || !assignForm.plan_id) return flash('❌ Kompaniya va tarifni tanlang');
-        const r = await fetch('/api/billing/subscriptions', {method:'POST', headers:H, body:JSON.stringify({company_id:Number(assignForm.company_id), plan_id:Number(assignForm.plan_id)})});
+        const body = {
+          company_id: Number(assignForm.company_id),
+          plan_id: Number(assignForm.plan_id),
+          duration_months: assignForm.duration_months ? Number(assignForm.duration_months) : null,
+        };
+        const r = await fetch('/api/billing/subscriptions', {method:'POST', headers:H, body:JSON.stringify(body)});
         const d = await r.json();
         if (!r.ok) return flash('❌ '+(d.error||'Xato'));
-        flash('✅ Tarif biriktirildi va hisob-faktura yaratildi');
-        setAssignForm({company_id:'', plan_id:''}); loadSubs(); loadInvoices(); setTab('invoices');
+        flash(assignForm.duration_months ? '✅ Tarif biriktirildi va darhol faollashtirildi' : '✅ Tarif biriktirildi va pending hisob-faktura yaratildi');
+        setAssignForm({company_id:'', plan_id:'', duration_months:''}); loadSubs(); loadInvoices(); setTab(assignForm.duration_months ? 'subs' : 'invoices');
       };
       const newInvoice = async (companyId) => {
         const r = await fetch('/api/billing/invoices', {method:'POST', headers:H, body:JSON.stringify({company_id:companyId})});
@@ -3519,7 +3524,7 @@
           {/* ── OBUNALAR ── */}
           {tab === 'subs' && (
             <div>
-              <form onSubmit={assignPlan} className="card" style={{padding:'16px 20px', display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:'12px', alignItems:'end', marginBottom:'18px'}}>
+              <form onSubmit={assignPlan} className="card" style={{padding:'16px 20px', display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:'12px', alignItems:'end', marginBottom:'18px'}}>
                 <div><span className="label-sm">Kompaniya</span>
                   <select className="input-base" style={{marginBottom:0}} value={assignForm.company_id} onChange={e=>setAssignForm({...assignForm,company_id:e.target.value})} required>
                     <option value="">— Kompaniyani tanlang —</option>
@@ -3530,6 +3535,16 @@
                   <select className="input-base" style={{marginBottom:0}} value={assignForm.plan_id} onChange={e=>setAssignForm({...assignForm,plan_id:e.target.value})} required>
                     <option value="">— Tarifni tanlang —</option>
                     {plans.filter(p=>p.is_active).map(p => <option key={p.id} value={p.id}>{p.name} — {billMoney(p.price)} UZS/{billPeriod(p.period)}</option>)}
+                  </select>
+                </div>
+                <div><span className="label-sm">Muddat</span>
+                  <select className="input-base" style={{marginBottom:0}} value={assignForm.duration_months} onChange={e=>setAssignForm({...assignForm,duration_months:e.target.value})}>
+                    <option value="">Standart (to'lov kutiladi)</option>
+                    <option value="1">1 oy (faollashtirish)</option>
+                    <option value="3">3 oy</option>
+                    <option value="6">6 oy</option>
+                    <option value="12">1 yil</option>
+                    <option value="24">2 yil</option>
                   </select>
                 </div>
                 <button className="btn-primary" type="submit" style={{padding:'10px 18px'}}>Biriktirish</button>
@@ -3657,7 +3672,7 @@
       const [selCompany,   setSelCompany]   = useState(null);
       const [compUsers,    setCompUsers]    = useState([]);
       const [showAddUser,  setShowAddUser]  = useState(false);
-      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan_id:'', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
+      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan_id:'', duration_months:'', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
       const [plans,        setPlans]        = useState([]);
       const [userForm,     setUserForm]     = useState({username:'', password:'', role:'MANAGER', full_name:'', email:''});
       const [msg,          setMsg]          = useState('');
@@ -3672,7 +3687,7 @@
       const [passSaving,    setPassSaving]    = useState(false);
       // Task 5: Company edit modal
       const [editCompModal, setEditCompModal] = useState(null); // null | companyObj
-      const [editCompForm,  setEditCompForm]  = useState({name:'', slug:'', plan_id:'', call_limit:5, email:''});
+      const [editCompForm,  setEditCompForm]  = useState({name:'', slug:'', plan_id:'', duration_months:'', call_limit:5, email:''});
       const [editCompSaving, setEditCompSaving] = useState(false);
 
       const token = localStorage.getItem('mizon_token');
@@ -3777,6 +3792,7 @@
         const payload = {
           ...createForm,
           plan_id: createForm.plan_id ? Number(createForm.plan_id) : null,
+          duration_months: createForm.duration_months ? Number(createForm.duration_months) : null,
         };
         const r = await fetch('/api/superadmin/companies', {method:'POST', headers:H, body:JSON.stringify(payload)});
         const d = await r.json(); setSaving(false);
@@ -3787,7 +3803,7 @@
           admin_email: createForm.admin_email,
         });
         setView('list'); loadCompanies();
-        setCreateForm({name:'', slug:'', plan_id:'', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
+        setCreateForm({name:'', slug:'', plan_id:'', duration_months:'', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
       };
 
       const toggleActive = async (comp) => {
@@ -3880,6 +3896,7 @@
           name: comp.name || '',
           slug: comp.slug || '',
           plan_id: comp.plan_id ? String(comp.plan_id) : '',
+          duration_months: '',
           call_limit: comp.call_limit || 5,
           email: comp.email || '',
         });
@@ -3890,6 +3907,7 @@
         const payload = {
           ...editCompForm,
           plan_id: editCompForm.plan_id ? Number(editCompForm.plan_id) : null,
+          duration_months: editCompForm.duration_months ? Number(editCompForm.duration_months) : null,
         };
         const r = await fetch(`/api/superadmin/companies/${editCompModal.id}`, {
           method:'PUT', headers:{...H, 'Content-Type':'application/json'},
@@ -3994,6 +4012,22 @@
                       ))}
                     </select>
                     {plans.length === 0 && <div style={{fontSize:'11px', color:'#f59e0b', marginTop:'4px'}}>⚠️ Hali tarif yo'q. Avval Billing tabidan tarif yarating.</div>}
+                  </div>
+                  <div>
+                    <span className="label-sm">Muddat {createForm.plan_id ? '*' : '(tarif tanlangach)'}</span>
+                    <select className="input-base" value={createForm.duration_months} onChange={e=>setCreateForm({...createForm,duration_months:e.target.value})} disabled={!createForm.plan_id}>
+                      <option value="">— Standart davr (to'lov kutiladi) —</option>
+                      <option value="1">1 oy (darhol faollashtirish)</option>
+                      <option value="3">3 oy (darhol faollashtirish)</option>
+                      <option value="6">6 oy (darhol faollashtirish)</option>
+                      <option value="12">1 yil (darhol faollashtirish)</option>
+                      <option value="24">2 yil (darhol faollashtirish)</option>
+                    </select>
+                    <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'3px'}}>
+                      {createForm.duration_months
+                        ? `✅ Obuna darhol faol bo'ladi, ${createForm.duration_months} oydan keyin tugaydi`
+                        : 'Bo\'sh qoldirilsa — pending hisob-faktura yaratiladi, to\'lovdan keyin faollashadi'}
+                    </div>
                   </div>
                   <div>
                     <span className="label-sm">Qo'ng'iroq limiti</span>
@@ -4277,6 +4311,22 @@
                       ))}
                     </select>
                     {plans.length === 0 && <div style={{fontSize:'10px', color:'#f59e0b', marginTop:'3px'}}>⚠️ Hali tarif yo'q. Billing tabidan yarating.</div>}
+                  </div>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <span className="label-sm">Yangi muddat berish (ixtiyoriy)</span>
+                    <select className="input-base" style={{marginBottom:0}} value={editCompForm.duration_months} onChange={e=>setEditCompForm({...editCompForm,duration_months:e.target.value})} disabled={!editCompForm.plan_id}>
+                      <option value="">— O'zgarishsiz —</option>
+                      <option value="1">+1 oy (uzaytirib darhol faollashtirish)</option>
+                      <option value="3">+3 oy</option>
+                      <option value="6">+6 oy</option>
+                      <option value="12">+1 yil</option>
+                      <option value="24">+2 yil</option>
+                    </select>
+                    <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'3px'}}>
+                      {editCompForm.duration_months
+                        ? `✅ Obuna ${editCompForm.duration_months} oyga uzaytiriladi/faollashtiriladi`
+                        : `Tarif almashtirilsa, pending invoice yaratiladi. Muddat tanlansa — darhol faollashadi`}
+                    </div>
                   </div>
                   <div>
                     <span className="label-sm">Qo'ng'iroq limiti</span>

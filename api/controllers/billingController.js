@@ -121,16 +121,33 @@ exports.listSubscriptions = async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
-// Internal helper — kompaniyaga tarif biriktirish (upsert) + pending hisob-faktura yaratish.
+// Sana qo'shish (oy yoki kun bilan) — duration_months/duration_days lar uchun
+function addDuration(start, months, days) {
+  const d = new Date(start);
+  if (months) d.setMonth(d.getMonth() + Number(months));
+  if (days)   d.setDate(d.getDate() + Number(days));
+  return d;
+}
+
+// Internal helper — kompaniyaga tarif biriktirish (upsert) + hisob-faktura yaratish.
 // HTTP qatlami emas, boshqa kontrollerlardan ham chaqirsa bo'ladi (masalan, superAdminController).
+// options:
+//   - duration_months / duration_days : muddatni qo'lda belgilash (default — tarifning standart davri)
+//   - activate : true bo'lsa obuna 'active' holatga o'tadi, invoice 'paid' deb belgilanadi
+//                (super admin tomonidan ruxsat berilgan — to'lov kutilmaydi)
 // Qaytaradi: { subscription, invoice, plan } yoki xato bo'lsa Error tashlaydi.
-exports._attachPlanToCompany = async (db, company_id, plan_id) => {
+exports._attachPlanToCompany = async (db, company_id, plan_id, options = {}) => {
   if (!db) throw new Error('DB ulangan emas');
   if (!company_id || !plan_id) throw new Error('company_id va plan_id majburiy');
 
   const planR = await db.query('SELECT * FROM billing_plans WHERE id=$1', [plan_id]);
   if (!planR.rows.length) throw new Error('Tarif topilmadi');
   const plan = planR.rows[0];
+
+  const months = options.duration_months != null && options.duration_months !== '' ? Number(options.duration_months) : null;
+  const days   = options.duration_days   != null && options.duration_days   !== '' ? Number(options.duration_days)   : null;
+  const hasCustomDuration = (months && months > 0) || (days && days > 0);
+  const activate = !!options.activate || hasCustomDuration; // qo'lda muddat berilsa — avtomatik faollashtirish
 
   // Har kompaniyaga bitta obuna (company_id UNIQUE) — upsert
   const existing = await db.query('SELECT * FROM billing_subscriptions WHERE company_id=$1', [company_id]);
@@ -150,14 +167,31 @@ exports._attachPlanToCompany = async (db, company_id, plan_id) => {
     sub = r.rows[0];
   }
 
-  // Birinchi davr uchun pending hisob-faktura
+  // Davr boshi: agar obuna hali amal qilsa — tugash sanasidan davom etadi (uzaytirish), aks holda hozirdan
   const start = nextPeriodStart(sub);
-  const end = periodEnd(start, plan.period);
+  const end = hasCustomDuration
+    ? addDuration(start, months, days)
+    : periodEnd(start, plan.period);
+
+  // Hisob-faktura yaratish
+  const invStatus = activate ? 'paid' : 'pending';
+  const paidAt    = activate ? 'NOW()' : 'NULL';
   const inv = await db.query(
-    `INSERT INTO billing_invoices (company_id, subscription_id, amount, currency, status, period_start, period_end)
-     VALUES ($1,$2,$3,'UZS','pending',$4,$5) RETURNING *`,
-    [company_id, sub.id, plan.price, start, end]
+    `INSERT INTO billing_invoices
+       (company_id, subscription_id, amount, currency, status, period_start, period_end, paid_at, payment_method)
+     VALUES ($1,$2,$3,'UZS',$4,$5,$6, ${paidAt}, $7) RETURNING *`,
+    [company_id, sub.id, plan.price, invStatus, start, end, activate ? 'admin_grant' : null]
   );
+
+  // Agar activate=true bo'lsa — obunani 'active' holatga o'tkazish + kompaniyani faollashtirish
+  if (activate) {
+    const r = await db.query(
+      `UPDATE billing_subscriptions SET status='active', expires_at=$1 WHERE id=$2 RETURNING *`,
+      [end, sub.id]
+    );
+    sub = r.rows[0];
+    await db.query('UPDATE companies SET is_active=true WHERE id=$1', [company_id]);
+  }
 
   // Companies.plan ni tarif nomiga sinxronlash (badge va legacy display uchun)
   await db.query('UPDATE companies SET plan=$1 WHERE id=$2', [plan.name, company_id]);
@@ -165,14 +199,15 @@ exports._attachPlanToCompany = async (db, company_id, plan_id) => {
   return { subscription: sub, invoice: inv.rows[0], plan };
 };
 
-// POST /api/billing/subscriptions — kompaniyaga tarif biriktirish (+ pending hisob-faktura)
+// POST /api/billing/subscriptions — kompaniyaga tarif biriktirish (+ hisob-faktura)
+// Body: { company_id, plan_id, duration_months?, duration_days?, activate? }
 exports.assignPlan = async (req, res) => {
   if (!isSA(req, res)) return;
   if (!req.db) return res.status(503).json({ error: 'DB ulangan emas' });
-  const { company_id, plan_id } = req.body || {};
+  const { company_id, plan_id, duration_months, duration_days, activate } = req.body || {};
   if (!company_id || !plan_id) return res.status(400).json({ error: 'company_id va plan_id majburiy' });
   try {
-    const out = await exports._attachPlanToCompany(req.db, company_id, plan_id);
+    const out = await exports._attachPlanToCompany(req.db, company_id, plan_id, { duration_months, duration_days, activate });
     res.status(201).json({ success: true, subscription: out.subscription, invoice: out.invoice });
   } catch (e) {
     const code = /majburiy|topilmadi/i.test(e.message) ? 400 : 500;
