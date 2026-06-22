@@ -169,6 +169,60 @@ exports.updateLeadFull = async (req, res) => {
   }
 };
 
+// POST /api/leads/:id/claim — lead birinchi marta ochilganda mas'ulni avtomatik biriktirish.
+// Qoidalar:
+//   - claimed_at NULL bo'lsa (lead hech kim tomonidan hali ochilmagan) — joriy foydalanuvchini owner qiladi
+//   - claimed_at to'ldirilgan bo'lsa — qaytarib o'zgartirilmaydi (idempotent), faqat lead qaytariladi
+//   - Tarix uchun chatlogs ga sys yozuv qo'shiladi
+exports.claimLead = async (req, res) => {
+  if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  const cid  = req.user?.companyId;
+  const uname = req.user?.username;
+  if (!uname) return res.status(401).json({ error: 'Auth required' });
+  const { id } = req.params;
+  try {
+    const r = await req.db.query(
+      'SELECT id, owner, claimed_at, claimed_by, chatlogs FROM crm_lead WHERE id=$1 AND company_id=$2',
+      [id, cid]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    const lead = r.rows[0];
+
+    // Allaqachon claim qilingan — hech narsa o'zgartirmaymiz
+    if (lead.claimed_at) {
+      const full = await req.db.query('SELECT * FROM crm_lead WHERE id=$1', [id]);
+      return res.json({ success: true, claimed: false, lead: full.rows[0] });
+    }
+
+    // chatlogs ga sys yozuv qo'shamiz
+    const logs = typeof lead.chatlogs === 'string' ? JSON.parse(lead.chatlogs) : (Array.isArray(lead.chatlogs) ? lead.chatlogs : []);
+    logs.push({
+      type: 'sys',
+      date: new Date().toISOString(),
+      text: `Lead ${uname} tomonidan qabul qilindi (avtomatik biriktirish)`,
+    });
+
+    const upd = await req.db.query(
+      `UPDATE crm_lead
+         SET owner=$1, claimed_at=NOW(), claimed_by=$1, chatlogs=$2
+       WHERE id=$3 AND company_id=$4 AND claimed_at IS NULL
+       RETURNING *`,
+      [uname, JSON.stringify(logs), id, cid]
+    );
+
+    // Race condition — boshqa foydalanuvchi parallel ochib biriktirib ulgurgan bo'lsa
+    if (!upd.rows.length) {
+      const full = await req.db.query('SELECT * FROM crm_lead WHERE id=$1', [id]);
+      return res.json({ success: true, claimed: false, lead: full.rows[0] });
+    }
+
+    res.json({ success: true, claimed: true, lead: upd.rows[0] });
+  } catch (err) {
+    console.error('claimLead error:', err.message);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
 // DELETE /api/leads/:id — delete a lead
 exports.deleteLead = async (req, res) => {
   if (!req.db) return res.status(503).json({ error: 'Database not configured' });

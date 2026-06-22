@@ -5204,6 +5204,7 @@ const HisobotlarModule = ({
 }) => {
   const [period, setPeriod] = useState('all');
   const [pipeFilter, setPipeFilter] = useState('all');
+  const [showFullReport, setShowFullReport] = useState(false); // To'liq lead hisoboti collapsible
 
   // ---- helpers ----
   const SOURCE_LABELS = {
@@ -5808,30 +5809,67 @@ const HisobotlarModule = ({
       marginBottom: '16px'
     }
   }, /*#__PURE__*/React.createElement("div", {
+    role: "button",
+    tabIndex: 0,
+    onClick: () => setShowFullReport(v => !v),
+    onKeyDown: e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setShowFullReport(v => !v);
+      }
+    },
     style: {
       padding: '14px 20px',
-      borderBottom: '1px solid var(--outline-variant)',
+      borderBottom: showFullReport ? '1px solid var(--outline-variant)' : 'none',
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: 'center',
+      cursor: 'pointer',
+      userSelect: 'none'
+    },
+    onMouseEnter: e => e.currentTarget.style.background = 'var(--bg-hover)',
+    onMouseLeave: e => e.currentTarget.style.background = ''
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px'
     }
   }, /*#__PURE__*/React.createElement("span", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '20px',
+      transition: 'transform 0.2s',
+      transform: showFullReport ? 'rotate(90deg)' : 'rotate(0deg)',
+      color: 'var(--text-secondary)'
+    }
+  }, "chevron_right"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontWeight: 600,
       fontSize: '14px'
     }
-  }, "To'liq lead hisoboti (", fl.length, ")"), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDCCA To'liq lead hisoboti"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '12px',
+      color: 'var(--text-muted)',
+      background: 'var(--bg-hover)',
+      padding: '2px 10px',
+      borderRadius: '12px',
+      fontWeight: 600
+    }
+  }, fl.length)), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: '8px',
       alignItems: 'center'
-    }
-  }, setSelectedLeadId && /*#__PURE__*/React.createElement("span", {
+    },
+    onClick: e => e.stopPropagation()
+  }, showFullReport && setSelectedLeadId && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: '11px',
       color: 'var(--text-muted)'
     }
-  }, "\u2190 Qatorni bosib lead'ni oching"), /*#__PURE__*/React.createElement("button", {
+  }, "\u2190 Qatorni bosib lead'ni oching"), showFullReport && /*#__PURE__*/React.createElement("button", {
     className: "btn-outline",
     style: {
       padding: '6px 12px'
@@ -5840,7 +5878,12 @@ const HisobotlarModule = ({
   }, /*#__PURE__*/React.createElement(Ico, {
     n: "download",
     s: 13
-  }), " Yuklab olish"))), /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "#"), /*#__PURE__*/React.createElement("th", null, "Ism"), /*#__PURE__*/React.createElement("th", null, "Telefon"), /*#__PURE__*/React.createElement("th", null, "Manba"), /*#__PURE__*/React.createElement("th", null, "Bosqich"), /*#__PURE__*/React.createElement("th", null, "Mas'ul"), /*#__PURE__*/React.createElement("th", null, "\uD83D\uDCDE"), /*#__PURE__*/React.createElement("th", null, "Muddat"))), /*#__PURE__*/React.createElement("tbody", null, fl.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+  }), " Yuklab olish"), !showFullReport && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)'
+    }
+  }, "Ochish uchun bosing"))), showFullReport && /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "#"), /*#__PURE__*/React.createElement("th", null, "Ism"), /*#__PURE__*/React.createElement("th", null, "Telefon"), /*#__PURE__*/React.createElement("th", null, "Manba"), /*#__PURE__*/React.createElement("th", null, "Bosqich"), /*#__PURE__*/React.createElement("th", null, "Mas'ul"), /*#__PURE__*/React.createElement("th", null, "\uD83D\uDCDE"), /*#__PURE__*/React.createElement("th", null, "Muddat"))), /*#__PURE__*/React.createElement("tbody", null, fl.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
     colSpan: "8",
     style: {
       textAlign: 'center',
@@ -10964,6 +11007,8 @@ const App = () => {
             date: l.created_at,
             text: "Tizimga qo'shildi"
           }],
+          claimedAt: l.claimed_at || null,
+          claimedBy: l.claimed_by || null,
           taskAssignee: (() => {
             if (l.taskassignee) return l.taskassignee;
             if (!l.deadline) return null;
@@ -11020,6 +11065,45 @@ const App = () => {
   useEffect(() => {
     if (selectedLeadId != null) localStorage.setItem('mizon_selectedLeadId', String(selectedLeadId));else localStorage.removeItem('mizon_selectedLeadId');
   }, [selectedLeadId]);
+
+  // ── Auto-claim: lead birinchi ochilganda — kim birinchi ochsa — o'sha mas'ul ──
+  // Faqat ichki userlar (CEO/MANAGER) uchun. WATCHER va SUPERADMIN claim qilmaydi (kuzatuvchi).
+  // Idempotent: backend claimed_at IS NULL shartiga ko'ra atomar.
+  const claimAttemptedRef = useRef(new Set());
+  useEffect(() => {
+    if (!selectedLeadId || !authUser) return;
+    if (['SUPERADMIN', 'WATCHER'].includes(authUser.role)) return;
+    // Avval shu sessiyada urinilgan bo'lsa — qaytadan urinmaymiz
+    const key = String(selectedLeadId);
+    if (claimAttemptedRef.current.has(key)) return;
+    const lead = leads.find(l => String(l.id) === key);
+    if (!lead) return; // leadlar hali yuklanmadi — keyingi render'da qayta urinamiz
+    if (lead.claimedAt) {
+      claimAttemptedRef.current.add(key);
+      return;
+    } // allaqachon claim qilingan
+    const token = localStorage.getItem('mizon_token');
+    if (!token) return;
+    claimAttemptedRef.current.add(key);
+    fetch(`/api/leads/${selectedLeadId}/claim`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      }
+    }).then(r => r.ok ? r.json() : null).then(d => {
+      if (d && d.claimed && d.lead) {
+        // Local state'da owner va claimedAt'ni darhol yangilaymiz
+        setLeads(prev => prev.map(l => String(l.id) === String(d.lead.id) ? {
+          ...l,
+          owner: d.lead.owner,
+          claimedAt: d.lead.claimed_at,
+          claimedBy: d.lead.claimed_by,
+          chatLogs: typeof d.lead.chatlogs === 'string' ? JSON.parse(d.lead.chatlogs) : d.lead.chatlogs || l.chatLogs
+        } : l));
+      }
+    }).catch(() => {}); // sukut — claim ixtiyoriy yaxshilanish
+  }, [selectedLeadId, authUser, leads]);
   const [taskDescInput, setTaskDescInput] = useState('');
   const [taskDateInput, setTaskDateInput] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');

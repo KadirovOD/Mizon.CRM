@@ -251,6 +251,8 @@ async function initDb() {
       ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_won       BOOLEAN DEFAULT false;
       ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_lost      BOOLEAN DEFAULT false;
       ALTER TABLE crm_lead               ADD COLUMN IF NOT EXISTS custom_data  JSONB   DEFAULT '{}'::jsonb;
+      ALTER TABLE crm_lead               ADD COLUMN IF NOT EXISTS claimed_at   TIMESTAMP;
+      ALTER TABLE crm_lead               ADD COLUMN IF NOT EXISTS claimed_by   VARCHAR(50);
       ALTER TABLE companies              ADD COLUMN IF NOT EXISTS form_title   TEXT;
       ALTER TABLE companies              ADD COLUMN IF NOT EXISTS form_subtitle TEXT;
       ALTER TABLE companies              ADD COLUMN IF NOT EXISTS extra_settings JSONB  DEFAULT '{}'::jsonb;
@@ -427,6 +429,7 @@ app.post  ('/api/leads',              leadController.createLead);
 app.put   ('/api/leads/:id',          leadController.updateLeadFull);
 app.delete('/api/leads/:id',          leadController.deleteLead);
 app.get   ('/api/leads/:id/chatlogs', leadController.getLeadChatlogs);
+app.post  ('/api/leads/:id/claim',    leadController.claimLead);
 app.get   ('/api/stages',             leadController.getStages);
 app.put   ('/api/stages/sync',        leadController.syncStages);
 app.get   ('/api/stats',              leadController.getStats);

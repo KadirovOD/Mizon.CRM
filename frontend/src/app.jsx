@@ -2222,6 +2222,7 @@
     const HisobotlarModule = ({ leads, columnsMap, pipelines, setSelectedLeadId }) => {
       const [period, setPeriod]       = useState('all');
       const [pipeFilter, setPipeFilter] = useState('all');
+      const [showFullReport, setShowFullReport] = useState(false); // To'liq lead hisoboti collapsible
 
       // ---- helpers ----
       const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", voip_incoming:'VoIP Kiruvchi', instagram:'Instagram DM' };
@@ -2487,52 +2488,67 @@
             </div>
           </div>
 
-          {/* ── Full leads table (clickable) ── */}
+          {/* ── Full leads table (collapsible) ── */}
           <div className="card" style={{padding:0, overflow:'hidden', marginBottom:'16px'}}>
-            <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span style={{fontWeight:600, fontSize:'14px'}}>To'liq lead hisoboti ({fl.length})</span>
-              <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-                {setSelectedLeadId && <span style={{fontSize:'11px', color:'var(--text-muted)'}}>← Qatorni bosib lead'ni oching</span>}
-                <button className="btn-outline" style={{padding:'6px 12px'}} onClick={exportCSV}><Ico n="download" s={13}/> Yuklab olish</button>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={()=>setShowFullReport(v=>!v)}
+              onKeyDown={e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault(); setShowFullReport(v=>!v);} }}
+              style={{padding:'14px 20px', borderBottom: showFullReport ? '1px solid var(--outline-variant)' : 'none', display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer', userSelect:'none'}}
+              onMouseEnter={e=>e.currentTarget.style.background='var(--bg-hover)'}
+              onMouseLeave={e=>e.currentTarget.style.background=''}
+            >
+              <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
+                <span className="material-symbols-outlined" style={{fontSize:'20px', transition:'transform 0.2s', transform:showFullReport?'rotate(90deg)':'rotate(0deg)', color:'var(--text-secondary)'}}>chevron_right</span>
+                <span style={{fontWeight:600, fontSize:'14px'}}>📊 To'liq lead hisoboti</span>
+                <span style={{fontSize:'12px', color:'var(--text-muted)', background:'var(--bg-hover)', padding:'2px 10px', borderRadius:'12px', fontWeight:600}}>{fl.length}</span>
+              </div>
+              <div style={{display:'flex', gap:'8px', alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                {showFullReport && setSelectedLeadId && <span style={{fontSize:'11px', color:'var(--text-muted)'}}>← Qatorni bosib lead'ni oching</span>}
+                {showFullReport && <button className="btn-outline" style={{padding:'6px 12px'}} onClick={exportCSV}><Ico n="download" s={13}/> Yuklab olish</button>}
+                {!showFullReport && <span style={{fontSize:'11px', color:'var(--text-muted)'}}>Ochish uchun bosing</span>}
               </div>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th><th>Ism</th><th>Telefon</th><th>Manba</th>
-                  <th>Bosqich</th><th>Mas'ul</th><th>📞</th><th>Muddat</th>
-                </tr>
-              </thead>
-              <tbody>
-                {fl.length===0 && (
-                  <tr><td colSpan="8" style={{textAlign:'center', padding:'30px', color:'var(--text-muted)'}}>
-                    Tanlangan davr / filtr uchun ma'lumot topilmadi
-                  </td></tr>
-                )}
-                {fl.map(l=>{
-                  const slaTp = determineSLAType(l.deadline);
-                  const stageTitle = uniqueStages.find(s=>s.id===l.status)?.title || l.status;
-                  return (
-                    <tr key={l.id}
-                      style={{cursor:setSelectedLeadId?'pointer':'default', borderLeft:`3px solid ${slaTp==='danger'?'var(--danger)':slaTp==='warning'?'var(--warning)':'transparent'}`}}
-                      onClick={()=>setSelectedLeadId&&setSelectedLeadId(l.id)}
-                      onMouseEnter={e=>{if(setSelectedLeadId)e.currentTarget.style.background='var(--bg-hover)';}}
-                      onMouseLeave={e=>e.currentTarget.style.background=''}>
-                      <td style={{color:'var(--text-muted)', fontSize:'11px', paddingLeft:'14px'}}>#{l.id}</td>
-                      <td style={{fontWeight:600}}>{l.name}</td>
-                      <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{l.phone||'—'}</td>
-                      <td><span className={`source-badge badge-${l.source}`}>{(SOURCE_LABELS[l.source]||l.source||'').replace('meta_fb_ads','fb_ads').replace('telegram_bot','telegram')}</span></td>
-                      <td><span style={{fontSize:'11px', fontWeight:600, padding:'2px 9px', borderRadius:'4px', background:(colColors[l.status]||'#888')+'22', color:colColors[l.status]||'var(--text-muted)'}}>{stageTitle}</span></td>
-                      <td>{l.owner||'—'}</td>
-                      <td style={{fontWeight:600, textAlign:'center'}}>{l.actualCallAttempts||0}</td>
-                      <td style={{fontSize:'11px', color:slaTp==='danger'?'var(--danger)':slaTp==='warning'?'var(--warning)':'var(--text-muted)'}}>
-                        {l.deadline ? new Date(l.deadline).toLocaleDateString('uz-Cyrl-UZ',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {showFullReport && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th><th>Ism</th><th>Telefon</th><th>Manba</th>
+                    <th>Bosqich</th><th>Mas'ul</th><th>📞</th><th>Muddat</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fl.length===0 && (
+                    <tr><td colSpan="8" style={{textAlign:'center', padding:'30px', color:'var(--text-muted)'}}>
+                      Tanlangan davr / filtr uchun ma'lumot topilmadi
+                    </td></tr>
+                  )}
+                  {fl.map(l=>{
+                    const slaTp = determineSLAType(l.deadline);
+                    const stageTitle = uniqueStages.find(s=>s.id===l.status)?.title || l.status;
+                    return (
+                      <tr key={l.id}
+                        style={{cursor:setSelectedLeadId?'pointer':'default', borderLeft:`3px solid ${slaTp==='danger'?'var(--danger)':slaTp==='warning'?'var(--warning)':'transparent'}`}}
+                        onClick={()=>setSelectedLeadId&&setSelectedLeadId(l.id)}
+                        onMouseEnter={e=>{if(setSelectedLeadId)e.currentTarget.style.background='var(--bg-hover)';}}
+                        onMouseLeave={e=>e.currentTarget.style.background=''}>
+                        <td style={{color:'var(--text-muted)', fontSize:'11px', paddingLeft:'14px'}}>#{l.id}</td>
+                        <td style={{fontWeight:600}}>{l.name}</td>
+                        <td style={{fontSize:'12px', color:'var(--text-muted)'}}>{l.phone||'—'}</td>
+                        <td><span className={`source-badge badge-${l.source}`}>{(SOURCE_LABELS[l.source]||l.source||'').replace('meta_fb_ads','fb_ads').replace('telegram_bot','telegram')}</span></td>
+                        <td><span style={{fontSize:'11px', fontWeight:600, padding:'2px 9px', borderRadius:'4px', background:(colColors[l.status]||'#888')+'22', color:colColors[l.status]||'var(--text-muted)'}}>{stageTitle}</span></td>
+                        <td>{l.owner||'—'}</td>
+                        <td style={{fontWeight:600, textAlign:'center'}}>{l.actualCallAttempts||0}</td>
+                        <td style={{fontSize:'11px', color:slaTp==='danger'?'var(--danger)':slaTp==='warning'?'var(--warning)':'var(--text-muted)'}}>
+                          {l.deadline ? new Date(l.deadline).toLocaleDateString('uz-Cyrl-UZ',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* ── Task 2: Harakatlar Jurnali (Activity Log) ── */}
@@ -4543,6 +4559,8 @@
               taskDescription: l.taskdescription || null,
               customData: (typeof l.custom_data === 'string' ? JSON.parse(l.custom_data) : l.custom_data) || {},
               chatLogs: typeof l.chatlogs === 'string' ? JSON.parse(l.chatlogs) : (l.chatlogs || [{type:'sys', date:l.created_at, text:"Tizimga qo'shildi"}]),
+              claimedAt: l.claimed_at || null,
+              claimedBy: l.claimed_by || null,
               taskAssignee: (() => {
                 if (l.taskassignee) return l.taskassignee;
                 if (!l.deadline) return null;
@@ -4592,6 +4610,41 @@
         if (selectedLeadId != null) localStorage.setItem('mizon_selectedLeadId', String(selectedLeadId));
         else localStorage.removeItem('mizon_selectedLeadId');
       }, [selectedLeadId]);
+
+      // ── Auto-claim: lead birinchi ochilganda — kim birinchi ochsa — o'sha mas'ul ──
+      // Faqat ichki userlar (CEO/MANAGER) uchun. WATCHER va SUPERADMIN claim qilmaydi (kuzatuvchi).
+      // Idempotent: backend claimed_at IS NULL shartiga ko'ra atomar.
+      const claimAttemptedRef = useRef(new Set());
+      useEffect(() => {
+        if (!selectedLeadId || !authUser) return;
+        if (['SUPERADMIN', 'WATCHER'].includes(authUser.role)) return;
+        // Avval shu sessiyada urinilgan bo'lsa — qaytadan urinmaymiz
+        const key = String(selectedLeadId);
+        if (claimAttemptedRef.current.has(key)) return;
+        const lead = leads.find(l => String(l.id) === key);
+        if (!lead) return; // leadlar hali yuklanmadi — keyingi render'da qayta urinamiz
+        if (lead.claimedAt) { claimAttemptedRef.current.add(key); return; } // allaqachon claim qilingan
+        const token = localStorage.getItem('mizon_token');
+        if (!token) return;
+        claimAttemptedRef.current.add(key);
+        fetch(`/api/leads/${selectedLeadId}/claim`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (d && d.claimed && d.lead) {
+              // Local state'da owner va claimedAt'ni darhol yangilaymiz
+              setLeads(prev => prev.map(l =>
+                String(l.id) === String(d.lead.id)
+                  ? { ...l, owner: d.lead.owner, claimedAt: d.lead.claimed_at, claimedBy: d.lead.claimed_by,
+                      chatLogs: typeof d.lead.chatlogs === 'string' ? JSON.parse(d.lead.chatlogs) : (d.lead.chatlogs || l.chatLogs) }
+                  : l
+              ));
+            }
+          })
+          .catch(() => {}); // sukut — claim ixtiyoriy yaxshilanish
+      }, [selectedLeadId, authUser, leads]);
       const [taskDescInput, setTaskDescInput] = useState('');
       const [taskDateInput, setTaskDateInput] = useState('');
       const [taskAssignee, setTaskAssignee] = useState('');
