@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const ec     = require('./edgeStore');
+const billingController = require('./billingController');
 
 const isSA = (req, res) => {
   if (!req.user || req.user.role !== 'SUPERADMIN')
@@ -22,11 +23,22 @@ exports.listCompanies = async (req, res) => {
     }
     if (req.db) {
       const r = await req.db.query(`
-        SELECT c.*, COUNT(DISTINCT u.id) AS user_count, COUNT(DISTINCT l.id) AS lead_count
+        SELECT c.*,
+               COUNT(DISTINCT u.id) AS user_count,
+               COUNT(DISTINCT l.id) AS lead_count,
+               s.plan_id   AS plan_id,
+               p.name      AS plan_name,
+               p.price     AS plan_price,
+               p.period    AS plan_period,
+               s.status    AS subscription_status,
+               s.expires_at AS subscription_expires_at
         FROM companies c
         LEFT JOIN crm_users u ON u.company_id=c.id
         LEFT JOIN crm_lead  l ON l.company_id=c.id
-        GROUP BY c.id ORDER BY c.created_at DESC
+        LEFT JOIN billing_subscriptions s ON s.company_id=c.id
+        LEFT JOIN billing_plans p ON p.id=s.plan_id
+        GROUP BY c.id, s.plan_id, p.name, p.price, p.period, s.status, s.expires_at
+        ORDER BY c.created_at DESC
       `);
       return res.json(r.rows);
     }
@@ -37,7 +49,7 @@ exports.listCompanies = async (req, res) => {
 // ── POST /api/superadmin/companies ────────────────────────────────────────────
 exports.createCompany = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { name, slug, plan, call_limit, admin_username, admin_password, admin_email } = req.body || {};
+  const { name, slug, plan, plan_id, call_limit, admin_username, admin_password, admin_email } = req.body || {};
   if (!name || !slug || !admin_username || !admin_password)
     return res.status(400).json({ error: 'name, slug, admin_username, admin_password majburiy' });
 
@@ -99,7 +111,27 @@ exports.createCompany = async (req, res) => {
         ('Muzokaralar',5,$1,false,false),('Yutildi',6,$1,true,false),
         ('Muvaffaqiyatsiz',7,$1,false,true)
       `, [company.id]);
-      return res.json({ success: true, company, login_url: `?company=${cleanSlug}`, message: `Muvaffaqiyatli yaratildi! URL: ?company=${cleanSlug}` });
+
+      // Tarif tanlangan bo'lsa — obuna va hisob-faktura yaratish
+      let attached = null;
+      if (plan_id) {
+        try {
+          attached = await billingController._attachPlanToCompany(req.db, company.id, Number(plan_id));
+          company.plan = attached.plan.name;
+          company.plan_id = attached.plan.id;
+        } catch (e) {
+          console.warn('createCompany: tarif biriktirishda xato:', e.message);
+        }
+      }
+
+      return res.json({
+        success: true,
+        company,
+        subscription: attached?.subscription || null,
+        invoice: attached?.invoice || null,
+        login_url: `?company=${cleanSlug}`,
+        message: `Muvaffaqiyatli yaratildi! URL: ?company=${cleanSlug}`,
+      });
     }
 
     return res.status(500).json({ error: 'Na Edge Config, na DB ulangan.' });
@@ -112,7 +144,7 @@ exports.createCompany = async (req, res) => {
 // ── PUT /api/superadmin/companies/:id ─────────────────────────────────────────
 exports.updateCompany = async (req, res) => {
   if (!isSA(req, res)) return;
-  const { is_active, plan, call_limit, name, slug, email } = req.body || {};
+  const { is_active, plan, plan_id, call_limit, name, slug, email } = req.body || {};
   const cleanSlug = slug ? slug.toLowerCase().replace(/[^a-z0-9-]/g, '-') : undefined;
   try {
     if (ec.isAvailable()) {
@@ -152,7 +184,22 @@ exports.updateCompany = async (req, res) => {
           req.params.id,
         ]
       );
-      return res.json({ success: true });
+
+      // Tarif (plan_id) tanlangan bo'lsa — obunani biriktirish/yangilash
+      let attached = null;
+      if (plan_id) {
+        try {
+          attached = await billingController._attachPlanToCompany(req.db, Number(req.params.id), Number(plan_id));
+        } catch (e) {
+          return res.status(400).json({ error: 'Tarif biriktirishda xato: ' + e.message });
+        }
+      }
+
+      return res.json({
+        success: true,
+        subscription: attached?.subscription || null,
+        invoice: attached?.invoice || null,
+      });
     }
     return res.status(500).json({ error: 'Storage ulangan emas' });
   } catch (e) {
@@ -172,7 +219,19 @@ exports.getCompany = async (req, res) => {
       return res.json({ ...c, users: users.filter(u => u.company_id === c.id).map(u => ({ ...u, password_hash: undefined })) });
     }
     if (req.db) {
-      const cr = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+      const cr = await req.db.query(`
+        SELECT c.*,
+               s.plan_id   AS plan_id,
+               p.name      AS plan_name,
+               p.price     AS plan_price,
+               p.period    AS plan_period,
+               s.status    AS subscription_status,
+               s.expires_at AS subscription_expires_at
+        FROM companies c
+        LEFT JOIN billing_subscriptions s ON s.company_id=c.id
+        LEFT JOIN billing_plans p ON p.id=s.plan_id
+        WHERE c.id=$1
+      `, [req.params.id]);
       if (!cr.rows.length) return res.status(404).json({ error: 'Topilmadi' });
       const ur = await req.db.query('SELECT id,username,email,role,full_name,is_active,created_at FROM crm_users WHERE company_id=$1', [req.params.id]);
       return res.json({ ...cr.rows[0], users: ur.rows });

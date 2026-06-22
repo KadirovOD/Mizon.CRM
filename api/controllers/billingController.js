@@ -121,6 +121,50 @@ exports.listSubscriptions = async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
+// Internal helper — kompaniyaga tarif biriktirish (upsert) + pending hisob-faktura yaratish.
+// HTTP qatlami emas, boshqa kontrollerlardan ham chaqirsa bo'ladi (masalan, superAdminController).
+// Qaytaradi: { subscription, invoice, plan } yoki xato bo'lsa Error tashlaydi.
+exports._attachPlanToCompany = async (db, company_id, plan_id) => {
+  if (!db) throw new Error('DB ulangan emas');
+  if (!company_id || !plan_id) throw new Error('company_id va plan_id majburiy');
+
+  const planR = await db.query('SELECT * FROM billing_plans WHERE id=$1', [plan_id]);
+  if (!planR.rows.length) throw new Error('Tarif topilmadi');
+  const plan = planR.rows[0];
+
+  // Har kompaniyaga bitta obuna (company_id UNIQUE) — upsert
+  const existing = await db.query('SELECT * FROM billing_subscriptions WHERE company_id=$1', [company_id]);
+  let sub;
+  if (existing.rows.length) {
+    const r = await db.query(
+      `UPDATE billing_subscriptions SET plan_id=$1 WHERE company_id=$2 RETURNING *`,
+      [plan_id, company_id]
+    );
+    sub = r.rows[0];
+  } else {
+    const r = await db.query(
+      `INSERT INTO billing_subscriptions (company_id, plan_id, status, started_at)
+       VALUES ($1,$2,'pending',NOW()) RETURNING *`,
+      [company_id, plan_id]
+    );
+    sub = r.rows[0];
+  }
+
+  // Birinchi davr uchun pending hisob-faktura
+  const start = nextPeriodStart(sub);
+  const end = periodEnd(start, plan.period);
+  const inv = await db.query(
+    `INSERT INTO billing_invoices (company_id, subscription_id, amount, currency, status, period_start, period_end)
+     VALUES ($1,$2,$3,'UZS','pending',$4,$5) RETURNING *`,
+    [company_id, sub.id, plan.price, start, end]
+  );
+
+  // Companies.plan ni tarif nomiga sinxronlash (badge va legacy display uchun)
+  await db.query('UPDATE companies SET plan=$1 WHERE id=$2', [plan.name, company_id]);
+
+  return { subscription: sub, invoice: inv.rows[0], plan };
+};
+
 // POST /api/billing/subscriptions — kompaniyaga tarif biriktirish (+ pending hisob-faktura)
 exports.assignPlan = async (req, res) => {
   if (!isSA(req, res)) return;
@@ -128,39 +172,12 @@ exports.assignPlan = async (req, res) => {
   const { company_id, plan_id } = req.body || {};
   if (!company_id || !plan_id) return res.status(400).json({ error: 'company_id va plan_id majburiy' });
   try {
-    const planR = await req.db.query('SELECT * FROM billing_plans WHERE id=$1', [plan_id]);
-    if (!planR.rows.length) return res.status(404).json({ error: 'Tarif topilmadi' });
-    const plan = planR.rows[0];
-
-    // Har kompaniyaga bitta obuna (company_id UNIQUE) — upsert
-    const existing = await req.db.query('SELECT * FROM billing_subscriptions WHERE company_id=$1', [company_id]);
-    let sub;
-    if (existing.rows.length) {
-      const r = await req.db.query(
-        `UPDATE billing_subscriptions SET plan_id=$1 WHERE company_id=$2 RETURNING *`,
-        [plan_id, company_id]
-      );
-      sub = r.rows[0];
-    } else {
-      const r = await req.db.query(
-        `INSERT INTO billing_subscriptions (company_id, plan_id, status, started_at)
-         VALUES ($1,$2,'pending',NOW()) RETURNING *`,
-        [company_id, plan_id]
-      );
-      sub = r.rows[0];
-    }
-
-    // Birinchi davr uchun pending hisob-faktura
-    const start = nextPeriodStart(sub);
-    const end = periodEnd(start, plan.period);
-    const inv = await req.db.query(
-      `INSERT INTO billing_invoices (company_id, subscription_id, amount, currency, status, period_start, period_end)
-       VALUES ($1,$2,$3,'UZS','pending',$4,$5) RETURNING *`,
-      [company_id, sub.id, plan.price, start, end]
-    );
-
-    res.status(201).json({ success: true, subscription: sub, invoice: inv.rows[0] });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    const out = await exports._attachPlanToCompany(req.db, company_id, plan_id);
+    res.status(201).json({ success: true, subscription: out.subscription, invoice: out.invoice });
+  } catch (e) {
+    const code = /majburiy|topilmadi/i.test(e.message) ? 400 : 500;
+    res.status(code).json({ error: e.message });
+  }
 };
 
 // ── HISOB-FAKTURALAR (invoices) ───────────────────────────────────────────────

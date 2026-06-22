@@ -8912,12 +8912,13 @@ const SuperAdminPanel = ({
   const [createForm, setCreateForm] = useState({
     name: '',
     slug: '',
-    plan: 'basic',
+    plan_id: '',
     call_limit: 5,
     admin_username: '',
     admin_password: '',
     admin_email: ''
   });
+  const [plans, setPlans] = useState([]);
   const [userForm, setUserForm] = useState({
     username: '',
     password: '',
@@ -8950,7 +8951,7 @@ const SuperAdminPanel = ({
   const [editCompForm, setEditCompForm] = useState({
     name: '',
     slug: '',
-    plan: 'basic',
+    plan_id: '',
     call_limit: 5,
     email: ''
   });
@@ -9039,6 +9040,20 @@ const SuperAdminPanel = ({
     loadCompanies(true);
   }, []);
 
+  // Billing tariflarini yuklash — kompaniya yaratish/tahrirlash formasi uchun
+  const loadPlans = async () => {
+    try {
+      const r = await fetch('/api/billing/plans', {
+        headers: H
+      });
+      const d = await r.json();
+      setPlans(Array.isArray(d) ? d : []);
+    } catch (e) {/* ignore */}
+  };
+  useEffect(() => {
+    loadPlans();
+  }, []);
+
   // ── Refs: ESC / back-button uchun joriy state ────────────────
   const saRefs = useRef({
     view: 'list',
@@ -9098,10 +9113,14 @@ const SuperAdminPanel = ({
   const createCompany = async e => {
     e.preventDefault();
     setSaving(true);
+    const payload = {
+      ...createForm,
+      plan_id: createForm.plan_id ? Number(createForm.plan_id) : null
+    };
     const r = await fetch('/api/superadmin/companies', {
       method: 'POST',
       headers: H,
-      body: JSON.stringify(createForm)
+      body: JSON.stringify(payload)
     });
     const d = await r.json();
     setSaving(false);
@@ -9119,7 +9138,7 @@ const SuperAdminPanel = ({
     setCreateForm({
       name: '',
       slug: '',
-      plan: 'basic',
+      plan_id: '',
       call_limit: 5,
       admin_username: '',
       admin_password: '',
@@ -9263,7 +9282,7 @@ const SuperAdminPanel = ({
     setEditCompForm({
       name: comp.name || '',
       slug: comp.slug || '',
-      plan: comp.plan || 'basic',
+      plan_id: comp.plan_id ? String(comp.plan_id) : '',
       call_limit: comp.call_limit || 5,
       email: comp.email || ''
     });
@@ -9272,13 +9291,17 @@ const SuperAdminPanel = ({
   const submitEditComp = async e => {
     e.preventDefault();
     setEditCompSaving(true);
+    const payload = {
+      ...editCompForm,
+      plan_id: editCompForm.plan_id ? Number(editCompForm.plan_id) : null
+    };
     const r = await fetch(`/api/superadmin/companies/${editCompModal.id}`, {
       method: 'PUT',
       headers: {
         ...H,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(editCompForm)
+      body: JSON.stringify(payload)
     });
     const d = await r.json();
     setEditCompSaving(false);
@@ -9560,18 +9583,23 @@ const SuperAdminPanel = ({
     className: "label-sm"
   }, "Tarif rejasi"), /*#__PURE__*/React.createElement("select", {
     className: "input-base",
-    value: createForm.plan,
+    value: createForm.plan_id,
     onChange: e => setCreateForm({
       ...createForm,
-      plan: e.target.value
+      plan_id: e.target.value
     })
   }, /*#__PURE__*/React.createElement("option", {
-    value: "basic"
-  }, "Basic (bepul)"), /*#__PURE__*/React.createElement("option", {
-    value: "pro"
-  }, "Pro"), /*#__PURE__*/React.createElement("option", {
-    value: "enterprise"
-  }, "Enterprise"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    value: ""
+  }, "\u2014 Tarifsiz \u2014"), plans.filter(p => p.is_active).map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.name, " \u2014 ", Number(p.price).toLocaleString('ru-RU'), " UZS/", p.period === 'year' ? 'yil' : 'oy'))), plans.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      color: '#f59e0b',
+      marginTop: '4px'
+    }
+  }, "\u26A0\uFE0F Hali tarif yo'q. Avval Billing tabidan tarif yarating.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "label-sm"
   }, "Qo'ng'iroq limiti"), /*#__PURE__*/React.createElement("input", {
     className: "input-base",
@@ -10520,18 +10548,23 @@ const SuperAdminPanel = ({
     style: {
       marginBottom: 0
     },
-    value: editCompForm.plan,
+    value: editCompForm.plan_id,
     onChange: e => setEditCompForm({
       ...editCompForm,
-      plan: e.target.value
+      plan_id: e.target.value
     })
   }, /*#__PURE__*/React.createElement("option", {
-    value: "basic"
-  }, "Basic"), /*#__PURE__*/React.createElement("option", {
-    value: "pro"
-  }, "Pro"), /*#__PURE__*/React.createElement("option", {
-    value: "enterprise"
-  }, "Enterprise"))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    value: ""
+  }, "\u2014 Tarifsiz \u2014"), plans.filter(p => p.is_active || String(p.id) === String(editCompForm.plan_id)).map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.name, " \u2014 ", Number(p.price).toLocaleString('ru-RU'), " UZS/", p.period === 'year' ? 'yil' : 'oy', !p.is_active ? ' (nofaol)' : ''))), plans.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '10px',
+      color: '#f59e0b',
+      marginTop: '3px'
+    }
+  }, "\u26A0\uFE0F Hali tarif yo'q. Billing tabidan yarating.")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
     className: "label-sm"
   }, "Qo'ng'iroq limiti"), /*#__PURE__*/React.createElement("input", {
     className: "input-base",

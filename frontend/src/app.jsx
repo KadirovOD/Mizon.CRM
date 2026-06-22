@@ -3657,7 +3657,8 @@
       const [selCompany,   setSelCompany]   = useState(null);
       const [compUsers,    setCompUsers]    = useState([]);
       const [showAddUser,  setShowAddUser]  = useState(false);
-      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
+      const [createForm,   setCreateForm]   = useState({name:'', slug:'', plan_id:'', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
+      const [plans,        setPlans]        = useState([]);
       const [userForm,     setUserForm]     = useState({username:'', password:'', role:'MANAGER', full_name:'', email:''});
       const [msg,          setMsg]          = useState('');
       const [saving,       setSaving]       = useState(false);
@@ -3671,7 +3672,7 @@
       const [passSaving,    setPassSaving]    = useState(false);
       // Task 5: Company edit modal
       const [editCompModal, setEditCompModal] = useState(null); // null | companyObj
-      const [editCompForm,  setEditCompForm]  = useState({name:'', slug:'', plan:'basic', call_limit:5, email:''});
+      const [editCompForm,  setEditCompForm]  = useState({name:'', slug:'', plan_id:'', call_limit:5, email:''});
       const [editCompSaving, setEditCompSaving] = useState(false);
 
       const token = localStorage.getItem('mizon_token');
@@ -3731,6 +3732,16 @@
 
       useEffect(() => { loadCompanies(true); }, []);
 
+      // Billing tariflarini yuklash — kompaniya yaratish/tahrirlash formasi uchun
+      const loadPlans = async () => {
+        try {
+          const r = await fetch('/api/billing/plans', {headers:H});
+          const d = await r.json();
+          setPlans(Array.isArray(d) ? d : []);
+        } catch(e) { /* ignore */ }
+      };
+      useEffect(() => { loadPlans(); }, []);
+
       // ── Refs: ESC / back-button uchun joriy state ────────────────
       const saRefs = useRef({ view: 'list', showAddUser: false, editUserModal: null });
       useEffect(() => { saRefs.current = { view, showAddUser, editUserModal }; }, [view, showAddUser, editUserModal]);
@@ -3763,7 +3774,11 @@
 
       const createCompany = async (e) => {
         e.preventDefault(); setSaving(true);
-        const r = await fetch('/api/superadmin/companies', {method:'POST', headers:H, body:JSON.stringify(createForm)});
+        const payload = {
+          ...createForm,
+          plan_id: createForm.plan_id ? Number(createForm.plan_id) : null,
+        };
+        const r = await fetch('/api/superadmin/companies', {method:'POST', headers:H, body:JSON.stringify(payload)});
         const d = await r.json(); setSaving(false);
         if (!r.ok) return flash('❌ '+d.error);
         setLastCreated({
@@ -3772,7 +3787,7 @@
           admin_email: createForm.admin_email,
         });
         setView('list'); loadCompanies();
-        setCreateForm({name:'', slug:'', plan:'basic', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
+        setCreateForm({name:'', slug:'', plan_id:'', call_limit:5, admin_username:'', admin_password:'', admin_email:''});
       };
 
       const toggleActive = async (comp) => {
@@ -3864,7 +3879,7 @@
         setEditCompForm({
           name: comp.name || '',
           slug: comp.slug || '',
-          plan: comp.plan || 'basic',
+          plan_id: comp.plan_id ? String(comp.plan_id) : '',
           call_limit: comp.call_limit || 5,
           email: comp.email || '',
         });
@@ -3872,9 +3887,13 @@
       };
       const submitEditComp = async (e) => {
         e.preventDefault(); setEditCompSaving(true);
+        const payload = {
+          ...editCompForm,
+          plan_id: editCompForm.plan_id ? Number(editCompForm.plan_id) : null,
+        };
         const r = await fetch(`/api/superadmin/companies/${editCompModal.id}`, {
           method:'PUT', headers:{...H, 'Content-Type':'application/json'},
-          body: JSON.stringify(editCompForm),
+          body: JSON.stringify(payload),
         });
         const d = await r.json(); setEditCompSaving(false);
         if (!r.ok) return flash('❌ ' + d.error);
@@ -3966,11 +3985,15 @@
                   </div>
                   <div>
                     <span className="label-sm">Tarif rejasi</span>
-                    <select className="input-base" value={createForm.plan} onChange={e=>setCreateForm({...createForm,plan:e.target.value})}>
-                      <option value="basic">Basic (bepul)</option>
-                      <option value="pro">Pro</option>
-                      <option value="enterprise">Enterprise</option>
+                    <select className="input-base" value={createForm.plan_id} onChange={e=>setCreateForm({...createForm,plan_id:e.target.value})}>
+                      <option value="">— Tarifsiz —</option>
+                      {plans.filter(p=>p.is_active).map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {Number(p.price).toLocaleString('ru-RU')} UZS/{p.period==='year'?'yil':'oy'}
+                        </option>
+                      ))}
                     </select>
+                    {plans.length === 0 && <div style={{fontSize:'11px', color:'#f59e0b', marginTop:'4px'}}>⚠️ Hali tarif yo'q. Avval Billing tabidan tarif yarating.</div>}
                   </div>
                   <div>
                     <span className="label-sm">Qo'ng'iroq limiti</span>
@@ -4245,9 +4268,15 @@
                   </div>
                   <div>
                     <span className="label-sm">Tarif rejasi</span>
-                    <select className="input-base" style={{marginBottom:0}} value={editCompForm.plan} onChange={e=>setEditCompForm({...editCompForm,plan:e.target.value})}>
-                      <option value="basic">Basic</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option>
+                    <select className="input-base" style={{marginBottom:0}} value={editCompForm.plan_id} onChange={e=>setEditCompForm({...editCompForm,plan_id:e.target.value})}>
+                      <option value="">— Tarifsiz —</option>
+                      {plans.filter(p=>p.is_active || String(p.id)===String(editCompForm.plan_id)).map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {Number(p.price).toLocaleString('ru-RU')} UZS/{p.period==='year'?'yil':'oy'}{!p.is_active?' (nofaol)':''}
+                        </option>
+                      ))}
                     </select>
+                    {plans.length === 0 && <div style={{fontSize:'10px', color:'#f59e0b', marginTop:'3px'}}>⚠️ Hali tarif yo'q. Billing tabidan yarating.</div>}
                   </div>
                   <div>
                     <span className="label-sm">Qo'ng'iroq limiti</span>
