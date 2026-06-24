@@ -6259,9 +6259,41 @@
                         )}
                       </div>
                       <div className="chat-logs-area">
-                        {selectedLeadData.chatLogs.map((log, idx) => {
-                          // Sana + vaqt (chat oynasidagi har bir element uchun yagona format)
-                          const dt = log.date ? new Date(log.date).toLocaleString('uz-UZ', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
+                        {(() => {
+                          // Telegram uslubi: kun bir marta o'rtada ajratgich sifatida, har bir log faqat HH:MM
+                          let lastDateKey = '';
+                          const monthNames = ['Yanvar','Fevral','Mart','Aprel','May','Iyun','Iyul','Avgust','Sentabr','Oktabr','Noyabr','Dekabr'];
+                          const todayKey     = new Date().toISOString().slice(0,10);
+                          const yesterdayKey = new Date(Date.now()-86400000).toISOString().slice(0,10);
+                          const formatDateSep = (d) => {
+                            const k = d.toISOString().slice(0,10);
+                            if (k === todayKey)     return 'Bugun';
+                            if (k === yesterdayKey) return 'Kecha';
+                            return `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+                          };
+                          const items = [];
+                          selectedLeadData.chatLogs.forEach((log, idx) => {
+                            const logDate = log.date ? new Date(log.date) : null;
+                            const dateKey = logDate ? logDate.toISOString().slice(0,10) : '';
+                            if (logDate && dateKey !== lastDateKey) {
+                              items.push({ isSep:true, key:'sep_'+idx, date:logDate });
+                              lastDateKey = dateKey;
+                            }
+                            items.push({ isSep:false, log, idx });
+                          });
+                          return items.map(item => {
+                            if (item.isSep) {
+                              return (
+                                <div key={item.key} style={{display:'flex', justifyContent:'center', margin:'14px 0 6px'}}>
+                                  <div style={{background:'rgba(255,255,255,0.06)', border:'1px solid var(--outline-variant)', color:'var(--text-muted)', padding:'3px 14px', borderRadius:'12px', fontSize:'11px', fontWeight:600, letterSpacing:'0.02em'}}>
+                                    {formatDateSep(item.date)}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            const { log, idx } = item;
+                            // Vaqt — faqat HH:MM (kun yuqorida ajratgichda ko'rsatilgan)
+                            const dt = log.date ? new Date(log.date).toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'}) : '';
                           // ---- VoIP call log ----
                           if (log.type === 'call') {
                             const isCalling  = log.status === 'calling';
@@ -6431,7 +6463,8 @@
                               {dt && <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'3px', textAlign:'right', opacity:0.7}}>{dt}</div>}
                             </div>
                           );
-                        })}
+                        });
+                        })()}
                       </div>
                       {role !== 'WATCHER' && (
                         <div style={{borderTop:'1px solid var(--outline-variant)', background:'var(--bg-surface)', flexShrink:0}}>

@@ -13884,326 +13884,424 @@ const App = () => {
     s: 10
   }), " Mas'ul: ", selectedLeadData.owner)), /*#__PURE__*/React.createElement("div", {
     className: "chat-logs-area"
-  }, selectedLeadData.chatLogs.map((log, idx) => {
-    // Sana + vaqt (chat oynasidagi har bir element uchun yagona format)
-    const dt = log.date ? new Date(log.date).toLocaleString('uz-UZ', {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    }) : '';
-    // ---- VoIP call log ----
-    if (log.type === 'call') {
-      const isCalling = log.status === 'calling';
-      const hasRecord = !!log.record_url;
-      const dur = log.duration > 0 ? ` · ${Math.floor(log.duration / 60)}:${String(log.duration % 60).padStart(2, '0')}` : '';
-      const bgColor = hasRecord ? 'rgba(1,167,80,0.1)' : isCalling ? 'rgba(90,223,129,0.06)' : 'rgba(255,255,255,0.04)';
-      const bdColor = hasRecord ? 'rgba(1,167,80,0.3)' : isCalling ? 'rgba(90,223,129,0.3)' : 'var(--border-light)';
-      const iconEmoji = hasRecord ? '🎙' : isCalling ? '📞' : log.text.includes('iruvchi') ? '📲' : '📞';
-      const cleanText = log.text.replace(/^[📞📲🎙]\s*/, '');
-      return /*#__PURE__*/React.createElement("div", {
-        key: idx,
-        style: {
-          display: 'flex',
-          justifyContent: 'center',
-          margin: '2px 0'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        className: "call-log-bubble",
-        style: {
-          background: bgColor,
-          border: `1px solid ${bdColor}`,
-          width: '100%'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: '34px',
-          height: '34px',
-          borderRadius: '50%',
-          flexShrink: 0,
-          background: hasRecord ? 'rgba(1,167,80,0.18)' : 'rgba(255,255,255,0.08)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '16px'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        className: isCalling ? 'calling-ring' : ''
-      }, iconEmoji)), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '12px',
-          fontWeight: 600,
-          color: 'var(--text-main)',
-          lineHeight: 1.35,
-          wordBreak: 'break-word'
-        }
-      }, cleanText), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '11px',
-          color: 'var(--text-muted)',
-          marginTop: '2px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px'
-        }
-      }, /*#__PURE__*/React.createElement("span", null, dt, dur), isCalling && /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: 'var(--primary)',
-          animation: 'callPulse 1s infinite'
-        }
-      }, "\u25CF Jonli qo'ng'iroq..."), hasRecord && /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: 'var(--success)'
-        }
-      }, "\u25CF Yozuv mavjud")))), hasRecord && /*#__PURE__*/React.createElement("div", {
-        style: {
-          marginTop: '8px'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '11px',
-          color: 'var(--text-muted)',
-          marginBottom: '4px',
-          fontWeight: 500
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        className: "material-symbols-outlined",
-        style: {
-          fontSize: '13px',
-          verticalAlign: 'middle'
-        }
-      }, "mic"), " Qo'ng'iroq yozuvi"), /*#__PURE__*/React.createElement("audio", {
-        controls: true,
-        style: {
-          width: '100%',
-          height: '32px',
-          borderRadius: '4px'
-        },
-        src: log.record_url
-      }, /*#__PURE__*/React.createElement("a", {
-        href: log.record_url,
-        target: "_blank",
-        rel: "noopener",
-        style: {
-          color: 'var(--primary)',
-          fontSize: '12px'
-        }
-      }, "\u2197 Yozuvni yuklab olish")))));
-    }
-    // ---- Audit log (o'zgarishlar — oddiy sys sifatida) ----
-    if (log.type === 'audit') {
-      const byMatch = log.text.match(/^✏️\s+(.+?)\s+o['']zgartirdi:\s*/);
-      const by = byMatch ? byMatch[1] : log.by || '?';
-      const details = byMatch ? log.text.slice(byMatch[0].length) : log.text;
-      return /*#__PURE__*/React.createElement("div", {
-        key: idx,
-        className: "sys-log",
-        style: {
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: 'var(--text-muted)'
-        }
-      }, "\u270F\uFE0F ", /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: 'var(--primary)',
-          fontWeight: 600
-        }
-      }, by), ": ", details.replace(/ \| /g, ' · ')), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--text-muted)',
-          whiteSpace: 'nowrap',
-          flexShrink: 0
-        }
-      }, dt));
-    }
-    // ---- Vazifa karta (sys + isTask) ----
-    const isTaskLog = log.type === 'sys' && (log.isTask || log.text && (log.text.startsWith('📌') || log.text.includes('Vazifa ochildi') || log.text.includes('Vazifa belgilandi')));
-    if (isTaskLog) {
-      // Bu vazifa keyinchalik yakunlanganmi? idx dan keyin '✅' yozuvi bor bo'lsa — yakunlangan
-      const completedAfter = selectedLeadData.chatLogs.slice(idx + 1).some(lg => lg.type === 'sys' && lg.text && lg.text.startsWith('✅'));
-      const taskStillActive = !!selectedLeadData.deadline && !completedAfter;
-      const isCompleting = inlineCompleteId === idx;
-      return /*#__PURE__*/React.createElement("div", {
-        key: idx,
-        style: {
-          padding: '10px 14px',
-          background: 'rgba(245,158,11,0.08)',
-          border: '1px solid rgba(245,158,11,0.3)',
-          borderRadius: '10px'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        className: "material-symbols-outlined",
-        style: {
-          fontSize: '16px',
-          color: '#f59e0b',
-          flexShrink: 0,
-          marginTop: '1px'
-        }
-      }, "task_alt"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '11px',
-          fontWeight: 700,
-          color: '#f59e0b'
-        }
-      }, "Vazifa belgilandi"), /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--text-muted)',
-          whiteSpace: 'nowrap',
-          flexShrink: 0
-        }
-      }, log.by && /*#__PURE__*/React.createElement("span", {
-        style: {
-          color: 'var(--primary)',
-          fontWeight: 600
-        }
-      }, log.by, " \xB7 "), dt)), (() => {
-        const desc = log.description !== undefined ? log.description : log.text.replace(/^📌 Vazifa:\s*"?/, '').replace(/"?\s*→.*$/, '').trim();
-        return desc ? /*#__PURE__*/React.createElement("div", {
+  }, (() => {
+    // Telegram uslubi: kun bir marta o'rtada ajratgich sifatida, har bir log faqat HH:MM
+    let lastDateKey = '';
+    const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const formatDateSep = d => {
+      const k = d.toISOString().slice(0, 10);
+      if (k === todayKey) return 'Bugun';
+      if (k === yesterdayKey) return 'Kecha';
+      return `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    };
+    const items = [];
+    selectedLeadData.chatLogs.forEach((log, idx) => {
+      const logDate = log.date ? new Date(log.date) : null;
+      const dateKey = logDate ? logDate.toISOString().slice(0, 10) : '';
+      if (logDate && dateKey !== lastDateKey) {
+        items.push({
+          isSep: true,
+          key: 'sep_' + idx,
+          date: logDate
+        });
+        lastDateKey = dateKey;
+      }
+      items.push({
+        isSep: false,
+        log,
+        idx
+      });
+    });
+    return items.map(item => {
+      if (item.isSep) {
+        return /*#__PURE__*/React.createElement("div", {
+          key: item.key,
+          style: {
+            display: 'flex',
+            justifyContent: 'center',
+            margin: '14px 0 6px'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid var(--outline-variant)',
+            color: 'var(--text-muted)',
+            padding: '3px 14px',
+            borderRadius: '12px',
+            fontSize: '11px',
+            fontWeight: 600,
+            letterSpacing: '0.02em'
+          }
+        }, formatDateSep(item.date)));
+      }
+      const {
+        log,
+        idx
+      } = item;
+      // Vaqt — faqat HH:MM (kun yuqorida ajratgichda ko'rsatilgan)
+      const dt = log.date ? new Date(log.date).toLocaleTimeString('uz-UZ', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : '';
+      // ---- VoIP call log ----
+      if (log.type === 'call') {
+        const isCalling = log.status === 'calling';
+        const hasRecord = !!log.record_url;
+        const dur = log.duration > 0 ? ` · ${Math.floor(log.duration / 60)}:${String(log.duration % 60).padStart(2, '0')}` : '';
+        const bgColor = hasRecord ? 'rgba(1,167,80,0.1)' : isCalling ? 'rgba(90,223,129,0.06)' : 'rgba(255,255,255,0.04)';
+        const bdColor = hasRecord ? 'rgba(1,167,80,0.3)' : isCalling ? 'rgba(90,223,129,0.3)' : 'var(--border-light)';
+        const iconEmoji = hasRecord ? '🎙' : isCalling ? '📞' : log.text.includes('iruvchi') ? '📲' : '📞';
+        const cleanText = log.text.replace(/^[📞📲🎙]\s*/, '');
+        return /*#__PURE__*/React.createElement("div", {
+          key: idx,
+          style: {
+            display: 'flex',
+            justifyContent: 'center',
+            margin: '2px 0'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          className: "call-log-bubble",
+          style: {
+            background: bgColor,
+            border: `1px solid ${bdColor}`,
+            width: '100%'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            width: '34px',
+            height: '34px',
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: hasRecord ? 'rgba(1,167,80,0.18)' : 'rgba(255,255,255,0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '16px'
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          className: isCalling ? 'calling-ring' : ''
+        }, iconEmoji)), /*#__PURE__*/React.createElement("div", {
+          style: {
+            flex: 1,
+            minWidth: 0
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '12px',
+            fontWeight: 600,
+            color: 'var(--text-main)',
+            lineHeight: 1.35,
+            wordBreak: 'break-word'
+          }
+        }, cleanText), /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            marginTop: '2px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }
+        }, /*#__PURE__*/React.createElement("span", null, dt, dur), isCalling && /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: 'var(--primary)',
+            animation: 'callPulse 1s infinite'
+          }
+        }, "\u25CF Jonli qo'ng'iroq..."), hasRecord && /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: 'var(--success)'
+          }
+        }, "\u25CF Yozuv mavjud")))), hasRecord && /*#__PURE__*/React.createElement("div", {
+          style: {
+            marginTop: '8px'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            marginBottom: '4px',
+            fontWeight: 500
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "material-symbols-outlined",
+          style: {
+            fontSize: '13px',
+            verticalAlign: 'middle'
+          }
+        }, "mic"), " Qo'ng'iroq yozuvi"), /*#__PURE__*/React.createElement("audio", {
+          controls: true,
+          style: {
+            width: '100%',
+            height: '32px',
+            borderRadius: '4px'
+          },
+          src: log.record_url
+        }, /*#__PURE__*/React.createElement("a", {
+          href: log.record_url,
+          target: "_blank",
+          rel: "noopener",
+          style: {
+            color: 'var(--primary)',
+            fontSize: '12px'
+          }
+        }, "\u2197 Yozuvni yuklab olish")))));
+      }
+      // ---- Audit log (o'zgarishlar — oddiy sys sifatida) ----
+      if (log.type === 'audit') {
+        const byMatch = log.text.match(/^✏️\s+(.+?)\s+o['']zgartirdi:\s*/);
+        const by = byMatch ? byMatch[1] : log.by || '?';
+        const details = byMatch ? log.text.slice(byMatch[0].length) : log.text;
+        return /*#__PURE__*/React.createElement("div", {
+          key: idx,
+          className: "sys-log",
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap'
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: 'var(--text-muted)'
+          }
+        }, "\u270F\uFE0F ", /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: 'var(--primary)',
+            fontWeight: 600
+          }
+        }, by), ": ", details.replace(/ \| /g, ' · ')), /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0
+          }
+        }, dt));
+      }
+      // ---- Vazifa karta (sys + isTask) ----
+      const isTaskLog = log.type === 'sys' && (log.isTask || log.text && (log.text.startsWith('📌') || log.text.includes('Vazifa ochildi') || log.text.includes('Vazifa belgilandi')));
+      if (isTaskLog) {
+        // Bu vazifa keyinchalik yakunlanganmi? idx dan keyin '✅' yozuvi bor bo'lsa — yakunlangan
+        const completedAfter = selectedLeadData.chatLogs.slice(idx + 1).some(lg => lg.type === 'sys' && lg.text && lg.text.startsWith('✅'));
+        const taskStillActive = !!selectedLeadData.deadline && !completedAfter;
+        const isCompleting = inlineCompleteId === idx;
+        return /*#__PURE__*/React.createElement("div", {
+          key: idx,
+          style: {
+            padding: '10px 14px',
+            background: 'rgba(245,158,11,0.08)',
+            border: '1px solid rgba(245,158,11,0.3)',
+            borderRadius: '10px'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px'
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "material-symbols-outlined",
+          style: {
+            fontSize: '16px',
+            color: '#f59e0b',
+            flexShrink: 0,
+            marginTop: '1px'
+          }
+        }, "task_alt"), /*#__PURE__*/React.createElement("div", {
+          style: {
+            flex: 1,
+            minWidth: 0
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#f59e0b'
+          }
+        }, "Vazifa belgilandi"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0
+          }
+        }, log.by && /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: 'var(--primary)',
+            fontWeight: 600
+          }
+        }, log.by, " \xB7 "), dt)), (() => {
+          const desc = log.description !== undefined ? log.description : log.text.replace(/^📌 Vazifa:\s*"?/, '').replace(/"?\s*→.*$/, '').trim();
+          return desc ? /*#__PURE__*/React.createElement("div", {
+            style: {
+              fontSize: '12px',
+              color: 'var(--text-main)',
+              lineHeight: 1.4,
+              marginTop: '3px'
+            }
+          }, "\uD83D\uDCDD ", desc) : null;
+        })(), taskStillActive && selectedLeadData.deadline && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            marginTop: '3px'
+          }
+        }, "\u23F0 ", new Date(selectedLeadData.deadline).toLocaleString('uz-UZ', {
+          day: '2-digit',
+          month: '2-digit',
+          year: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        })), log.assignee && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            marginTop: '2px'
+          }
+        }, "\uD83D\uDC64 ", log.assignee), taskStillActive && role !== 'WATCHER' && !isCompleting && /*#__PURE__*/React.createElement("button", {
+          className: "btn-success",
+          style: {
+            marginTop: '8px',
+            fontSize: '11px',
+            padding: '5px 12px'
+          },
+          onClick: () => {
+            setInlineCompleteId(idx);
+            setInlineCompleteNote('');
+          }
+        }, "\u2713 Vazifani yakunlash"), isCompleting && /*#__PURE__*/React.createElement("div", {
+          style: {
+            marginTop: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px'
+          }
+        }, /*#__PURE__*/React.createElement("input", {
+          className: "input-base",
+          style: {
+            marginBottom: 0,
+            fontSize: '12px'
+          },
+          placeholder: "Natija: Shartnoma imzolandi...",
+          value: inlineCompleteNote,
+          autoFocus: true,
+          onChange: e => setInlineCompleteNote(e.target.value)
+        }), /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            gap: '6px'
+          }
+        }, /*#__PURE__*/React.createElement("button", {
+          className: "btn-success",
+          style: {
+            flex: 1,
+            fontSize: '11px'
+          },
+          onClick: () => handleTaskComplete(selectedLeadData.id, inlineCompleteNote)
+        }, "Tasdiqlash"), /*#__PURE__*/React.createElement("button", {
+          className: "btn-outline",
+          style: {
+            padding: '0 10px',
+            fontSize: '11px'
+          },
+          onClick: () => setInlineCompleteId(null)
+        }, "Bekor"))))));
+      }
+      // ---- Vazifa yakunlandi karta ----
+      const isTaskCompleteLog = log.type === 'sys' && (log.isTaskComplete || log.text && log.text.startsWith('✅ Vazifa yakunlandi'));
+      if (isTaskCompleteLog) {
+        const completionNote = log.note !== undefined ? log.note : log.text.replace(/^✅ Vazifa yakunlandi!\s*Natija:\s*"?/, '').replace(/"?\s*$/, '').trim();
+        return /*#__PURE__*/React.createElement("div", {
+          key: idx,
+          style: {
+            padding: '10px 14px',
+            background: 'rgba(1,167,80,0.08)',
+            border: '1px solid rgba(1,167,80,0.3)',
+            borderRadius: '10px'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '8px'
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          className: "material-symbols-outlined",
+          style: {
+            fontSize: '16px',
+            color: '#01a750',
+            flexShrink: 0,
+            marginTop: '1px'
+          }
+        }, "check_circle"), /*#__PURE__*/React.createElement("div", {
+          style: {
+            flex: 1,
+            minWidth: 0
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap'
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '11px',
+            fontWeight: 700,
+            color: '#01a750'
+          }
+        }, "Vazifa yakunlandi"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0
+          }
+        }, log.by && /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: 'var(--primary)',
+            fontWeight: 600
+          }
+        }, log.by, " \xB7 "), dt)), completionNote ? /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: '12px',
             color: 'var(--text-main)',
             lineHeight: 1.4,
             marginTop: '3px'
           }
-        }, "\uD83D\uDCDD ", desc) : null;
-      })(), taskStillActive && selectedLeadData.deadline && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--text-muted)',
-          marginTop: '3px'
-        }
-      }, "\u23F0 ", new Date(selectedLeadData.deadline).toLocaleString('uz-UZ', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      })), log.assignee && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--text-muted)',
-          marginTop: '2px'
-        }
-      }, "\uD83D\uDC64 ", log.assignee), taskStillActive && role !== 'WATCHER' && !isCompleting && /*#__PURE__*/React.createElement("button", {
-        className: "btn-success",
-        style: {
-          marginTop: '8px',
-          fontSize: '11px',
-          padding: '5px 12px'
-        },
-        onClick: () => {
-          setInlineCompleteId(idx);
-          setInlineCompleteNote('');
-        }
-      }, "\u2713 Vazifani yakunlash"), isCompleting && /*#__PURE__*/React.createElement("div", {
-        style: {
-          marginTop: '8px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px'
-        }
-      }, /*#__PURE__*/React.createElement("input", {
-        className: "input-base",
-        style: {
-          marginBottom: 0,
-          fontSize: '12px'
-        },
-        placeholder: "Natija: Shartnoma imzolandi...",
-        value: inlineCompleteNote,
-        autoFocus: true,
-        onChange: e => setInlineCompleteNote(e.target.value)
-      }), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          gap: '6px'
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        className: "btn-success",
-        style: {
-          flex: 1,
-          fontSize: '11px'
-        },
-        onClick: () => handleTaskComplete(selectedLeadData.id, inlineCompleteNote)
-      }, "Tasdiqlash"), /*#__PURE__*/React.createElement("button", {
-        className: "btn-outline",
-        style: {
-          padding: '0 10px',
-          fontSize: '11px'
-        },
-        onClick: () => setInlineCompleteId(null)
-      }, "Bekor"))))));
-    }
-    // ---- Vazifa yakunlandi karta ----
-    const isTaskCompleteLog = log.type === 'sys' && (log.isTaskComplete || log.text && log.text.startsWith('✅ Vazifa yakunlandi'));
-    if (isTaskCompleteLog) {
-      const completionNote = log.note !== undefined ? log.note : log.text.replace(/^✅ Vazifa yakunlandi!\s*Natija:\s*"?/, '').replace(/"?\s*$/, '').trim();
-      return /*#__PURE__*/React.createElement("div", {
+        }, "\uD83D\uDCAC ", completionNote) : /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: '12px',
+            color: 'var(--text-muted)',
+            lineHeight: 1.4,
+            marginTop: '3px',
+            fontStyle: 'italic'
+          }
+        }, "Izohsiz yakunlandi"))));
+      }
+      // ---- System log ----
+      if (log.type === 'sys') return /*#__PURE__*/React.createElement("div", {
         key: idx,
-        style: {
-          padding: '10px 14px',
-          background: 'rgba(1,167,80,0.08)',
-          border: '1px solid rgba(1,167,80,0.3)',
-          borderRadius: '10px'
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        className: "material-symbols-outlined",
-        style: {
-          fontSize: '16px',
-          color: '#01a750',
-          flexShrink: 0,
-          marginTop: '1px'
-        }
-      }, "check_circle"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
+        className: "sys-log",
         style: {
           display: 'flex',
           justifyContent: 'space-between',
@@ -14211,13 +14309,7 @@ const App = () => {
           gap: '8px',
           flexWrap: 'wrap'
         }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '11px',
-          fontWeight: 700,
-          color: '#01a750'
-        }
-      }, "Vazifa yakunlandi"), /*#__PURE__*/React.createElement("span", {
+      }, /*#__PURE__*/React.createElement("span", null, log.text), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: '10px',
           color: 'var(--text-muted)',
@@ -14229,82 +14321,43 @@ const App = () => {
           color: 'var(--primary)',
           fontWeight: 600
         }
-      }, log.by, " \xB7 "), dt)), completionNote ? /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '12px',
-          color: 'var(--text-main)',
-          lineHeight: 1.4,
-          marginTop: '3px'
-        }
-      }, "\uD83D\uDCAC ", completionNote) : /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '12px',
-          color: 'var(--text-muted)',
-          lineHeight: 1.4,
-          marginTop: '3px',
-          fontStyle: 'italic'
-        }
-      }, "Izohsiz yakunlandi"))));
-    }
-    // ---- System log ----
-    if (log.type === 'sys') return /*#__PURE__*/React.createElement("div", {
-      key: idx,
-      className: "sys-log",
-      style: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '8px',
-        flexWrap: 'wrap'
+      }, log.by, " \xB7 "), dt));
+      // ---- Telegram / Instagram message ----
+      if (log.type === 'telegram' || log.type === 'instagram') {
+        const icon = log.type === 'telegram' ? '✈️' : '📸';
+        return /*#__PURE__*/React.createElement("div", {
+          key: idx,
+          className: "sys-log",
+          style: {
+            background: 'rgba(0,136,204,0.06)',
+            border: '1px solid rgba(0,136,204,0.15)',
+            borderRadius: '6px',
+            padding: '5px 10px',
+            textAlign: 'left'
+          }
+        }, icon, " ", log.text, " ", /*#__PURE__*/React.createElement("span", {
+          style: {
+            float: 'right',
+            fontSize: '10px',
+            color: 'var(--text-muted)'
+          }
+        }, dt));
       }
-    }, /*#__PURE__*/React.createElement("span", null, log.text), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: '10px',
-        color: 'var(--text-muted)',
-        whiteSpace: 'nowrap',
-        flexShrink: 0
-      }
-    }, log.by && /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: 'var(--primary)',
-        fontWeight: 600
-      }
-    }, log.by, " \xB7 "), dt));
-    // ---- Telegram / Instagram message ----
-    if (log.type === 'telegram' || log.type === 'instagram') {
-      const icon = log.type === 'telegram' ? '✈️' : '📸';
+      // ---- Chat message ----
       return /*#__PURE__*/React.createElement("div", {
         key: idx,
-        className: "sys-log",
+        className: `msg-bubble ${log.dir === 'in' ? 'msg-in' : 'msg-out'}`
+      }, /*#__PURE__*/React.createElement("div", null, log.text), dt && /*#__PURE__*/React.createElement("div", {
         style: {
-          background: 'rgba(0,136,204,0.06)',
-          border: '1px solid rgba(0,136,204,0.15)',
-          borderRadius: '6px',
-          padding: '5px 10px',
-          textAlign: 'left'
-        }
-      }, icon, " ", log.text, " ", /*#__PURE__*/React.createElement("span", {
-        style: {
-          float: 'right',
           fontSize: '10px',
-          color: 'var(--text-muted)'
+          color: 'var(--text-muted)',
+          marginTop: '3px',
+          textAlign: 'right',
+          opacity: 0.7
         }
       }, dt));
-    }
-    // ---- Chat message ----
-    return /*#__PURE__*/React.createElement("div", {
-      key: idx,
-      className: `msg-bubble ${log.dir === 'in' ? 'msg-in' : 'msg-out'}`
-    }, /*#__PURE__*/React.createElement("div", null, log.text), dt && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: '10px',
-        color: 'var(--text-muted)',
-        marginTop: '3px',
-        textAlign: 'right',
-        opacity: 0.7
-      }
-    }, dt));
-  })), role !== 'WATCHER' && /*#__PURE__*/React.createElement("div", {
+    });
+  })()), role !== 'WATCHER' && /*#__PURE__*/React.createElement("div", {
     style: {
       borderTop: '1px solid var(--outline-variant)',
       background: 'var(--bg-surface)',
