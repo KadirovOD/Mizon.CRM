@@ -1332,7 +1332,7 @@ const IntegrationsModule = ({
 
     // API tomonidan boshqariladigan barcha platformalar
     // Bu ro'yxatdagi platformalar faqat DB dan yuklanadi — localStorage dagi eskilar tozalanadi
-    const API_PLATFORMS = ['facebook', 'instagram', 'telegram', 'webhook', 'google_sheets'];
+    const API_PLATFORMS = ['facebook', 'instagram', 'telegram', 'webhook', 'google_sheets', 'meta_capi'];
 
     // Load platform integrations
     fetch('/api/integrations', {
@@ -1855,6 +1855,14 @@ const IntegrationsModule = ({
     color: '#0f9d58',
     bg: 'rgba(15,157,88,0.12)',
     desc: 'Facebook Lead Ads → Google Sheets → CRM: Apps Script orqali avtomatik sinxronizatsiya',
+    customUI: true
+  }, {
+    key: 'meta_capi',
+    name: 'Meta Conversions API',
+    logo: '📈',
+    color: '#1877F2',
+    bg: 'rgba(24,119,242,0.12)',
+    desc: 'Server-tomondan Meta\'ga konversiya eventlari (Lead/Purchase) yuborish — App Review kerak emas',
     customUI: true
   }];
   const cfgIsOn = key => {
@@ -3670,8 +3678,390 @@ const IntegrationsModule = ({
       }, "Uzish")));
     };
 
+    // ── Meta CAPI custom UI ─────────────────────────────────
+    const CapiFlow = () => {
+      const CAPI = '#1877F2';
+      const [cfg, setCfg] = useState(null); // {configured, pixel_id, access_token_masked, test_event_code, ...}
+      const [pixelId, setPixelId] = useState('');
+      const [accessToken, setAccessToken] = useState('');
+      const [testEventCode, setTestEventCode] = useState('');
+      const [saving, setSaving] = useState(false);
+      const [tStat, setTStat] = useState(null); // null | 'loading' | {ok|err, msg, details}
+      const [showToken, setShowToken] = useState(false);
+      useEffect(() => {
+        fetch('/api/integrations/meta-capi', {
+          headers: authH()
+        }).then(r => r.ok ? r.json() : null).then(d => {
+          if (!d) return;
+          setCfg(d);
+          if (d.configured) {
+            setPixelId(d.pixel_id || '');
+            setTestEventCode(d.test_event_code || '');
+            // Token o'zgaruvchisini bo'sh qoldiramiz — eski token DB'da saqlangan, qaytadan kiritmasdan saqlanmaydi
+          }
+        }).catch(() => {});
+      }, []);
+      const saveCapi = async () => {
+        if (!pixelId.trim()) return flash('❌ Pixel ID majburiy');
+        // Yangi ulashda token majburiy, mavjudni yangilashda token bo'sh bo'lsa — eskisi saqlanadi (lekin backend hozir bunga ruxsat bermaydi, shuning uchun majburiy)
+        if (!accessToken.trim()) return flash('❌ Access Token majburiy. Events Manager → Pixel → Settings → Generate');
+        setSaving(true);
+        try {
+          const r = await fetch('/api/integrations/meta-capi', {
+            method: 'PUT',
+            headers: authH(),
+            body: JSON.stringify({
+              pixel_id: pixelId.trim(),
+              access_token: accessToken.trim(),
+              test_event_code: testEventCode.trim() || null
+            })
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error || 'Saqlash xatosi');
+          const updated = {
+            ...configs,
+            meta_capi: {
+              pixel_id: pixelId.trim(),
+              _connected_at: new Date().toISOString()
+            }
+          };
+          setConfigs(updated);
+          localStorage.setItem('mizon_integrations', JSON.stringify(updated));
+          flash('✅ Meta CAPI sozlamalari saqlandi');
+          // Tokenni input'dan tozalaymiz va status'ni qaytadan yuklaymiz
+          setAccessToken('');
+          setShowToken(false);
+          const r2 = await fetch('/api/integrations/meta-capi', {
+            headers: authH()
+          });
+          if (r2.ok) setCfg(await r2.json());
+        } catch (e) {
+          flash('❌ ' + e.message);
+        }
+        setSaving(false);
+      };
+      const testCapi = async () => {
+        setTStat('loading');
+        try {
+          const r = await fetch('/api/integrations/meta-capi/test', {
+            method: 'POST',
+            headers: authH(),
+            body: JSON.stringify({})
+          });
+          const d = await r.json();
+          if (r.ok && d.success) {
+            setTStat({
+              ok: true,
+              msg: `✅ Meta qabul qildi (${d.events_received} event)`,
+              details: d
+            });
+          } else {
+            setTStat({
+              ok: false,
+              msg: '❌ ' + (d.error || 'Xato'),
+              details: d
+            });
+          }
+        } catch (e) {
+          setTStat({
+            ok: false,
+            msg: '❌ ' + e.message
+          });
+        }
+      };
+      const disconnectCapi = async () => {
+        if (!window.confirm('Meta CAPI sozlamalarini o\'chirib tashlaysizmi?')) return;
+        try {
+          await fetch('/api/integrations/meta-capi', {
+            method: 'DELETE',
+            headers: authH()
+          });
+          const upd = {
+            ...configs
+          };
+          delete upd.meta_capi;
+          setConfigs(upd);
+          localStorage.setItem('mizon_integrations', JSON.stringify(upd));
+          setCfg({
+            configured: false
+          });
+          setPixelId('');
+          setAccessToken('');
+          setTestEventCode('');
+          setTStat(null);
+          flash('✅ Meta CAPI o\'chirildi');
+        } catch (e) {
+          flash('❌ ' + e.message);
+        }
+      };
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: '20px 22px'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: '16px'
+        }
+      }, [{
+        n: 1,
+        title: 'Events Manager\'ni oching',
+        desc: 'business.facebook.com/events_manager2 → Pixel/Dataset tanlang yoki yarating'
+      }, {
+        n: 2,
+        title: 'Conversions API Access Token oling',
+        desc: 'Pixel → Settings → "Conversions API" bo\'limi → "Generate Access Token" — App Review kerak EMAS'
+      }, {
+        n: 3,
+        title: 'Pixel ID + Token\'ni quyiga kiriting va saqlang',
+        desc: 'CRM avtomatik ravishda Lead/Purchase eventlarini Meta\'ga server-tomondan yuboradi'
+      }].map(s => /*#__PURE__*/React.createElement("div", {
+        key: s.n,
+        style: {
+          display: 'flex',
+          gap: '11px',
+          marginBottom: '11px',
+          alignItems: 'flex-start'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          width: '22px',
+          height: '22px',
+          borderRadius: '50%',
+          background: CAPI,
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '11px',
+          fontWeight: 800,
+          flexShrink: 0
+        }
+      }, s.n), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontWeight: 700,
+          fontSize: '13px'
+        }
+      }, s.title), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '11px',
+          color: 'var(--text-muted)',
+          marginTop: '2px',
+          lineHeight: '1.5'
+        }
+      }, s.desc))))), cfg?.configured && /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: 'rgba(1,167,80,0.06)',
+          border: '1px solid rgba(1,167,80,0.25)',
+          borderRadius: '10px',
+          padding: '12px 14px',
+          marginBottom: '14px',
+          fontSize: '12px'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontWeight: 700,
+          color: '#01a750',
+          marginBottom: '4px'
+        }
+      }, "\u25CF Ulangan"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: 'var(--text-secondary)'
+        }
+      }, "Pixel ID: ", /*#__PURE__*/React.createElement("code", {
+        style: {
+          background: 'var(--surface-variant)',
+          padding: '1px 6px',
+          borderRadius: '4px'
+        }
+      }, cfg.pixel_id)), /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: 'var(--text-muted)',
+          fontSize: '11px',
+          marginTop: '3px'
+        }
+      }, "Token: ", cfg.access_token_masked), cfg.test_event_code && /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: 'var(--text-muted)',
+          fontSize: '11px',
+          marginTop: '3px'
+        }
+      }, "Test code: ", /*#__PURE__*/React.createElement("code", null, cfg.test_event_code))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: '12px'
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "label-sm"
+      }, "Pixel ID (Dataset ID) *"), /*#__PURE__*/React.createElement("input", {
+        className: "input-base",
+        type: "text",
+        placeholder: "1234567890123456",
+        value: pixelId,
+        onChange: e => setPixelId(e.target.value),
+        style: {
+          marginBottom: 0,
+          fontFamily: 'monospace'
+        }
+      })), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: '12px'
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "label-sm"
+      }, "Conversions API Access Token *"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: 'relative'
+        }
+      }, /*#__PURE__*/React.createElement("input", {
+        className: "input-base",
+        type: showToken ? 'text' : 'password',
+        placeholder: "EAABwzLjNMZBxxxxx...",
+        value: accessToken,
+        onChange: e => setAccessToken(e.target.value),
+        style: {
+          marginBottom: 0,
+          paddingRight: '40px',
+          fontFamily: 'monospace'
+        }
+      }), /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => setShowToken(v => !v),
+        style: {
+          position: 'absolute',
+          right: '8px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--text-muted)',
+          fontSize: '14px'
+        },
+        title: showToken ? 'Yashirish' : 'Ko\'rsatish'
+      }, showToken ? '🙈' : '👁')), cfg?.configured && !accessToken && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '10px',
+          color: 'var(--text-muted)',
+          marginTop: '4px'
+        }
+      }, "Token allaqachon saqlangan. O'zgartirish uchun yangisini kiriting.")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: '12px'
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        className: "label-sm"
+      }, "Test Event Code (ixtiyoriy \u2014 diagnostika uchun)"), /*#__PURE__*/React.createElement("input", {
+        className: "input-base",
+        type: "text",
+        placeholder: "TEST12345",
+        value: testEventCode,
+        onChange: e => setTestEventCode(e.target.value),
+        style: {
+          marginBottom: 0,
+          fontFamily: 'monospace'
+        }
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '10px',
+          color: 'var(--text-muted)',
+          marginTop: '3px'
+        }
+      }, "Events Manager \u2192 \"Test Events\" tabidan oling. Faqat sinov uchun!")), tStat && tStat !== 'loading' && /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: tStat.ok ? 'rgba(1,167,80,0.08)' : 'rgba(239,68,68,0.08)',
+          border: `1px solid ${tStat.ok ? 'rgba(1,167,80,0.3)' : 'rgba(239,68,68,0.3)'}`,
+          borderRadius: '8px',
+          padding: '10px 12px',
+          marginBottom: '12px',
+          fontSize: '12px'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontWeight: 700,
+          color: tStat.ok ? '#01a750' : '#ef4444'
+        }
+      }, tStat.msg), tStat.details?.fbtrace_id && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '10px',
+          color: 'var(--text-muted)',
+          marginTop: '4px',
+          fontFamily: 'monospace'
+        }
+      }, "fbtrace_id: ", tStat.details.fbtrace_id), tStat.details?.messages && tStat.details.messages.length > 0 && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: '10px',
+          color: 'var(--text-muted)',
+          marginTop: '4px'
+        }
+      }, tStat.details.messages.join(' • '))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: 'flex',
+          gap: '8px',
+          flexWrap: 'wrap',
+          marginTop: '16px'
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        style: {
+          flex: 1,
+          padding: '10px',
+          background: CAPI,
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: '13px',
+          fontWeight: 700,
+          cursor: 'pointer',
+          opacity: saving ? 0.7 : 1
+        },
+        disabled: saving,
+        onClick: saveCapi
+      }, saving ? '⏳ Saqlanmoqda...' : cfg?.configured ? '💾 Yangilash' : '✅ Saqlash'), cfg?.configured && /*#__PURE__*/React.createElement("button", {
+        onClick: testCapi,
+        disabled: tStat === 'loading',
+        style: {
+          padding: '10px 14px',
+          background: 'var(--surface-variant)',
+          border: '1px solid var(--outline-variant)',
+          color: 'var(--text-secondary)',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 600,
+          whiteSpace: 'nowrap'
+        }
+      }, tStat === 'loading' ? '⏳ Yuborilmoqda...' : '🧪 Test event'), cfg?.configured && /*#__PURE__*/React.createElement("button", {
+        style: {
+          padding: '10px 12px',
+          background: 'none',
+          border: '1px solid rgba(239,68,68,0.35)',
+          color: '#ef4444',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '12px',
+          fontWeight: 600
+        },
+        onClick: disconnectCapi
+      }, "Uzish")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginTop: '16px',
+          padding: '10px 12px',
+          background: 'rgba(24,119,242,0.05)',
+          border: '1px solid rgba(24,119,242,0.15)',
+          borderRadius: '8px',
+          fontSize: '11px',
+          color: 'var(--text-muted)',
+          lineHeight: '1.6'
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontWeight: 700,
+          color: CAPI,
+          marginBottom: '4px'
+        }
+      }, "\u2139\uFE0F Qachon eventlar yuboriladi?"), "Hozircha qo'lda Test orqali. Avtomatik triggerlar (lead WON \u2192 Purchase, lead yaratilganda \u2192 Lead) keyingi versiyada qo'shiladi. Yuboriluvchi PII (email/telefon) Meta talabiga ko'ra SHA-256 bilan hash qilinadi."));
+    };
+
     // ── Modal wrapper ───────────────────────────────────────
-    const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets';
+    const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets' || activeModal.key === 'meta_capi';
     const isFbIg = activeModal.key === 'facebook' || activeModal.key === 'instagram';
     return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -3745,7 +4135,7 @@ const IntegrationsModule = ({
         lineHeight: 1,
         padding: '4px'
       }
-    }, "\u2715")), activeModal.key === 'facebook' && /*#__PURE__*/React.createElement(FbOAuthFlow, null), activeModal.key === 'instagram' && /*#__PURE__*/React.createElement(IgOAuthFlow, null), activeModal.key === 'google_sheets' && /*#__PURE__*/React.createElement(SheetsFlow, null), !isCustomUI && /*#__PURE__*/React.createElement("div", {
+    }, "\u2715")), activeModal.key === 'facebook' && /*#__PURE__*/React.createElement(FbOAuthFlow, null), activeModal.key === 'instagram' && /*#__PURE__*/React.createElement(IgOAuthFlow, null), activeModal.key === 'google_sheets' && /*#__PURE__*/React.createElement(SheetsFlow, null), activeModal.key === 'meta_capi' && /*#__PURE__*/React.createElement(CapiFlow, null), !isCustomUI && /*#__PURE__*/React.createElement("div", {
       style: {
         padding: '20px 22px'
       }

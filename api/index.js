@@ -389,6 +389,7 @@ const companyController    = require('./controllers/companyController');
 const oauthController      = require('./controllers/oauthController');
 const automationCtrl       = require('./controllers/automationController');
 const billingController    = require('./controllers/billingController');
+const metaCapiController   = require('./controllers/metaCapiController');
 
 // leadController va webhookController ga runTrigger uzatish
 leadController._setAutomation(automationCtrl.runTrigger);
@@ -638,6 +639,13 @@ app.delete('/api/integrations/id/:id', async (req, res) => {
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+// ── Meta CAPI (Conversions API) ─────────────────────────────────────────────
+app.get   ('/api/integrations/meta-capi',       metaCapiController.getConfig);
+app.put   ('/api/integrations/meta-capi',       metaCapiController.saveConfig);
+app.delete('/api/integrations/meta-capi',       metaCapiController.deleteConfig);
+app.post  ('/api/integrations/meta-capi/test',  metaCapiController.testEvent);
+app.post  ('/api/integrations/meta-capi/send',  metaCapiController.sendEvent);
 
 // DELETE /api/integrations/:platform — disconnect ALL of a platform
 app.delete('/api/integrations/:platform', async (req, res) => {
