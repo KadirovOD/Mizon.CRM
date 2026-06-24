@@ -839,8 +839,23 @@ app.post('/api/public/leads', async (req, res) => {
       ]
     );
 
-    console.log(`🌐 Tashqi forma lead: "${name}" → company=${company_slug} id=${newLead.rows[0].id}`);
-    res.status(201).json({ success: true, id: newLead.rows[0].id });
+    const newId = newLead.rows[0].id;
+    console.log(`🌐 Tashqi forma lead: "${name}" → company=${company_slug} id=${newId}`);
+
+    // Meta CAPI — Tashqi forma orqali kelgan lead. Eng muhim CAPI nuqtasi:
+    // Facebook Ads ROI shu yerdan hisoblanadi (server-side, ad-blockerlardan o'tib).
+    metaCapiController._send(req.db, cid, 'Lead', {
+      id: newId,
+      name: name.trim(),
+      email,
+      phone,
+    }, {
+      event_id: `form_lead_${newId}`,
+      value: 0,
+      currency: 'UZS',
+    }).catch(e => console.error('[CAPI] Public form Lead event failed:', e.message));
+
+    res.status(201).json({ success: true, id: newId });
   } catch (err) {
     console.error('Public lead error:', err.message);
     res.status(500).json({ error: 'Server xatosi' });

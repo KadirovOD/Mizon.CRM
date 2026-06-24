@@ -4,6 +4,9 @@ let _runTrigger = null;
 exports._setAutomation = (fn) => { _runTrigger = fn; };
 const runTrigger = (...args) => { if (_runTrigger) _runTrigger(...args); };
 
+// Meta Conversions API — avtomatik server-side event yuborish (lead_created → Lead, WON → Purchase)
+const metaCapi = require('./metaCapiController');
+
 // GET /api/leads — fetch all leads with stage data (company_id filtered)
 exports.getLeads = async (req, res) => {
   if (!req.db) return res.json({ success: true, leads: [], stages: [], mode: 'demo' });
@@ -107,6 +110,19 @@ exports.createLead = async (req, res) => {
     );
     const lead = newLead.rows[0];
     runTrigger(req.db, 'lead_created', lead, {});
+
+    // Meta CAPI — fire-and-forget Lead event (lead saqlash bloklanmasin)
+    metaCapi._send(req.db, cid, 'Lead', {
+      id: lead.id,
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+    }, {
+      event_id: `lead_${lead.id}`,
+      value: 0,
+      currency: 'UZS',
+    }).catch(e => console.error('[CAPI] Lead event failed:', e.message));
+
     res.status(201).json({ success: true, lead });
   } catch (err) {
     console.error('createLead error:', err.message);
@@ -126,6 +142,18 @@ exports.updateLeadFull = async (req, res) => {
   } = req.body;
 
   try {
+    // OLDIN: eski bosqichning is_won qiymatini olamiz (WON transition aniqlash uchun)
+    let oldIsWon = false;
+    if (status && !isNaN(parseInt(status))) {
+      const before = await req.db.query(
+        `SELECT s.is_won
+           FROM crm_lead l LEFT JOIN crm_stage s ON l.stage_id=s.id
+          WHERE l.id=$1 AND l.company_id=$2`,
+        [id, cid]
+      );
+      oldIsWon = !!before.rows[0]?.is_won;
+    }
+
     const updated = await req.db.query(
       `UPDATE crm_lead
        SET name = COALESCE($1, name),
@@ -158,9 +186,33 @@ exports.updateLeadFull = async (req, res) => {
     const updLead = updated.rows[0];
     // Bosqich o'zgargan bo'lsa trigger
     if (status && !isNaN(parseInt(status))) {
-      const stageRow = await req.db.query('SELECT name FROM crm_stage WHERE id=$1', [parseInt(status)]);
+      const stageRow = await req.db.query('SELECT name, is_won FROM crm_stage WHERE id=$1', [parseInt(status)]);
       const stageName = stageRow.rows[0]?.name || '';
+      const newIsWon  = !!stageRow.rows[0]?.is_won;
       runTrigger(req.db, 'stage_changed', updLead, { stageId: parseInt(status), stageName });
+
+      // Meta CAPI — WON ga o'tdimi? (faqat bir marta, transition'da)
+      if (!oldIsWon && newIsWon) {
+        // Deal qiymatini custom_data ichidan topishga harakat qilamiz
+        const cd = updLead.custom_data || {};
+        const dealValue =
+          Number(cd.deal_amount) ||
+          Number(cd.amount)      ||
+          Number(cd.value)       ||
+          Number(cd.summa)       ||
+          Number(cd.price)       || 0;
+
+        metaCapi._send(req.db, cid, 'Purchase', {
+          id: updLead.id,
+          name: updLead.name,
+          email: updLead.email,
+          phone: updLead.phone,
+        }, {
+          event_id: `purchase_${updLead.id}`,
+          value: dealValue,
+          currency: 'UZS',
+        }).catch(e => console.error('[CAPI] Purchase event failed:', e.message));
+      }
     }
     res.json({ success: true, lead: updLead });
   } catch (err) {
