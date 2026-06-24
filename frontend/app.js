@@ -13509,7 +13509,29 @@ const App = () => {
     className: "lead-panel-body"
   }, /*#__PURE__*/React.createElement("div", {
     className: "lead-profile-col"
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "label-sm"
+  }, "Varonka bosqichi"), role === 'WATCHER' ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '8px 12px',
+      marginBottom: '18px',
+      fontSize: '12px',
+      color: 'var(--text-secondary)',
+      background: 'var(--bg-hover)',
+      borderRadius: '8px',
+      border: '1px solid var(--border-light)'
+    }
+  }, columnsMap[selectedLeadData.pipelineId]?.find(c => c.id === selectedLeadData.status)?.title || selectedLeadData.status) : /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: '18px'
+    },
+    value: selectedLeadData.status,
+    onChange: e => handleStatusChange(selectedLeadData.id, e.target.value)
+  }, columnsMap[selectedLeadData.pipelineId]?.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c.id,
+    value: c.id
+  }, c.title))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       justifyContent: 'space-between',
@@ -13783,25 +13805,7 @@ const App = () => {
   }, /*#__PURE__*/React.createElement(Ico, {
     n: "phone",
     s: 14
-  }), " Qo'ng'iroq (", selectedLeadData.actualCallAttempts, " / ", globalCallLimit, ")"), /*#__PURE__*/React.createElement("span", {
-    className: "label-sm"
-  }, "Bosqich"), role === 'WATCHER' ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: '8px 12px',
-      fontSize: '12px',
-      color: 'var(--text-secondary)',
-      background: 'var(--bg-hover)',
-      borderRadius: '8px',
-      border: '1px solid var(--border-light)'
-    }
-  }, columnsMap[selectedLeadData.pipelineId]?.find(c => c.id === selectedLeadData.status)?.title || selectedLeadData.status) : /*#__PURE__*/React.createElement("select", {
-    className: "input-base",
-    value: selectedLeadData.status,
-    onChange: e => handleStatusChange(selectedLeadData.id, e.target.value)
-  }, columnsMap[selectedLeadData.pipelineId]?.map(c => /*#__PURE__*/React.createElement("option", {
-    key: c.id,
-    value: c.id
-  }, c.title)))), /*#__PURE__*/React.createElement("div", {
+  }), " Qo'ng'iroq (", selectedLeadData.actualCallAttempts, " / ", globalCallLimit, ")")), /*#__PURE__*/React.createElement("div", {
     className: "lead-chat-col"
   }, /*#__PURE__*/React.createElement("div", {
     className: "operator-bar"
@@ -13831,6 +13835,14 @@ const App = () => {
   }), " Mas'ul: ", selectedLeadData.owner)), /*#__PURE__*/React.createElement("div", {
     className: "chat-logs-area"
   }, selectedLeadData.chatLogs.map((log, idx) => {
+    // Sana + vaqt (chat oynasidagi har bir element uchun yagona format)
+    const dt = log.date ? new Date(log.date).toLocaleString('uz-UZ', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }) : '';
     // ---- VoIP call log ----
     if (log.type === 'call') {
       const isCalling = log.status === 'calling';
@@ -13896,7 +13908,7 @@ const App = () => {
           alignItems: 'center',
           gap: '6px'
         }
-      }, /*#__PURE__*/React.createElement("span", null, new Date(log.date).toLocaleTimeString(), dur), isCalling && /*#__PURE__*/React.createElement("span", {
+      }, /*#__PURE__*/React.createElement("span", null, dt, dur), isCalling && /*#__PURE__*/React.createElement("span", {
         style: {
           color: 'var(--primary)',
           animation: 'callPulse 1s infinite'
@@ -13971,7 +13983,7 @@ const App = () => {
           whiteSpace: 'nowrap',
           flexShrink: 0
         }
-      }, new Date(log.date).toLocaleTimeString()));
+      }, dt));
     }
     // ---- Vazifa karta (sys + isTask) ----
     const isTaskLog = log.type === 'sys' && (log.isTask || log.text && (log.text.startsWith('📌') || log.text.includes('Vazifa ochildi') || log.text.includes('Vazifa belgilandi')));
@@ -14033,7 +14045,7 @@ const App = () => {
           color: 'var(--primary)',
           fontWeight: 600
         }
-      }, log.by, " \xB7 "), new Date(log.date).toLocaleTimeString())), (() => {
+      }, log.by, " \xB7 "), dt)), (() => {
         const desc = log.description !== undefined ? log.description : log.text.replace(/^📌 Vazifa:\s*"?/, '').replace(/"?\s*→.*$/, '').trim();
         return desc ? /*#__PURE__*/React.createElement("div", {
           style: {
@@ -14167,7 +14179,7 @@ const App = () => {
           color: 'var(--primary)',
           fontWeight: 600
         }
-      }, log.by, " \xB7 "), new Date(log.date).toLocaleTimeString())), completionNote ? /*#__PURE__*/React.createElement("div", {
+      }, log.by, " \xB7 "), dt)), completionNote ? /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: '12px',
           color: 'var(--text-main)',
@@ -14207,7 +14219,7 @@ const App = () => {
         color: 'var(--primary)',
         fontWeight: 600
       }
-    }, log.by, " \xB7 "), new Date(log.date).toLocaleTimeString()));
+    }, log.by, " \xB7 "), dt));
     // ---- Telegram / Instagram message ----
     if (log.type === 'telegram' || log.type === 'instagram') {
       const icon = log.type === 'telegram' ? '✈️' : '📸';
@@ -14227,13 +14239,21 @@ const App = () => {
           fontSize: '10px',
           color: 'var(--text-muted)'
         }
-      }, new Date(log.date).toLocaleTimeString()));
+      }, dt));
     }
     // ---- Chat message ----
     return /*#__PURE__*/React.createElement("div", {
       key: idx,
       className: `msg-bubble ${log.dir === 'in' ? 'msg-in' : 'msg-out'}`
-    }, log.text);
+    }, /*#__PURE__*/React.createElement("div", null, log.text), dt && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: '10px',
+        color: 'var(--text-muted)',
+        marginTop: '3px',
+        textAlign: 'right',
+        opacity: 0.7
+      }
+    }, dt));
   })), role !== 'WATCHER' && /*#__PURE__*/React.createElement("div", {
     style: {
       borderTop: '1px solid var(--outline-variant)',

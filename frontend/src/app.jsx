@@ -6095,6 +6095,18 @@
                   <div className="lead-panel-body">
                     {/* PROFILE COLUMN */}
                     <div className="lead-profile-col">
+                      {/* ── Varonka bosqichi (eng yuqorida, tezroq o'zgartirish uchun) ── */}
+                      <span className="label-sm">Varonka bosqichi</span>
+                      {role === 'WATCHER' ? (
+                        <div style={{padding:'8px 12px', marginBottom:'18px', fontSize:'12px', color:'var(--text-secondary)', background:'var(--bg-hover)', borderRadius:'8px', border:'1px solid var(--border-light)'}}>
+                          {columnsMap[selectedLeadData.pipelineId]?.find(c=>c.id===selectedLeadData.status)?.title || selectedLeadData.status}
+                        </div>
+                      ) : (
+                        <select className="input-base" style={{marginBottom:'18px'}} value={selectedLeadData.status} onChange={e=>handleStatusChange(selectedLeadData.id, e.target.value)}>
+                          {columnsMap[selectedLeadData.pipelineId]?.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}
+                        </select>
+                      )}
+
                       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px'}}>
                         <span className="label-sm" style={{marginBottom:0}}>Mijoz ma'lumotlari</span>
                         {role !== 'WATCHER' && (
@@ -6208,16 +6220,6 @@
                         </button>
                       )}
 
-                      <span className="label-sm">Bosqich</span>
-                      {role === 'WATCHER' ? (
-                        <div style={{padding:'8px 12px', fontSize:'12px', color:'var(--text-secondary)', background:'var(--bg-hover)', borderRadius:'8px', border:'1px solid var(--border-light)'}}>
-                          {columnsMap[selectedLeadData.pipelineId]?.find(c=>c.id===selectedLeadData.status)?.title || selectedLeadData.status}
-                        </div>
-                      ) : (
-                        <select className="input-base" value={selectedLeadData.status} onChange={e=>handleStatusChange(selectedLeadData.id, e.target.value)}>
-                          {columnsMap[selectedLeadData.pipelineId]?.map(c=><option key={c.id} value={c.id}>{c.title}</option>)}
-                        </select>
-                      )}
                     </div>
 
                     {/* CHAT COLUMN */}
@@ -6235,6 +6237,8 @@
                       </div>
                       <div className="chat-logs-area">
                         {selectedLeadData.chatLogs.map((log, idx) => {
+                          // Sana + vaqt (chat oynasidagi har bir element uchun yagona format)
+                          const dt = log.date ? new Date(log.date).toLocaleString('uz-UZ', {day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
                           // ---- VoIP call log ----
                           if (log.type === 'call') {
                             const isCalling  = log.status === 'calling';
@@ -6258,7 +6262,7 @@
                                     <div style={{flex:1, minWidth:0}}>
                                       <div style={{fontSize:'12px', fontWeight:600, color:'var(--text-main)', lineHeight:1.35, wordBreak:'break-word'}}>{cleanText}</div>
                                       <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px', display:'flex', alignItems:'center', gap:'6px'}}>
-                                        <span>{new Date(log.date).toLocaleTimeString()}{dur}</span>
+                                        <span>{dt}{dur}</span>
                                         {isCalling && <span style={{color:'var(--primary)', animation:'callPulse 1s infinite'}}>● Jonli qo'ng'iroq...</span>}
                                         {hasRecord && <span style={{color:'var(--success)'}}>● Yozuv mavjud</span>}
                                       </div>
@@ -6288,7 +6292,7 @@
                                 <span style={{color:'var(--text-muted)'}}>
                                   ✏️ <span style={{color:'var(--primary)', fontWeight:600}}>{by}</span>: {details.replace(/ \| /g, ' · ')}
                                 </span>
-                                <span style={{fontSize:'10px', color:'var(--text-muted)', whiteSpace:'nowrap', flexShrink:0}}>{new Date(log.date).toLocaleTimeString()}</span>
+                                <span style={{fontSize:'10px', color:'var(--text-muted)', whiteSpace:'nowrap', flexShrink:0}}>{dt}</span>
                               </div>
                             );
                           }
@@ -6311,7 +6315,7 @@
                                       <div style={{fontSize:'11px', fontWeight:700, color:'#f59e0b'}}>Vazifa belgilandi</div>
                                       <span style={{fontSize:'10px', color:'var(--text-muted)', whiteSpace:'nowrap', flexShrink:0}}>
                                         {log.by && <span style={{color:'var(--primary)', fontWeight:600}}>{log.by} · </span>}
-                                        {new Date(log.date).toLocaleTimeString()}
+                                        {dt}
                                       </span>
                                     </div>
                                     {(() => {
@@ -6365,7 +6369,7 @@
                                       <div style={{fontSize:'11px',fontWeight:700,color:'#01a750'}}>Vazifa yakunlandi</div>
                                       <span style={{fontSize:'10px',color:'var(--text-muted)',whiteSpace:'nowrap',flexShrink:0}}>
                                         {log.by && <span style={{color:'var(--primary)',fontWeight:600}}>{log.by} · </span>}
-                                        {new Date(log.date).toLocaleTimeString()}
+                                        {dt}
                                       </span>
                                     </div>
                                     {completionNote ? (
@@ -6384,7 +6388,7 @@
                               <span>{log.text}</span>
                               <span style={{fontSize:'10px', color:'var(--text-muted)', whiteSpace:'nowrap', flexShrink:0}}>
                                 {log.by && <span style={{color:'var(--primary)', fontWeight:600}}>{log.by} · </span>}
-                                {new Date(log.date).toLocaleTimeString()}
+                                {dt}
                               </span>
                             </div>
                           );
@@ -6393,12 +6397,17 @@
                             const icon = log.type === 'telegram' ? '✈️' : '📸';
                             return (
                               <div key={idx} className="sys-log" style={{background:'rgba(0,136,204,0.06)', border:'1px solid rgba(0,136,204,0.15)', borderRadius:'6px', padding:'5px 10px', textAlign:'left'}}>
-                                {icon} {log.text} <span style={{float:'right', fontSize:'10px', color:'var(--text-muted)'}}>{new Date(log.date).toLocaleTimeString()}</span>
+                                {icon} {log.text} <span style={{float:'right', fontSize:'10px', color:'var(--text-muted)'}}>{dt}</span>
                               </div>
                             );
                           }
                           // ---- Chat message ----
-                          return <div key={idx} className={`msg-bubble ${log.dir==='in'?'msg-in':'msg-out'}`}>{log.text}</div>;
+                          return (
+                            <div key={idx} className={`msg-bubble ${log.dir==='in'?'msg-in':'msg-out'}`}>
+                              <div>{log.text}</div>
+                              {dt && <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'3px', textAlign:'right', opacity:0.7}}>{dt}</div>}
+                            </div>
+                          );
                         })}
                       </div>
                       {role !== 'WATCHER' && (
