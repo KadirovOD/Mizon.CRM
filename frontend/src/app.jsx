@@ -4526,6 +4526,109 @@
       );
     };
 
+    // ===== PUBLIC LEAD FORM (alohida komponent — App ichidagi conditional hook'lardan qutilish uchun) =====
+    const PublicLeadFormView = ({ companySlug, formPipeId }) => {
+      const [extFormData, setExtFormData] = useState({});
+      const [extSubmitted, setExtSubmitted] = useState(false);
+      const [extCompanyInfo, setExtCompanyInfo] = useState(null);
+      const [extError, setExtError] = useState('');
+      const [extSending, setExtSending] = useState(false);
+      const [formFields] = useState(() => {
+        const s = localStorage.getItem('mizon_formFields');
+        return s ? JSON.parse(s) : [
+          {id:'f1', label:'Ism va Familiya', key:'name', type:'text', required:true, placeholder:'Abdulla Qodiriy...'},
+          {id:'f2', label:'Telefon raqam', key:'phone', type:'tel', required:true, placeholder:'+998 90 123 45 67'},
+          {id:'f3', label:'Manzil', key:'region', type:'text', required:false, placeholder:'Toshkent shahri...'},
+        ];
+      });
+
+      useEffect(() => {
+        const slug = companySlug || new URLSearchParams(window.location.search).get('company') || '';
+        if (!slug) return;
+        fetch(`/api/company/info?slug=${encodeURIComponent(slug)}`)
+          .then(r=>r.json()).then(d=>{ if(d.found) setExtCompanyInfo(d); }).catch(()=>{});
+      }, [companySlug]);
+
+      const extTitle    = extCompanyInfo?.form_title    || extCompanyInfo?.name || "Ro'yxatdan o'tish";
+      const extSubtitle = extCompanyInfo?.form_subtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz.";
+      const companyName = extCompanyInfo?.name || '';
+
+      const handleExtSubmit = async (e) => {
+        e.preventDefault();
+        setExtError('');
+        const nameField = formFields.find(f=>f.key==='name');
+        const phoneField = formFields.find(f=>f.key==='phone');
+        if(nameField && nameField.required && !extFormData.name) return alert("Ismingizni kiriting!");
+        if(phoneField && phoneField.required && !extFormData.phone) return alert("Telefon raqamni kiriting!");
+        const extraInfo = formFields
+          .filter(f=>!['name','phone','region','email'].includes(f.key))
+          .map(f=>`${f.label}: ${extFormData[f.key]||'-'}`).join(' | ');
+        const slug = companySlug || new URLSearchParams(window.location.search).get('company') || '';
+        if (!slug) { setExtError("Havola noto'g'ri: kompaniya aniqlanmadi."); return; }
+        setExtSending(true);
+        try {
+          const r = await fetch('/api/public/leads', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({
+              company_slug: slug,
+              name:  extFormData.name  || "Noma'lum",
+              phone: extFormData.phone || '',
+              email: extFormData.email || null,
+              region: extFormData.region || 'Veb-Sayt',
+              source: 'website',
+              pipelineId: formPipeId || 'p1',
+              extra: extraInfo,
+            })
+          });
+          if (!r.ok) {
+            const d = await r.json().catch(()=>({error:'Server xatosi'}));
+            setExtError(d.error || `Xato: ${r.status}`);
+            setExtSending(false);
+            return;
+          }
+          setExtSubmitted(true);
+        } catch(err) {
+          setExtError('Tarmoq xatosi: ' + err.message);
+        }
+        setExtSending(false);
+      };
+
+      if (extSubmitted) return (
+        <div className="login-overlay">
+          <div className="login-box" style={{maxWidth:'440px', textAlign:'center'}}>
+            <div style={{fontSize:'48px', marginBottom:'16px'}}>✅</div>
+            <h2 style={{fontSize:'22px', marginBottom:'8px', fontWeight:800}}>Rahmat!</h2>
+            <p style={{color:'var(--text-muted)', fontSize:'14px', lineHeight:'1.6'}}>Arizangiz qabul qilindi. {companyName?`${companyName} jamoasi `:''} tez orada siz bilan bog'lanadi.</p>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="login-overlay" style={{alignItems:'flex-start', paddingTop:'60px'}}>
+          <form className="login-box" style={{maxWidth:'480px', width:'100%'}} onSubmit={handleExtSubmit}>
+            {companyName && <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'8px', textAlign:'center', letterSpacing:'0.05em', textTransform:'uppercase', fontWeight:600}}>{companyName}</div>}
+            <h2 style={{fontSize:'24px', marginBottom:'8px', fontWeight:800, textAlign:'center'}}>{extTitle}</h2>
+            <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'13px', textAlign:'center', lineHeight:'1.6'}}>{extSubtitle}</p>
+            {formFields.map(f => (
+              <div key={f.id}>
+                <span className="label-sm">{f.label}{f.required?' *':''}</span>
+                <input className="input-base" type={f.type||'text'} placeholder={f.placeholder||''} value={extFormData[f.key]||''} onChange={e=>setExtFormData({...extFormData,[f.key]:e.target.value})} />
+              </div>
+            ))}
+            {extError && (
+              <div style={{padding:'10px 14px',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'8px',color:'#ef4444',fontSize:'13px',marginTop:'8px'}}>
+                ❌ {extError}
+              </div>
+            )}
+            <button className="btn-primary" style={{width:'100%', marginTop:'16px', padding:'14px', fontSize:'15px'}} type="submit" disabled={extSending}>
+              {extSending ? 'Yuborilmoqda...' : "Arizani Jo'natish →"}
+            </button>
+          </form>
+        </div>
+      );
+    };
+
     // ===== APP =====
     const App = () => {
       const urlParams = new URLSearchParams(window.location.search);
@@ -4545,6 +4648,9 @@
         return urlParams.get('company') || '';
       })();
       const isSuperAdminMode = urlParams.get('superadmin') === 'true';
+
+      // ── Public form mode — App hook'larini chaqirmaymiz (Rules of Hooks: early return BEFORE all hooks) ──
+      if (isFormMode) return <PublicLeadFormView companySlug={companySlug} formPipeId={formPipeId} />;
 
       // ── Auth state ───────────────────────────────────────────────
       const [users, setUsers] = useState([]); // API dan yuklanadi (login dan keyin)
@@ -4952,101 +5058,7 @@
       const [filterSla,    setFilterSla]    = useState('all');
       const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
 
-      // isFormMode — tashqi forma
-      if(isFormMode) {
-        const [extFormData, setExtFormData] = useState({});
-        const [extSubmitted, setExtSubmitted] = useState(false);
-        // Kompaniya ma'lumotlarini URL dagi slug yoki subdomain orqali yuklash
-        const [extCompanyInfo, setExtCompanyInfo] = useState(null);
-        useEffect(() => {
-          const slug = companySlug || new URLSearchParams(window.location.search).get('company') || '';
-          if (!slug) return;
-          fetch(`/api/company/info?slug=${encodeURIComponent(slug)}`)
-            .then(r=>r.json()).then(d=>{ if(d.found) setExtCompanyInfo(d); }).catch(()=>{});
-        }, []);
-
-        const extTitle    = extCompanyInfo?.form_title    || extCompanyInfo?.name || "Ro'yxatdan o'tish";
-        const extSubtitle = extCompanyInfo?.form_subtitle || "Ma'lumotlaringizni qoldiring, tez orada aloqaga chiqamiz.";
-        const companyName = extCompanyInfo?.name || '';
-
-        const [extError, setExtError] = useState('');
-        const [extSending, setExtSending] = useState(false);
-
-        const handleExtSubmit = async (e) => {
-          e.preventDefault();
-          setExtError('');
-          const nameField = formFields.find(f=>f.key==='name');
-          const phoneField = formFields.find(f=>f.key==='phone');
-          if(nameField && nameField.required && !extFormData.name) return alert("Ismingizni kiriting!");
-          if(phoneField && phoneField.required && !extFormData.phone) return alert("Telefon raqamni kiriting!");
-          const extraInfo = formFields
-            .filter(f=>!['name','phone','region','email'].includes(f.key))
-            .map(f=>`${f.label}: ${extFormData[f.key]||'-'}`).join(' | ');
-          const slug = companySlug || new URLSearchParams(window.location.search).get('company') || '';
-          if (!slug) { setExtError("Havola noto'g'ri: kompaniya aniqlanmadi."); return; }
-          setExtSending(true);
-          try {
-            const r = await fetch('/api/public/leads', {
-              method:'POST',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({
-                company_slug: slug,
-                name:  extFormData.name  || "Noma'lum",
-                phone: extFormData.phone || '',
-                email: extFormData.email || null,
-                region: extFormData.region || 'Veb-Sayt',
-                source: 'website',
-                pipelineId: formPipeId || 'p1',
-                extra: extraInfo,
-              })
-            });
-            if (!r.ok) {
-              const d = await r.json().catch(()=>({error:'Server xatosi'}));
-              setExtError(d.error || `Xato: ${r.status}`);
-              setExtSending(false);
-              return;
-            }
-            setExtSubmitted(true);
-          } catch(err) {
-            setExtError('Tarmoq xatosi: ' + err.message);
-          }
-          setExtSending(false);
-        };
-
-        if (extSubmitted) return (
-          <div className="login-overlay">
-            <div className="login-box" style={{maxWidth:'440px', textAlign:'center'}}>
-              <div style={{fontSize:'48px', marginBottom:'16px'}}>✅</div>
-              <h2 style={{fontSize:'22px', marginBottom:'8px', fontWeight:800}}>Rahmat!</h2>
-              <p style={{color:'var(--text-muted)', fontSize:'14px', lineHeight:'1.6'}}>Arizangiz qabul qilindi. {companyName?`${companyName} jamoasi `:''} tez orada siz bilan bog'lanadi.</p>
-            </div>
-          </div>
-        );
-
-        return (
-          <div className="login-overlay" style={{alignItems:'flex-start', paddingTop:'60px'}}>
-            <form className="login-box" style={{maxWidth:'480px', width:'100%'}} onSubmit={handleExtSubmit}>
-              {companyName && <div style={{fontSize:'11px', color:'var(--text-muted)', marginBottom:'8px', textAlign:'center', letterSpacing:'0.05em', textTransform:'uppercase', fontWeight:600}}>{companyName}</div>}
-              <h2 style={{fontSize:'24px', marginBottom:'8px', fontWeight:800, textAlign:'center'}}>{extTitle}</h2>
-              <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'13px', textAlign:'center', lineHeight:'1.6'}}>{extSubtitle}</p>
-              {formFields.map(f => (
-                <div key={f.id}>
-                  <span className="label-sm">{f.label}{f.required?' *':''}</span>
-                  <input className="input-base" type={f.type||'text'} placeholder={f.placeholder||''} value={extFormData[f.key]||''} onChange={e=>setExtFormData({...extFormData,[f.key]:e.target.value})} />
-                </div>
-              ))}
-              {extError && (
-                <div style={{padding:'10px 14px',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'8px',color:'#ef4444',fontSize:'13px',marginTop:'8px'}}>
-                  ❌ {extError}
-                </div>
-              )}
-              <button className="btn-primary" style={{width:'100%', marginTop:'16px', padding:'14px', fontSize:'15px'}} type="submit" disabled={extSending}>
-                {extSending ? 'Yuborilmoqda...' : "Arizani Jo'natish →"}
-              </button>
-            </form>
-          </div>
-        );
-      }
+      // Note: isFormMode endi PublicLeadFormView komponentida — yuqorida early return qilingan.
 
       const [, setTick] = useState(0);
       useEffect(() => { const iv = setInterval(()=>setTick(t=>t+1), 60000); return ()=>clearInterval(iv); }, []);
@@ -5209,80 +5221,9 @@
         } finally { setLoginLoading(false); }
       };
 
-      if(!authUser) {
-        const loginTitle   = isSuperAdminMode ? 'MIZON SUPER ADMIN' : (companyInfo?.name || 'MIZON CRM');
-        const loginSubtitle = isSuperAdminMode
-          ? 'Platforma boshqaruvi. Faqat vakolatli foydalanuvchilar.'
-          : companyInfo?.name
-            ? `${companyInfo.name} — CRM tizimiga xush kelibsiz`
-            : 'Tizimga kirish uchun xodim ruxsatnomasini kiriting.';
-        const logoLetter = isSuperAdminMode ? 'S' : (companyInfo?.name?.[0]?.toUpperCase() || 'M');
-        const logoBg     = isSuperAdminMode ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'var(--primary-container)';
-        return (
-          <div className="login-overlay">
-            <form onSubmit={handleLogin} className="login-box">
-              <div style={{width:'52px', height:'52px', background:logoBg, borderRadius:'14px', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px', boxShadow:'0 0 28px rgba(1,167,80,0.25)'}}>
-                <span style={{fontSize:'22px', fontWeight:800, color:'#fff', fontFamily:'var(--font-label)'}}>{logoLetter}</span>
-              </div>
-              <h1 style={{fontSize:'24px', marginBottom:'5px', fontWeight:800, letterSpacing:'-0.6px'}}>{loginTitle}</h1>
-              <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'12px', lineHeight:1.5}}>{loginSubtitle}</p>
-              {/* Lockout banner */}
-              {loginLock && loginLock.secsLeft > 0 && (
-                <div style={{background:'rgba(239,68,68,0.08)', border:'2px solid rgba(239,68,68,0.4)', color:'#ef4444', borderRadius:'10px', padding:'14px 16px', fontSize:'13px', marginBottom:'14px', textAlign:'center'}}>
-                  <div style={{fontSize:'26px', marginBottom:'6px'}}>🔒</div>
-                  <div style={{fontWeight:700, marginBottom:'4px'}}>Kirish vaqtincha bloklandi</div>
-                  <div style={{fontSize:'20px', fontWeight:800, fontVariantNumeric:'tabular-nums', letterSpacing:'0.04em', margin:'6px 0'}}>
-                    {String(Math.floor(loginLock.secsLeft/60)).padStart(2,'0')}:{String(loginLock.secsLeft%60).padStart(2,'0')}
-                  </div>
-                  <div style={{fontSize:'11px', opacity:0.8}}>Blok tugagach qayta urinib ko'ring</div>
-                </div>
-              )}
-              {loginError && !loginLock && (
-                <div style={{background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', marginBottom:'14px'}}>
-                  {loginError}
-                </div>
-              )}
-              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Email yoki login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus disabled={!!(loginLock && loginLock.secsLeft > 0)} />
-              <div style={{position:'relative', marginBottom:'0'}}>
-                <input className="input-base" type={showLoginPass ? 'text' : 'password'} placeholder="Parol" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} disabled={!!(loginLock && loginLock.secsLeft > 0)} style={{marginBottom:0, paddingRight:'40px'}} />
-                <button type="button" onClick={()=>setShowLoginPass(p=>!p)} tabIndex={-1}
-                  style={{position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', padding:'4px', color:'var(--text-muted)', display:'flex', alignItems:'center', lineHeight:1}}>
-                  <span className="material-symbols-outlined" style={{fontSize:'18px', userSelect:'none'}}>
-                    {showLoginPass ? 'visibility_off' : 'visibility'}
-                  </span>
-                </button>
-              </div>
-              <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px', opacity:(loginLoading||(loginLock&&loginLock.secsLeft>0))?0.5:1}} type="submit" disabled={loginLoading||(loginLock&&loginLock.secsLeft>0)}>
-                {loginLoading ? 'Tekshirilmoqda...' : (loginLock&&loginLock.secsLeft>0 ? `🔒 Bloklangan (${Math.ceil(loginLock.secsLeft/60)} daq)` : 'Tizimga Kirish')}
-              </button>
-              {!isSuperAdminMode && (
-                <div style={{marginTop:'16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
-                  {companySlug
-                    ? <span>🌐 <b style={{color:'var(--primary)'}}>{companySlug}.mizon-crm.uz</b></span>
-                    : <span>💡 Email yoki login va parolni kiriting</span>
-                  }
-                </div>
-              )}
-            </form>
-          </div>
-        );
-      }
-
-      const role = authUser.role;
-
-      // ── Super Admin — full-screen panel ──────────────────────────
-      if (role === 'SUPERADMIN') return <SuperAdminPanel authUser={authUser} onLogout={() => {
-        clearCompanyCache();
-        setAuthUser(null);
-        localStorage.removeItem('mizon_session');
-        localStorage.removeItem('mizon_token');
-      }} />;
-
-      const activeColumns = columnsMap[activePipe] || [];
-      const activeLeads = leads.filter(l => l.pipelineId === activePipe);
-      const selectedLeadData = leads.find(l => l.id == selectedLeadId);
-
       // ── Bildirishnoma yordamchi funksiyalari ─────────────────────────────────
+      // MUHIM: barcha hook'lar (useCallback, useEffect) `if(!authUser)` va `if(role==='SUPERADMIN')`
+      // early return'laridan OLDIN chaqirilishi shart — aks holda React #310 (hook count mismatch).
       const _notifTypes = { sla_danger:'🔴', sla_warning:'🟡', new_lead:'🆕', stage_changed:'🔄', call_limit:'📵', call_logged:'📞', voip_incoming:'📲', ext_lead:'🌐', task_assigned:'📌', billing:'💳' };
       const notifIcon = (type) => _notifTypes[type] || '🔔';
       const timeAgo   = (iso)  => {
@@ -5310,6 +5251,23 @@
       }, []);
       // reloadLeadsFromApi addNotif'ni ref orqali chaqirsin (closure muammosini chetlab o'tish)
       React.useEffect(() => { addNotifRef.current = addNotif; }, [addNotif]);
+
+      // Bildirishnoma ovozi (qisqa "ding")
+      const playNotifSound = () => {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.5);
+        } catch(e) {}
+      };
 
       // ── Obuna muddati tugashi haqida bildirishnoma (faqat CEO uchun) ─────────
       React.useEffect(() => {
@@ -5349,23 +5307,6 @@
           })
           .catch(() => {});
       }, [authUser, addNotif]);
-
-      // Bildirishnoma ovozi (qisqa "ding")
-      const playNotifSound = () => {
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(880, ctx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
-          gain.gain.setValueAtTime(0.25, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-          osc.start(ctx.currentTime);
-          osc.stop(ctx.currentTime + 0.5);
-        } catch(e) {}
-      };
 
       // Menga tayinlangan vazifalarni tekshirish
       useEffect(() => {
@@ -5442,6 +5383,101 @@
         }, 20000);
         return () => clearInterval(iv);
       }, [authUser]);
+
+      // ── Kanban + tanlash + drag state hook'lari (early return'lardan oldin chaqirilishi shart) ──
+      const kanbanBoardRef = React.useRef(null);
+      const [kanbanCanScrollLeft,  setKanbanCanScrollLeft]  = React.useState(false);
+      const [kanbanCanScrollRight, setKanbanCanScrollRight] = React.useState(false);
+      React.useEffect(() => {
+        const el = kanbanBoardRef.current;
+        if (!el) return;
+        el.addEventListener('scroll', updateKanbanScroll);
+        updateKanbanScroll();
+        return () => el.removeEventListener('scroll', updateKanbanScroll);
+      }, [columnsMap, activePipe]);
+      const kanbanDragScroll = React.useRef({ active:false, startX:0, scrollLeft:0 });
+      const [kanbanGrabbing, setKanbanGrabbing] = React.useState(false);
+      // Ko'p tanlash rejimi (faqat CEO uchun ommaviy o'chirish)
+      const [selectMode,  setSelectMode]  = React.useState(false);
+      const [selectedIds, setSelectedIds] = React.useState(() => new Set());
+      const [draggingLeadId, setDraggingLeadId] = React.useState(null);
+      // CSV Import — fayldan lidlarni yuklash
+      const csvFileInputRef = React.useRef(null);
+
+      if(!authUser) {
+        const loginTitle   = isSuperAdminMode ? 'MIZON SUPER ADMIN' : (companyInfo?.name || 'MIZON CRM');
+        const loginSubtitle = isSuperAdminMode
+          ? 'Platforma boshqaruvi. Faqat vakolatli foydalanuvchilar.'
+          : companyInfo?.name
+            ? `${companyInfo.name} — CRM tizimiga xush kelibsiz`
+            : 'Tizimga kirish uchun xodim ruxsatnomasini kiriting.';
+        const logoLetter = isSuperAdminMode ? 'S' : (companyInfo?.name?.[0]?.toUpperCase() || 'M');
+        const logoBg     = isSuperAdminMode ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'var(--primary-container)';
+        return (
+          <div className="login-overlay">
+            <form onSubmit={handleLogin} className="login-box">
+              <div style={{width:'52px', height:'52px', background:logoBg, borderRadius:'14px', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px', boxShadow:'0 0 28px rgba(1,167,80,0.25)'}}>
+                <span style={{fontSize:'22px', fontWeight:800, color:'#fff', fontFamily:'var(--font-label)'}}>{logoLetter}</span>
+              </div>
+              <h1 style={{fontSize:'24px', marginBottom:'5px', fontWeight:800, letterSpacing:'-0.6px'}}>{loginTitle}</h1>
+              <p style={{color:'var(--text-muted)', marginBottom:'24px', fontSize:'12px', lineHeight:1.5}}>{loginSubtitle}</p>
+              {/* Lockout banner */}
+              {loginLock && loginLock.secsLeft > 0 && (
+                <div style={{background:'rgba(239,68,68,0.08)', border:'2px solid rgba(239,68,68,0.4)', color:'#ef4444', borderRadius:'10px', padding:'14px 16px', fontSize:'13px', marginBottom:'14px', textAlign:'center'}}>
+                  <div style={{fontSize:'26px', marginBottom:'6px'}}>🔒</div>
+                  <div style={{fontWeight:700, marginBottom:'4px'}}>Kirish vaqtincha bloklandi</div>
+                  <div style={{fontSize:'20px', fontWeight:800, fontVariantNumeric:'tabular-nums', letterSpacing:'0.04em', margin:'6px 0'}}>
+                    {String(Math.floor(loginLock.secsLeft/60)).padStart(2,'0')}:{String(loginLock.secsLeft%60).padStart(2,'0')}
+                  </div>
+                  <div style={{fontSize:'11px', opacity:0.8}}>Blok tugagach qayta urinib ko'ring</div>
+                </div>
+              )}
+              {loginError && !loginLock && (
+                <div style={{background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#ef4444', borderRadius:'8px', padding:'10px 14px', fontSize:'12px', marginBottom:'14px'}}>
+                  {loginError}
+                </div>
+              )}
+              <input className="input-base" placeholder={isSuperAdminMode ? "Super admin login" : "Email yoki login"} value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} autoFocus disabled={!!(loginLock && loginLock.secsLeft > 0)} />
+              <div style={{position:'relative', marginBottom:'0'}}>
+                <input className="input-base" type={showLoginPass ? 'text' : 'password'} placeholder="Parol" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} disabled={!!(loginLock && loginLock.secsLeft > 0)} style={{marginBottom:0, paddingRight:'40px'}} />
+                <button type="button" onClick={()=>setShowLoginPass(p=>!p)} tabIndex={-1}
+                  style={{position:'absolute', right:'10px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', padding:'4px', color:'var(--text-muted)', display:'flex', alignItems:'center', lineHeight:1}}>
+                  <span className="material-symbols-outlined" style={{fontSize:'18px', userSelect:'none'}}>
+                    {showLoginPass ? 'visibility_off' : 'visibility'}
+                  </span>
+                </button>
+              </div>
+              <button className="btn-primary" style={{width:'100%', marginTop:'8px', padding:'12px', fontSize:'14px', opacity:(loginLoading||(loginLock&&loginLock.secsLeft>0))?0.5:1}} type="submit" disabled={loginLoading||(loginLock&&loginLock.secsLeft>0)}>
+                {loginLoading ? 'Tekshirilmoqda...' : (loginLock&&loginLock.secsLeft>0 ? `🔒 Bloklangan (${Math.ceil(loginLock.secsLeft/60)} daq)` : 'Tizimga Kirish')}
+              </button>
+              {!isSuperAdminMode && (
+                <div style={{marginTop:'16px', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
+                  {companySlug
+                    ? <span>🌐 <b style={{color:'var(--primary)'}}>{companySlug}.mizon-crm.uz</b></span>
+                    : <span>💡 Email yoki login va parolni kiriting</span>
+                  }
+                </div>
+              )}
+            </form>
+          </div>
+        );
+      }
+
+      const role = authUser.role;
+
+      // ── Super Admin — full-screen panel ──────────────────────────
+      if (role === 'SUPERADMIN') return <SuperAdminPanel authUser={authUser} onLogout={() => {
+        clearCompanyCache();
+        setAuthUser(null);
+        localStorage.removeItem('mizon_session');
+        localStorage.removeItem('mizon_token');
+      }} />;
+
+      const activeColumns = columnsMap[activePipe] || [];
+      const activeLeads = leads.filter(l => l.pipelineId === activePipe);
+      const selectedLeadData = leads.find(l => l.id == selectedLeadId);
+      // Note: Bildirishnoma helperlari + hook'lar (addNotif, billing/task/SLA/VoIP/reload useEffect'lar)
+      // endi `if(!authUser)` dan oldin chaqiriladi — React Rules of Hooks talabi.
 
       const syncLeadToAPI = (lead) => {
         if (String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
@@ -5633,30 +5669,20 @@
         syncLeadToAPI(targetLead);
       };
 
-      const kanbanBoardRef = React.useRef(null);
-      const [kanbanCanScrollLeft,  setKanbanCanScrollLeft]  = React.useState(false);
-      const [kanbanCanScrollRight, setKanbanCanScrollRight] = React.useState(false);
+      // Note: kanbanBoardRef, kanbanCanScrollLeft/Right state va scroll useEffect yuqoriga ko'chirildi
+      // (`if(!authUser)` dan oldin) — Rules of Hooks talabi.
       const updateKanbanScroll = () => {
         const el = kanbanBoardRef.current;
         if (!el) return;
         setKanbanCanScrollLeft(el.scrollLeft > 8);
         setKanbanCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
       };
-      React.useEffect(() => {
-        const el = kanbanBoardRef.current;
-        if (!el) return;
-        el.addEventListener('scroll', updateKanbanScroll);
-        updateKanbanScroll();
-        return () => el.removeEventListener('scroll', updateKanbanScroll);
-      }, [activeColumns.length]);
       const scrollKanban = (dir) => {
         const el = kanbanBoardRef.current;
         if (el) el.scrollBy({ left: dir * 310, behavior:'smooth' });
       };
 
-      // Sichqoncha bosib-suring scroll
-      const kanbanDragScroll = React.useRef({ active:false, startX:0, scrollLeft:0 });
-      const [kanbanGrabbing, setKanbanGrabbing] = React.useState(false);
+      // Sichqoncha bosib-suring scroll (kanbanDragScroll, kanbanGrabbing ham yuqoriga ko'chirildi)
       const onKanbanMouseDown = (e) => {
         // Faqat karta emas, bo'sh joyni bossagina ishlaydi
         if (e.target.closest('.k-card') || e.target.closest('.kanban-col-header')) return;
@@ -5676,9 +5702,7 @@
       };
       const onKanbanMouseUp = () => { kanbanDragScroll.current.active = false; setKanbanGrabbing(false); };
 
-      // Ko'p tanlash rejimi (faqat CEO uchun ommaviy o'chirish)
-      const [selectMode,  setSelectMode]  = React.useState(false);
-      const [selectedIds, setSelectedIds] = React.useState(() => new Set());
+      // Ko'p tanlash rejimi (selectMode, selectedIds state yuqoriga ko'chirildi)
       const toggleSelect = (id) => {
         setSelectedIds(prev => {
           const next = new Set(prev);
@@ -5713,9 +5737,8 @@
         alert(`✅ ${okCount} ta lid o'chirildi${failCount ? `, ❌ ${failCount} ta xato` : ''}`);
       };
 
-      const [draggingLeadId, setDraggingLeadId] = React.useState(null);
+      // draggingLeadId va csvFileInputRef hook'lari yuqoriga ko'chirildi (Rules of Hooks).
       // CSV Import — fayldan lidlarni yuklash
-      const csvFileInputRef = React.useRef(null);
       const parseCsvRow = (line) => {
         const out = []; let cur = ''; let inQ = false;
         for (let i = 0; i < line.length; i++) {
