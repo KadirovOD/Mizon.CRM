@@ -349,6 +349,22 @@ exports.syncStages = async (req, res) => {
   if (!Array.isArray(stages) || stages.length === 0)
     return res.status(400).json({ error: 'stages array (kamida 1 ta) kerak' });
 
+  // ── NORMALIZATSIYA: bir varonkada faqat 1 ta is_won va 1 ta is_lost bo'lishi mumkin ──
+  // Bir nechta is_won=true kelsa, faqat eng OXIRGISI (eng yuqori sequence) saqlanadi.
+  // Bu yandi-davr kabi hodisalarni oldini oladi: 'Uchrashuvga keldi' tasodifan WON belgilangan
+  // bo'lsa va 'Shartnoma' ham WON bo'lsa, faqat 'Shartnoma' WON bo'lib qoladi.
+  let lastWonIdx = -1, lastLostIdx = -1;
+  stages.forEach((s, i) => {
+    if (s.is_won)  lastWonIdx  = i;
+    if (s.is_lost) lastLostIdx = i;
+  });
+  stages.forEach((s, i) => {
+    if (s.is_won  && i !== lastWonIdx)  s.is_won  = false;
+    if (s.is_lost && i !== lastLostIdx) s.is_lost = false;
+    // Bir bosqich ham WON ham LOST bo'lishi mumkin emas
+    if (s.is_won && s.is_lost) s.is_lost = false;
+  });
+
   try {
     // Mavjud bosqichlar
     const existing = await req.db.query('SELECT id FROM crm_stage WHERE company_id=$1', [cid]);

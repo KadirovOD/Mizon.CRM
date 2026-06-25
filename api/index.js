@@ -314,6 +314,33 @@ async function initDb() {
     await client.query("UPDATE crm_stage SET is_won=true  WHERE name='Yutildi'         AND (is_won  IS NULL OR is_won=false)");
     await client.query("UPDATE crm_stage SET is_lost=true WHERE name='Muvaffaqiyatsiz' AND (is_lost IS NULL OR is_lost=false)");
 
+    // ── NORMALIZATSIYA: kompaniya bo'yicha bir nechta is_won/is_lost bo'lsa, faqat eng oxirgisini saqlash ──
+    // (Yandi-davr kabi hodisalardan keyin avtomatik tozalash: 'Uchrashuvga keldi' va 'Shartnoma' ikkalasi
+    // ham WON belgilangan bo'lsa, faqat eng yuqori sequence bo'lganini WON qoldiramiz.)
+    try {
+      const _wonFix = await client.query(`
+        UPDATE crm_stage SET is_won=false
+        WHERE is_won=true AND id NOT IN (
+          SELECT DISTINCT ON (company_id) id FROM crm_stage
+          WHERE is_won=true ORDER BY company_id, sequence DESC, id DESC
+        )
+      `);
+      const _lostFix = await client.query(`
+        UPDATE crm_stage SET is_lost=false
+        WHERE is_lost=true AND id NOT IN (
+          SELECT DISTINCT ON (company_id) id FROM crm_stage
+          WHERE is_lost=true ORDER BY company_id, sequence DESC, id DESC
+        )
+      `);
+      // Bir bosqich ham WON ham LOST bo'lmasligi kerak
+      await client.query("UPDATE crm_stage SET is_lost=false WHERE is_won=true AND is_lost=true");
+      if ((_wonFix.rowCount || 0) > 0 || (_lostFix.rowCount || 0) > 0) {
+        console.log(`🔧 Stage normalization: ${_wonFix.rowCount || 0} ortiqcha is_won va ${_lostFix.rowCount || 0} ortiqcha is_lost belgilari olib tashlandi`);
+      }
+    } catch (e) {
+      console.warn('Stage normalization skip:', e.message);
+    }
+
     // ── Kompaniyasiz (NULL) integratsiya va API kalitlarini birinchi kompaniyaga bog'lash ──
     const _firstComp = await client.query('SELECT id FROM companies ORDER BY id ASC LIMIT 1');
     if (_firstComp.rows.length > 0) {

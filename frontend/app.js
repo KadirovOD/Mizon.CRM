@@ -596,6 +596,8 @@ const PipelineEditor = ({
         if (!confirm(msg)) return;
       }
     }
+    // FAQAT off→on paytida boshqalardan stripping qilamiz (on→off paytida boshqa to'g'ri WON/LOST bosqichlar ta'sirlanmasligi kerak)
+    const willEnable = !isCurrentlyOn;
     setLocalCols(localCols.map(c => {
       if (c.id === id) {
         if (kind === 'won') return {
@@ -609,15 +611,17 @@ const PipelineEditor = ({
           is_won: false
         };
       }
-      // Boshqa bosqichlardan o'sha turdagi belgini olib tashlash
-      if (kind === 'won' && c.is_won) return {
-        ...c,
-        is_won: false
-      };
-      if (kind === 'lost' && c.is_lost) return {
-        ...c,
-        is_lost: false
-      };
+      // Faqat YOQILAYOTGAN paytda boshqalardan o'sha turdagi belgini olib tashlaymiz
+      if (willEnable) {
+        if (kind === 'won' && c.is_won) return {
+          ...c,
+          is_won: false
+        };
+        if (kind === 'lost' && c.is_lost) return {
+          ...c,
+          is_lost: false
+        };
+      }
       return c;
     }));
   };
