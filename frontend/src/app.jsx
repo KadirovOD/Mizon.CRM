@@ -293,8 +293,11 @@
                 ...(dbId != null ? { id: dbId } : {}),
                 name: col.title,
                 sequence: i + 1,
-                is_won:  !!col.is_won  || col.id === 'WON',
-                is_lost: !!col.is_lost || col.id === 'LOST',
+                // V50: faqat is_won/is_lost flagiga ishonamiz. Avval `|| col.id === 'WON'` deb
+                // qo'shilardi — bu pozitsional _STAGE_KEYS tufayli yandi-davr kabi
+                // kompaniyalarda 6-bosqich avtomatik is_won=true bo'lib qolardi har save'da.
+                is_won:  !!col.is_won,
+                is_lost: !!col.is_lost,
               };
             });
             const r = await fetch('/api/stages/sync', {
@@ -4816,11 +4819,22 @@
           if (!data) return;
           if(data.success) {
             // Dinamik stage mapping — API bosqichlariga asoslangan (yangi kompaniyalar uchun muhim)
+            // ⚠️ FLAG-BASED MAPPING (V50): 'WON' va 'LOST' kalitlari faqat is_won/is_lost flag
+            // qo'yilgan bosqichlarga beriladi (pozitsiyaga emas). Avval pozitsiya bo'yicha
+            // _STAGE_KEYS[i] = 'WON' qilinardi — bu yandi-davr kabi 6-bosqich "Uchrashuvga keldi"
+            // bo'lgan kompaniyalarda 'Uchrashuvga keldi' frontend id'si 'WON' bo'lib qolardi,
+            // kanban filteri (c.id !== 'WON') uni yashirardi va statistika WON deb hisoblardi.
             const apiStages = [...(data.stages || [])].sort((a,b) => a.sequence - b.sequence);
             if (apiStages.length > 0) {
               const toFrontend = {}, toDbId = {};
+              const stageKey = (s, i) => {
+                if (s.is_won)  return 'WON';
+                if (s.is_lost) return 'LOST';
+                if (i === 0)   return 'NEW';   // birinchi bosqich = NEW (yangi leadlar)
+                return 'STAGE_' + s.id;        // qolganlari DB id bilan
+              };
               apiStages.forEach((s, i) => {
-                const k = _STAGE_KEYS[i] || ('STAGE_' + s.id);
+                const k = stageKey(s, i);
                 toFrontend[s.id] = k;
                 toDbId[k] = s.id;
               });
@@ -4829,7 +4843,7 @@
               setColumnsMap(prev => ({
                 ...prev,
                 p1: apiStages.map((s, i) => ({
-                  id: _STAGE_KEYS[i] || ('STAGE_' + s.id),
+                  id: stageKey(s, i),
                   title: s.name,
                   is_won: s.is_won || false,
                   is_lost: s.is_lost || false,
