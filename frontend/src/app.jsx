@@ -218,7 +218,7 @@
     };
 
     // ===== PIPELINE EDITOR =====
-    const PipelineEditor = ({ pipelines, setPipelines, columnsMap, setColumnsMap, stageMapRef, onStagesUpdated }) => {
+    const PipelineEditor = ({ pipelines, setPipelines, columnsMap, setColumnsMap, stageMapRef, onStagesUpdated, leads }) => {
       const [pId, setPId] = useState(pipelines[0]?.id);
       const pipe = pipelines.find(p => p.id === pId);
       const [localCols, setLocalCols] = useState(columnsMap[pId] || []);
@@ -235,15 +235,33 @@
       // faqat pId o'zganda reset — columnsMap tashqi yangilanishi lokal tahririyatni o'chirmaydi
       useEffect(() => { setLocalCols(columnsMap[pId] || []); }, [pId]); // eslint-disable-line react-hooks/exhaustive-deps
       if(!pipe) return null;
+      // Har bir bosqichdagi lead sonini sanash (faqat shu pipeline ichida)
+      const countLeadsInStage = (stageId) => (leads || []).filter(l => l.status === stageId && (l.pipelineId === pId || (!l.pipelineId && pId === 'p1'))).length;
       const addCol = () => setLocalCols([...localCols, {id:'STAGE_'+Date.now(), title:'Yangi bosqich', is_won:false, is_lost:false}]);
       const updateColTitle = (id, val) => setLocalCols(localCols.map(c => c.id===id?{...c,title:val}:c));
       const removeCol = (id) => {
         if(localCols.length <= 1) return alert("Kamida 1 bosqich bo'lishi shart!");
+        const cnt = countLeadsInStage(id);
+        if (cnt > 0) {
+          if (!confirm(`Diqqat! Bu bosqichda ${cnt} ta lead bor.\n\nO'chirilsa, bu leadlar bosqichsiz qoladi (ko'rinmay qolishi mumkin).\n\nDavom etamizmi?`)) return;
+        }
         setLocalCols(localCols.filter(c => c.id!==id));
       };
       // Bosqichni Yutildi / Muvoffaqiyatsiz / Normal qilib belgilash
       // Bir varonkada faqat bitta WON va bitta LOST bo'lishi mumkin
       const setStageOutcome = (id, kind) => {
+        const target = localCols.find(c => c.id === id);
+        if (!target) return;
+        const isCurrentlyOn = kind === 'won' ? !!target.is_won : !!target.is_lost;
+        // YONIB QILINMOQDA (off → on): leadlar bormi tekshiramiz va ogohlantiramiz
+        if (!isCurrentlyOn) {
+          const cnt = countLeadsInStage(id);
+          if (cnt > 0) {
+            const label = kind === 'won' ? "Yutildi (WON)" : "Muvaffaqiyatsiz (LOST)";
+            const msg = `⚠️ DIQQAT!\n\n"${target.title}" bosqichida ${cnt} ta lead bor.\n\nAgar uni "${label}" deb belgilasangiz:\n• Bu bosqich Kanban ko'rinishidan YASHIRINADI\n• ${cnt} ta lead avtomatik tarzda ${kind === 'won' ? 'YUTILGAN' : 'YO\u02BCQOTILGAN'} sifatida hisoblanadi\n• Hisobotlarda ular ${kind === 'won' ? 'savdo (deal)' : 'mag\u02BClubiyat'} sifatida ko'rinadi\n\nDavom etamizmi?`;
+            if (!confirm(msg)) return;
+          }
+        }
         setLocalCols(localCols.map(c => {
           if (c.id === id) {
             if (kind === 'won')  return {...c, is_won:!c.is_won, is_lost:false};
@@ -316,7 +334,10 @@
             <input className="input-base" value={pipe.name} onChange={updateName} />
             <span className="label-sm" style={{marginTop:'8px'}}>Bosqichlar:</span>
             <div style={{display:'flex', flexDirection:'column', gap:'7px', marginBottom:'14px'}}>
-              {localCols.map((col, idx) => (
+              {localCols.map((col, idx) => {
+                const leadCnt = countLeadsInStage(col.id);
+                const isHiddenInKanban = !!(col.is_won || col.is_lost);
+                return (
                 <div key={col.id}
                   draggable
                   onDragStart={()=>setDragIdx(idx)}
@@ -324,13 +345,27 @@
                   onDrop={()=>{ if(dragIdx!==null && dragIdx!==idx){ moveStage(dragIdx,idx); setDragIdx(null); } }}
                   onDragEnd={()=>setDragIdx(null)}
                   style={{display:'flex', gap:'8px', alignItems:'center', opacity:dragIdx===idx?0.4:1, transition:'opacity 0.15s',
-                    background: dragIdx!==null && dragIdx!==idx ? 'rgba(99,102,241,0.06)' : 'transparent',
-                    borderRadius:'6px', padding:'2px 0'}}>
+                    background: dragIdx!==null && dragIdx!==idx ? 'rgba(99,102,241,0.06)' : (isHiddenInKanban && leadCnt > 0 ? 'rgba(245,158,11,0.08)' : 'transparent'),
+                    border: isHiddenInKanban && leadCnt > 0 ? '1px solid rgba(245,158,11,0.35)' : '1px solid transparent',
+                    borderRadius:'6px', padding:'4px 6px'}}>
                   <span style={{color:'var(--text-muted)', fontSize:'18px', cursor:'grab', userSelect:'none', padding:'0 6px', letterSpacing:'-2px'}}>⠿</span>
                   <span style={{color:'var(--text-muted)', fontSize:'11px', minWidth:'18px', textAlign:'center'}}>{idx+1}</span>
                   <input className="input-base" style={{marginBottom:0, flex:1}} value={col.title} onChange={e=>updateColTitle(col.id, e.target.value)} />
+                  <span title={leadCnt + ' ta lead bu bosqichda'}
+                    style={{minWidth:'48px', textAlign:'center', fontSize:'11px', fontWeight:700,
+                      background: leadCnt>0 ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.04)',
+                      color: leadCnt>0 ? 'var(--primary)' : 'var(--text-muted)',
+                      padding:'5px 8px', borderRadius:'6px', border:'1px solid ' + (leadCnt>0 ? 'rgba(99,102,241,0.3)' : 'var(--border-light)')}}>
+                    {leadCnt} 👤
+                  </span>
+                  {isHiddenInKanban && (
+                    <span title="Bu bosqich Kanban ko'rinishidan yashirin (is_won/is_lost)"
+                      style={{fontSize:'10px', fontWeight:700, color:'#f59e0b', background:'rgba(245,158,11,0.15)', padding:'4px 6px', borderRadius:'4px', border:'1px solid rgba(245,158,11,0.35)', whiteSpace:'nowrap'}}>
+                      🙈 Yashirin
+                    </span>
+                  )}
                   <button
-                    title="Yutilgan bosqich sifatida belgilash"
+                    title={col.is_won ? "Yutildi belgisini olib tashlash" : "Yutilgan bosqich sifatida belgilash"}
                     onClick={()=>setStageOutcome(col.id, 'won')}
                     style={{padding:'7px 10px', fontSize:'12px', fontWeight:600, borderRadius:'6px', cursor:'pointer',
                       border: '1px solid ' + (col.is_won ? '#22c55e' : 'var(--border-light)'),
@@ -339,7 +374,7 @@
                     🏆 Yutildi
                   </button>
                   <button
-                    title="Muvoffaqiyatsiz bosqich sifatida belgilash"
+                    title={col.is_lost ? "Muvoffaqiyatsiz belgisini olib tashlash" : "Muvoffaqiyatsiz bosqich sifatida belgilash"}
                     onClick={()=>setStageOutcome(col.id, 'lost')}
                     style={{padding:'7px 10px', fontSize:'12px', fontWeight:600, borderRadius:'6px', cursor:'pointer',
                       border: '1px solid ' + (col.is_lost ? '#ef4444' : 'var(--border-light)'),
@@ -349,7 +384,8 @@
                   </button>
                   <button className="btn-danger" style={{padding:'7px 10px'}} onClick={()=>removeCol(col.id)}>O'chirish</button>
                 </div>
-              ))}
+                );
+              })}
               <button className="btn-outline" onClick={addCol}>+ Bosqich Qo'shish</button>
             </div>
             <div style={{display:'flex', justifyContent:'space-between', borderTop:'1px solid var(--border-light)', paddingTop:'14px'}}>
@@ -6795,7 +6831,7 @@
                     {settingsActiveTab==='pipelines' && (
                       <div>
                         <h3 style={{marginBottom:'14px', fontWeight:600}}>Varonkalarni Sozlash</h3>
-                        <PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} stageMapRef={stageMapRef} onStagesUpdated={reloadLeadsFromApi} />
+                        <PipelineEditor pipelines={pipelines} setPipelines={setPipelines} columnsMap={columnsMap} setColumnsMap={setColumnsMap} stageMapRef={stageMapRef} onStagesUpdated={reloadLeadsFromApi} leads={leads} />
                       </div>
                     )}
                     {settingsActiveTab==='cardfields' && (
