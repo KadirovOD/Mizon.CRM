@@ -6261,6 +6261,18 @@
                               <span className="info-value">{(selectedLeadData.customData||{})[cf.key]}</span>
                             </div>
                           ))}
+                          {/* V51: Vebhook orqali kelgan, lekin cardFields da sozlanmagan maydonlarni ham ko'rsatamiz */}
+                          {(() => {
+                            const cd = selectedLeadData.customData || {};
+                            const known = new Set(cardFields.map(cf => cf.key));
+                            return Object.keys(cd).filter(k => !known.has(k) && cd[k] != null && cd[k] !== '').map(k => (
+                              <div key={'auto_'+k} className="info-row">
+                                <div className="info-row-icon"><span className="material-symbols-outlined" style={{fontSize:'15px'}}>auto_awesome</span></div>
+                                <span className="info-label">{k.replace(/_/g,' ').replace(/^./, c=>c.toUpperCase())}</span>
+                                <span className="info-value">{String(cd[k])}</span>
+                              </div>
+                            ));
+                          })()}
                         </div>
                       )}
 

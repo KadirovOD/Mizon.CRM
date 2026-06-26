@@ -49,18 +49,23 @@ const META_FIELD_MAP = {
 function normalizeMetaFields(fieldData, customMapping = {}) {
   let first = '', last = '';
   const result = {};
+  const customData = {}; // ── V51: BARCHA xom maydonlar (kartaga ko'rinishi uchun)
   for (const f of fieldData || []) {
     const raw  = (f.values || [])[0] || '';
     const key  = (f.name || '').toLowerCase().replace(/\s+/g, '_');
+    if (!raw) continue;
+    // ── HAR DOIM xom kalit bilan customData ga saqlaymiz (cardFields shu key bo'yicha ko'rsatadi)
+    if (!customData[key]) customData[key] = raw;
     // Custom mapping first (from crm_integration_config.field_mapping)
     const target = customMapping[f.name] || customMapping[key] || META_FIELD_MAP[key];
-    if (!target || !raw) continue;
+    if (!target) continue;
     if (target === '_first') { first = raw; continue; }
     if (target === '_last')  { last  = raw; continue; }
     if (!result[target]) result[target] = raw; // first-wins
   }
   if (first || last)
     result.name = result.name || [first, last].filter(Boolean).join(' ');
+  result._customData = customData; // V51: barcha xom maydonlar
   return result;
 }
 
@@ -200,12 +205,15 @@ exports.handleMetaWebhook = async (req, res) => {
             fields.address && `Manzil: ${fields.address}`,
           ].filter(Boolean);
 
+          // V51: barcha xom maydonlarni custom_data ga saqlaymiz (karta ma'lumotlari uchun)
+          const customDataMeta = fields._customData || {};
+
           await req.db.query(
             `INSERT INTO crm_lead
                (name, contact_name, phone, email, region, taskdescription,
                 mizon_source, lead_score, stage_id,
-                facebook_lead_id, ad_name, form_name, company_id, chatlogs)
-             VALUES ($1,$2,$3,$4,$5,$6,'facebook',35,$7,$8,$9,$10,$11,$12)
+                facebook_lead_id, ad_name, form_name, company_id, chatlogs, custom_data)
+             VALUES ($1,$2,$3,$4,$5,$6,'facebook',35,$7,$8,$9,$10,$11,$12,$13)
              ON CONFLICT (facebook_lead_id) DO NOTHING`,
             [
               leadName, leadName,
@@ -219,6 +227,7 @@ exports.handleMetaWebhook = async (req, res) => {
                 type: 'sys', date: new Date().toISOString(),
                 text: `📘 Facebook Lead Ads | Reklama: ${adName||'-'} | Form: ${formName||form_id} | Page: ${page_id}`,
               }]),
+              JSON.stringify(customDataMeta),
             ]
           );
           console.log(`📌 FB lead saved: "${leadName}" (form=${form_id}, ad="${adName||'-'}")`);

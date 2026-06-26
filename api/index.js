@@ -546,11 +546,25 @@ app.post('/api/webhook/sheets', async (req, res) => {
       note   && `Izoh: ${note}`,
     ].filter(Boolean);
 
+    // ── V51: BARCHA qo'shimcha formdan kelgan maydonlarni custom_data ga saqlaymiz
+    //   (cardFields ushbu kalitlar bo'yicha lid kartasida ko'rsatadi)
+    const SHEETS_STANDARD = new Set([
+      'name','phone','email','region','city','note','comment',
+      'company_slug','slug','company','source','row_index','rowindex',
+    ]);
+    const customDataSheets = {};
+    for (const [k, v] of Object.entries(body || {})) {
+      const lk = String(k || '').toLowerCase();
+      if (SHEETS_STANDARD.has(lk)) continue;
+      if (v == null || v === '' || (typeof v === 'object' && Array.isArray(v) && !v.length)) continue;
+      customDataSheets[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    }
+
     const inserted = await req.db.query(
       `INSERT INTO crm_lead
          (name, phone, email, region, taskdescription,
-          mizon_source, lead_score, stage_id, company_id, chatlogs)
-       VALUES ($1,$2,$3,$4,$5,'google_sheets',30,$6,$7,$8) RETURNING id`,
+          mizon_source, lead_score, stage_id, company_id, chatlogs, custom_data)
+       VALUES ($1,$2,$3,$4,$5,'google_sheets',30,$6,$7,$8,$9) RETURNING id`,
       [
         name || `+${phone}`,
         phone || null,
@@ -563,6 +577,7 @@ app.post('/api/webhook/sheets', async (req, res) => {
           date: new Date().toISOString(),
           text: `📊 Google Sheets orqali keldi${rowIndex ? ` (qator ${rowIndex})` : ''}`,
         }]),
+        JSON.stringify(customDataSheets),
       ]
     );
 
@@ -813,6 +828,7 @@ app.post('/api/public/leads', async (req, res) => {
     source = 'website',
     pipelineId = 'p1',
     extra  = '',
+    custom_data: bodyCustomData,
   } = req.body || {};
 
   if (!company_slug || !company_slug.trim())
@@ -846,12 +862,32 @@ app.post('/api/public/leads', async (req, res) => {
       ? `Tashqi veb-forma: ${extra}`
       : "Tashqi veb-forma orqali yuborildi";
 
+    // ── V51: BARCHA qo'shimcha formdan kelgan maydonlarni custom_data ga saqlaymiz
+    //   Frontend cardFields ushbu kalitlar bo'yicha lid kartasida ko'rsatadi
+    const PUBLIC_STANDARD = new Set([
+      'company_slug','name','phone','email','region','source','pipelineid','pipeline_id','extra','custom_data',
+    ]);
+    const customData = {};
+    // Avval bevosita yuborilgan custom_data ni qabul qilamiz
+    if (bodyCustomData && typeof bodyCustomData === 'object') {
+      for (const [k, v] of Object.entries(bodyCustomData)) {
+        if (v != null && v !== '') customData[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      }
+    }
+    // So'ngra body ning qolgan qismidagi qo'shimcha maydonlarni qo'shamiz
+    for (const [k, v] of Object.entries(req.body || {})) {
+      const lk = String(k || '').toLowerCase();
+      if (PUBLIC_STANDARD.has(lk)) continue;
+      if (v == null || v === '') continue;
+      if (!customData[k]) customData[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    }
+
     // 4. Leadni yaratish
     const newLead = await req.db.query(
       `INSERT INTO crm_lead
          (name, contact_name, phone, email, mizon_source, lead_score,
-          stage_id, region, owner, pipelineid, chatlogs, company_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          stage_id, region, owner, pipelineid, chatlogs, company_id, custom_data)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id`,
       [
         name.trim(), name.trim(),
@@ -863,6 +899,7 @@ app.post('/api/public/leads', async (req, res) => {
         pipelineId || 'p1',
         JSON.stringify([{ type:'sys', date: new Date().toISOString(), text: sysNote }]),
         cid,
+        JSON.stringify(customData),
       ]
     );
 
