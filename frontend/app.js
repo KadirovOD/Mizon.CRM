@@ -5663,6 +5663,21 @@ const HisobotlarModule = ({
   const [pipeFilter, setPipeFilter] = useState('all');
   const [showFullReport, setShowFullReport] = useState(false); // To'liq lead hisoboti collapsible
 
+  // V53: Kompaniyaning haqiqiy ro'yxatdan o'tgan xodimlari — Hisobotlarda faqat shularni ko'rsatamiz
+  // (placeholder 'Navbatda', 'ceo' kabi default qiymatlar haqiqiy xodim emas)
+  const [companyUsers, setCompanyUsers] = useState([]);
+  useEffect(() => {
+    const token = localStorage.getItem('mizon_token');
+    if (!token) return;
+    fetch('/api/company/users', {
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    }).then(r => r.ok ? r.json() : null).then(d => {
+      if (Array.isArray(d)) setCompanyUsers(d);
+    }).catch(() => {});
+  }, []);
+
   // ---- helpers ----
   const SOURCE_LABELS = {
     meta_fb_ads: 'Facebook Ads',
@@ -6110,10 +6125,16 @@ const HisobotlarModule = ({
       marginBottom: '14px'
     }
   }, "Xodimlar samaradorligi"), (() => {
-    // V52: 'Navbatda' va boshqa to'g'ridan-to'g'ri tayinlanmagan placeholderlarni haqiqiy xodimlardan ajratamiz
-    const PLACEHOLDER_OWNERS = new Set(['Navbatda', 'navbatda', '', '—', '-', 'unassigned', 'Unassigned']);
-    const realOwners = allOwners.filter(o => !PLACEHOLDER_OWNERS.has(o));
-    const placeholderOwners = allOwners.filter(o => PLACEHOLDER_OWNERS.has(o));
+    // V53: real xodim = companyUsers (DB ro'yxatdan o'tgan) ichidagi username yoki full_name ga mos kelgan owner
+    // Qolgan barcha owner qiymatlari (Navbatda queue, eski 'ceo' default, va h.k.) — placeholder
+    const userKeys = new Set();
+    (companyUsers || []).forEach(u => {
+      if (u.username) userKeys.add(String(u.username).toLowerCase());
+      if (u.full_name) userKeys.add(String(u.full_name).toLowerCase());
+    });
+    const isRealEmployee = owner => owner && userKeys.has(String(owner).toLowerCase());
+    const realOwners = allOwners.filter(o => isRealEmployee(o));
+    const placeholderOwners = allOwners.filter(o => !isRealEmployee(o));
     const sortedOwners = [...realOwners, ...placeholderOwners]; // haqiqiy xodimlar yuqorida
     if (allOwners.length === 0) return /*#__PURE__*/React.createElement("div", {
       style: {
@@ -6123,14 +6144,27 @@ const HisobotlarModule = ({
         padding: '20px 0'
       }
     }, "Ma'lumot yo'q");
+    if (sortedOwners.length === 0) return /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: 'var(--text-muted)',
+        fontSize: '13px',
+        textAlign: 'center',
+        padding: '20px 0'
+      }
+    }, "Xodimlar yuklanmoqda...");
     return sortedOwners.map(op => {
-      const isPlaceholder = PLACEHOLDER_OWNERS.has(op);
+      const isPlaceholder = !isRealEmployee(op);
       const opL = fl.filter(l => l.owner === op);
       const opWon = opL.filter(l => wonCol ? l.status === wonCol.id : l.status === 'WON').length;
       const opCalls = opL.reduce((s, l) => s + (l.actualCallAttempts || 0), 0);
       const maxOp = Math.max(1, ...allOwners.map(o => fl.filter(l => l.owner === o).length));
       const cvr = opL.length ? Math.round(opWon / opL.length * 100) : 0;
-      const displayName = isPlaceholder ? '⏳ Tayinlanmagan (queue)' : op;
+      // Display: placeholder uchun qiymatga qarab label
+      let displayName = op;
+      if (isPlaceholder) {
+        const lower = String(op).toLowerCase();
+        if (lower === 'navbatda') displayName = '⏳ Tayinlanmagan (queue)';else if (lower === 'ceo') displayName = `⚠️ Tizim default ('ceo')`;else displayName = `⚠️ Noma'lum xodim: ${op}`;
+      }
       return /*#__PURE__*/React.createElement("div", {
         key: op,
         style: {
@@ -6151,7 +6185,7 @@ const HisobotlarModule = ({
           fontSize: '13px',
           background: isPlaceholder ? 'rgba(245,158,11,0.18)' : undefined
         }
-      }, isPlaceholder ? '⏳' : op[0].toUpperCase()), /*#__PURE__*/React.createElement("div", {
+      }, isPlaceholder ? '⚠️' : op[0].toUpperCase()), /*#__PURE__*/React.createElement("div", {
         style: {
           flex: 1
         }
@@ -6166,7 +6200,8 @@ const HisobotlarModule = ({
           fontWeight: 600,
           fontSize: '13px',
           color: isPlaceholder ? '#f59e0b' : undefined
-        }
+        },
+        title: isPlaceholder ? `Ushbu lead'lar mas'uli "${op}" — kompaniya xodimlar ro'yxatida yo'q. Lid kartasidan to'g'ri mas'ulni belgilang.` : ''
       }, displayName), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: '11px',
@@ -6202,9 +6237,13 @@ const HisobotlarModule = ({
     }
   }, "Qo'shimcha ko'rsatkichlar"), (() => {
     const bestSrc = allSources[0];
-    // V52: placeholderlarni "Eng samarali xodim" hisobidan chiqaramiz; agar real xodimlardan birortasi WON yutmagan bo'lsa — '—'
-    const PLACEHOLDER_OWNERS = new Set(['Navbatda', 'navbatda', '', '—', '-', 'unassigned', 'Unassigned']);
-    const realOwners = allOwners.filter(o => !PLACEHOLDER_OWNERS.has(o));
+    // V53: faqat companyUsers ichidagi real xodimlar orasidan tanlanadi (Navbatda, ceo va boshqa placeholderlar chiqarib tashlanadi)
+    const userKeys = new Set();
+    (companyUsers || []).forEach(u => {
+      if (u.username) userKeys.add(String(u.username).toLowerCase());
+      if (u.full_name) userKeys.add(String(u.full_name).toLowerCase());
+    });
+    const realOwners = allOwners.filter(o => o && userKeys.has(String(o).toLowerCase()));
     const wonByOwner = o => fl.filter(l => l.owner === o && (wonCol ? l.status === wonCol.id : l.status === 'WON')).length;
     const topOp = realOwners.length ? [...realOwners].sort((a, b) => wonByOwner(b) - wonByOwner(a))[0] : null;
     const bestOp = topOp && wonByOwner(topOp) > 0 ? topOp : null;
