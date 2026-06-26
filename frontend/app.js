@@ -5652,6 +5652,522 @@ const CallCenterModule = ({
   }, "touch_app"), "Mijoz ustiga bosing \u2014 kartasini ochadi")))));
 };
 
+// ===== V54: ACTIVITY LOG PANEL — Hisobotlar > Harakatlar Jurnali =====
+// Hodimlar bo'yicha filtr, bo'limlarga ajratish (bosqich/komment/vazifa/tahrir/qo'ng'iroq/boshqalar)
+// Bosqich tab'ida qo'shimcha "qaysi bosqichdan qaysi bosqichga" filtri + son
+const ActivityLogPanel = ({
+  leads,
+  columnsMap,
+  companyUsers,
+  setSelectedLeadId
+}) => {
+  const [tab, setTab] = useState('all'); // all|stage|comment|task|edit|call|other
+  const [empFilter, setEmpFilter] = useState('all'); // username yoki 'all'
+  const [fromFilter, setFromFilter] = useState('all'); // stage id (faqat stage tab)
+  const [toFilter, setToFilter] = useState('all'); // stage id (faqat stage tab)
+  const [showAll, setShowAll] = useState(false); // 200 vs hammasi
+
+  // 1) Barcha logni yig'amiz va kategoriya belgilaymiz
+  const allColsFlat = Object.values(columnsMap || {}).flat();
+  const stageTitleById = id => allColsFlat.find(c => c.id === id)?.title || String(id || '—');
+  const all = [];
+  (leads || []).forEach(l => {
+    const logs = Array.isArray(l.chatLogs) ? l.chatLogs : [];
+    logs.forEach((log, i) => {
+      // Eski logdagi "🔄 Bosqich o'zgardi → X" matnini ham qo'lga olamiz (V54'dan oldingi yozuvlar)
+      const isLegacyStage = !log.isStageChange && log.type === 'sys' && /Bosqich o.zgardi/i.test(log.text || '');
+      let cat = 'other';
+      if (log.isStageChange || isLegacyStage) cat = 'stage';else if (log.type === 'msg') cat = 'comment';else if (log.isTask || log.isTaskComplete) cat = 'task';else if (log.type === 'audit') cat = 'edit';else if (log.type === 'call') cat = 'call';else if (log.type === 'telegram' || log.type === 'instagram') cat = 'chat_in';
+      all.push({
+        ...log,
+        _cat: cat,
+        _legacy: isLegacyStage,
+        leadId: l.id,
+        leadName: l.name,
+        leadPhone: l.phone,
+        _key: `${l.id}_${i}`
+      });
+    });
+  });
+  all.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // 2) Bo'lim bo'yicha tekshirish
+  const bySection = {
+    all: all,
+    stage: all.filter(x => x._cat === 'stage'),
+    comment: all.filter(x => x._cat === 'comment'),
+    task: all.filter(x => x._cat === 'task'),
+    edit: all.filter(x => x._cat === 'edit'),
+    call: all.filter(x => x._cat === 'call'),
+    other: all.filter(x => x._cat === 'other' || x._cat === 'chat_in')
+  };
+  const TAB_DEFS = [{
+    id: 'all',
+    label: 'Hammasi',
+    icon: 'list',
+    color: 'var(--text-secondary)'
+  }, {
+    id: 'stage',
+    label: "Bosqich o'zgarishi",
+    icon: 'swap_horiz',
+    color: '#6366f1'
+  }, {
+    id: 'comment',
+    label: 'Izoh/Komment',
+    icon: 'chat',
+    color: '#01a750'
+  }, {
+    id: 'task',
+    label: 'Vazifalar',
+    icon: 'task_alt',
+    color: '#f59e0b'
+  }, {
+    id: 'edit',
+    label: 'Tahrirlash',
+    icon: 'edit_note',
+    color: '#3b82f6'
+  }, {
+    id: 'call',
+    label: "Qo'ng'iroqlar",
+    icon: 'call',
+    color: '#8b5cf6'
+  }, {
+    id: 'other',
+    label: 'Boshqalar',
+    icon: 'more_horiz',
+    color: 'var(--text-muted)'
+  }];
+
+  // 3) Tab tanlangan logni xodim filtri bilan filtrlash
+  let filtered = bySection[tab] || [];
+  if (empFilter !== 'all') filtered = filtered.filter(x => (x.by || '') === empFilter);
+
+  // 4) Stage tab uchun qo'shimcha from→to filtr
+  if (tab === 'stage') {
+    if (fromFilter !== 'all') filtered = filtered.filter(x => String(x.fromStatus || '') === fromFilter);
+    if (toFilter !== 'all') filtered = filtered.filter(x => String(x.toStatus || '') === toFilter);
+  }
+
+  // 5) Xodim ro'yxati — filtr dropdown uchun (companyUsers + barcha "by" qiymatlar)
+  const allBys = [...new Set(all.map(x => x.by).filter(Boolean))];
+  const knownUsernames = new Set((companyUsers || []).map(u => u.username));
+
+  // 6) Stage tab — from/to dropdown uchun barcha mavjud bosqichlar
+  const stageOptions = [...new Map(allColsFlat.map(c => [c.id, c])).values()];
+
+  // 7) Stage tab uchun transition statistikasi (eng top 5)
+  const transitionStats = (() => {
+    if (tab !== 'stage') return [];
+    const counts = {};
+    bySection.stage.forEach(x => {
+      if (empFilter !== 'all' && (x.by || '') !== empFilter) return;
+      if (fromFilter !== 'all' && String(x.fromStatus || '') !== fromFilter) return;
+      if (toFilter !== 'all' && String(x.toStatus || '') !== toFilter) return;
+      const fromT = x.fromStageTitle || stageTitleById(x.fromStatus) || '—';
+      const toT = x.toStageTitle || stageTitleById(x.toStatus) || '—';
+      const key = `${fromT} → ${toT}`;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  })();
+  const shown = showAll ? filtered : filtered.slice(0, 200);
+  const totalCount = filtered.length;
+  const renderLogRow = log => {
+    const dt = new Date(log.date);
+    const dtStr = dt.toLocaleDateString('uz-UZ', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    }) + ' ' + dt.toLocaleTimeString('uz-UZ', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    const tabDef = TAB_DEFS.find(t => t.id === log._cat) || TAB_DEFS[6];
+    // Stage transition uchun maxsus ko'rinish
+    const isStage = log._cat === 'stage';
+    const fromT = log.fromStageTitle || stageTitleById(log.fromStatus);
+    const toT = log.toStageTitle || stageTitleById(log.toStatus);
+    return /*#__PURE__*/React.createElement("div", {
+      key: log._key,
+      style: {
+        display: 'flex',
+        gap: '10px',
+        alignItems: 'flex-start',
+        padding: '10px 20px',
+        borderBottom: '1px solid var(--outline-variant)',
+        cursor: setSelectedLeadId ? 'pointer' : 'default'
+      },
+      onClick: () => setSelectedLeadId && setSelectedLeadId(log.leadId),
+      onMouseEnter: e => {
+        if (setSelectedLeadId) e.currentTarget.style.background = 'var(--bg-hover)';
+      },
+      onMouseLeave: e => e.currentTarget.style.background = ''
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: '26px',
+        height: '26px',
+        borderRadius: '6px',
+        background: `${tabDef.color}18`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        marginTop: '2px'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "material-symbols-outlined",
+      style: {
+        fontSize: '15px',
+        color: tabDef.color
+      }
+    }, tabDef.icon)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        minWidth: 0
+      }
+    }, isStage && log.fromStatus && log.toStatus ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: '12px',
+        color: 'var(--text-secondary)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        flexWrap: 'wrap',
+        lineHeight: 1.4
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: 'var(--surface-variant)',
+        padding: '2px 8px',
+        borderRadius: '10px',
+        fontWeight: 600
+      }
+    }, fromT), /*#__PURE__*/React.createElement("span", {
+      className: "material-symbols-outlined",
+      style: {
+        fontSize: '14px',
+        color: '#6366f1'
+      }
+    }, "arrow_forward"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: 'rgba(99,102,241,0.15)',
+        color: '#6366f1',
+        padding: '2px 8px',
+        borderRadius: '10px',
+        fontWeight: 600
+      }
+    }, toT), log._legacy && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '9px',
+        color: 'var(--text-muted)',
+        fontStyle: 'italic'
+      }
+    }, "(legacy)")) : /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: '12px',
+        color: 'var(--text-secondary)',
+        lineHeight: 1.4
+      }
+    }, log.text), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        gap: '10px',
+        marginTop: '4px',
+        flexWrap: 'wrap'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '10px',
+        color: 'var(--text-muted)'
+      }
+    }, dtStr), log.leadName && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '10px',
+        color: 'var(--primary)',
+        fontWeight: 600
+      }
+    }, log.leadName, log.leadPhone ? ` · ${log.leadPhone}` : ''), log.by && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '10px',
+        color: knownUsernames.has(log.by) ? 'var(--text-muted)' : '#f59e0b'
+      }
+    }, "by ", log.by, !knownUsernames.has(log.by) && ' ⚠️'), log.assignee && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: '10px',
+        color: '#f59e0b'
+      }
+    }, "\u2192 ", log.assignee))));
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden',
+      marginTop: '16px'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '14px 20px',
+      borderBottom: '1px solid var(--outline-variant)',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: '10px'
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 600,
+      fontSize: '14px'
+    }
+  }, "\uD83D\uDCCB Harakatlar Jurnali"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)',
+      marginLeft: '10px'
+    }
+  }, "(jami ", all.length, " ta yozuv)"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      gap: '6px',
+      padding: '10px 20px',
+      borderBottom: '1px solid var(--outline-variant)',
+      overflowX: 'auto',
+      flexWrap: 'wrap'
+    }
+  }, TAB_DEFS.map(t => {
+    const cnt = bySection[t.id]?.length || 0;
+    const isActive = tab === t.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: t.id,
+      onClick: () => {
+        setTab(t.id);
+        setEmpFilter('all');
+        setFromFilter('all');
+        setToFilter('all');
+        setShowAll(false);
+      },
+      style: {
+        padding: '6px 12px',
+        borderRadius: '8px',
+        border: `1px solid ${isActive ? t.color : 'var(--border-light)'}`,
+        background: isActive ? `${t.color}18` : 'var(--bg-base)',
+        color: isActive ? t.color : 'var(--text-secondary)',
+        fontSize: '12px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        whiteSpace: 'nowrap'
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "material-symbols-outlined",
+      style: {
+        fontSize: '15px'
+      }
+    }, t.icon), t.label, /*#__PURE__*/React.createElement("span", {
+      style: {
+        background: isActive ? t.color : 'var(--surface-variant)',
+        color: isActive ? '#fff' : 'var(--text-muted)',
+        padding: '1px 7px',
+        borderRadius: '10px',
+        fontSize: '10px',
+        fontWeight: 700
+      }
+    }, cnt));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '10px 20px',
+      borderBottom: '1px solid var(--outline-variant)',
+      display: 'flex',
+      gap: '10px',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      background: 'var(--bg-base)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '15px',
+      color: 'var(--text-muted)'
+    }
+  }, "person"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      height: '30px',
+      fontSize: '12px',
+      minWidth: '150px'
+    },
+    value: empFilter,
+    onChange: e => setEmpFilter(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "Barcha xodimlar"), allBys.map(b => /*#__PURE__*/React.createElement("option", {
+    key: b,
+    value: b
+  }, b, !knownUsernames.has(b) && ' ⚠️')))), tab === 'stage' && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)'
+    }
+  }, "Bosqichdan:"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      height: '30px',
+      fontSize: '12px',
+      minWidth: '130px'
+    },
+    value: fromFilter,
+    onChange: e => setFromFilter(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "\u2014 Barchasi \u2014"), stageOptions.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.id,
+    value: String(s.id)
+  }, s.title)))), /*#__PURE__*/React.createElement("span", {
+    className: "material-symbols-outlined",
+    style: {
+      fontSize: '16px',
+      color: '#6366f1'
+    }
+  }, "arrow_forward"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '11px',
+      color: 'var(--text-muted)'
+    }
+  }, "Bosqichga:"), /*#__PURE__*/React.createElement("select", {
+    className: "input-base",
+    style: {
+      marginBottom: 0,
+      height: '30px',
+      fontSize: '12px',
+      minWidth: '130px'
+    },
+    value: toFilter,
+    onChange: e => setToFilter(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "\u2014 Barchasi \u2014"), stageOptions.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s.id,
+    value: String(s.id)
+  }, s.title))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: '12px',
+      fontWeight: 700,
+      color: 'var(--primary)'
+    }
+  }, totalCount, " ta ", tab === 'stage' ? "o'tish" : "yozuv")), tab === 'stage' && transitionStats.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px 20px',
+      borderBottom: '1px solid var(--outline-variant)',
+      background: 'rgba(99,102,241,0.04)'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: '11px',
+      fontWeight: 600,
+      color: 'var(--text-secondary)',
+      marginBottom: '8px',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px'
+    }
+  }, "\uD83D\uDCCA Eng ko'p uchragan o'tishlar ", empFilter !== 'all' && `(${empFilter})`), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '8px'
+    }
+  }, transitionStats.map(([trans, cnt]) => /*#__PURE__*/React.createElement("div", {
+    key: trans,
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      padding: '5px 10px',
+      background: 'var(--surface-variant)',
+      borderRadius: '14px',
+      fontSize: '11px',
+      border: '1px solid var(--border-light)'
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: 'var(--text-secondary)'
+    }
+  }, trans), /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: '#6366f1',
+      color: '#fff',
+      padding: '1px 8px',
+      borderRadius: '10px',
+      fontWeight: 700,
+      fontSize: '10px'
+    }
+  }, cnt))))), shown.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '30px',
+      textAlign: 'center',
+      color: 'var(--text-muted)',
+      fontSize: '13px'
+    }
+  }, "Tanlangan filtrga mos yozuv yo'q") : /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxHeight: '500px',
+      overflowY: 'auto'
+    }
+  }, shown.map(renderLogRow), !showAll && totalCount > 200 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px',
+      textAlign: 'center',
+      background: 'var(--bg-base)'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    onClick: () => setShowAll(true),
+    style: {
+      fontSize: '12px',
+      padding: '6px 14px'
+    }
+  }, "Yana ", totalCount - 200, " ta yozuvni ko'rsatish")), showAll && totalCount > 200 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: '12px',
+      textAlign: 'center',
+      background: 'var(--bg-base)'
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "btn-outline",
+    onClick: () => setShowAll(false),
+    style: {
+      fontSize: '12px',
+      padding: '6px 14px'
+    }
+  }, "Faqat oxirgi 200 ta ko'rsatish"))));
+};
+
 // ===== HISOBOTLAR (REPORTS) MODULE =====
 const HisobotlarModule = ({
   leads,
@@ -6460,134 +6976,12 @@ const HisobotlarModule = ({
       hour: '2-digit',
       minute: '2-digit'
     }) : '—'));
-  })))), (() => {
-    // Barcha leadlardan sys va audit chatlog yozuvlarini yig'amiz
-    const actLogs = [];
-    leads.forEach(l => {
-      const logs = Array.isArray(l.chatLogs) ? l.chatLogs : [];
-      logs.forEach(log => {
-        if (log.type === 'sys' || log.type === 'audit') {
-          actLogs.push({
-            ...log,
-            leadId: l.id,
-            leadName: l.name,
-            leadPhone: l.phone
-          });
-        }
-      });
-    });
-    // Sanaga qarab tartiblash (yangi birinchi)
-    actLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
-    const shown = actLogs.slice(0, 200);
-    return /*#__PURE__*/React.createElement("div", {
-      className: "card",
-      style: {
-        padding: 0,
-        overflow: 'hidden',
-        marginTop: '16px'
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '14px 20px',
-        borderBottom: '1px solid var(--outline-variant)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }
-    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontWeight: 600,
-        fontSize: '14px'
-      }
-    }, "\uD83D\uDCCB Harakatlar Jurnali"), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: '11px',
-        color: 'var(--text-muted)',
-        marginLeft: '10px'
-      }
-    }, "(so'nggi ", shown.length, " ta yozuv)"))), shown.length === 0 ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: '30px',
-        textAlign: 'center',
-        color: 'var(--text-muted)',
-        fontSize: '13px'
-      }
-    }, "Hali hech qanday harakat qayd etilmagan") : /*#__PURE__*/React.createElement("div", {
-      style: {
-        maxHeight: '400px',
-        overflowY: 'auto'
-      }
-    }, shown.map((log, idx) => {
-      const isAudit = log.type === 'audit';
-      const dt = new Date(log.date);
-      const dtStr = dt.toLocaleDateString('uz-UZ', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit'
-      }) + ' ' + dt.toLocaleTimeString('uz-UZ', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      return /*#__PURE__*/React.createElement("div", {
-        key: idx,
-        style: {
-          display: 'flex',
-          gap: '12px',
-          alignItems: 'flex-start',
-          padding: '10px 20px',
-          borderBottom: '1px solid var(--outline-variant)',
-          cursor: setSelectedLeadId ? 'pointer' : 'default'
-        },
-        onClick: () => setSelectedLeadId && setSelectedLeadId(log.leadId),
-        onMouseEnter: e => {
-          if (setSelectedLeadId) e.currentTarget.style.background = 'var(--bg-hover)';
-        },
-        onMouseLeave: e => e.currentTarget.style.background = ''
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: '6px',
-          height: '6px',
-          borderRadius: '50%',
-          background: isAudit ? '#3b82f6' : 'var(--text-muted)',
-          marginTop: '6px',
-          flexShrink: 0
-        }
-      }), /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          minWidth: 0
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: '12px',
-          color: 'var(--text-secondary)',
-          lineHeight: 1.4
-        }
-      }, log.text), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: 'flex',
-          gap: '10px',
-          marginTop: '3px'
-        }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--text-muted)'
-        }
-      }, dtStr), log.leadName && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--primary)',
-          fontWeight: 600
-        }
-      }, log.leadName, log.leadPhone ? ` · ${log.leadPhone}` : ''), log.by && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: '10px',
-          color: 'var(--text-muted)'
-        }
-      }, "by ", log.by))));
-    })));
-  })());
+  })))), /*#__PURE__*/React.createElement(ActivityLogPanel, {
+    leads: leads,
+    columnsMap: columnsMap,
+    companyUsers: companyUsers,
+    setSelectedLeadId: setSelectedLeadId
+  }));
 };
 
 // ===== AUTOMATION MODULE =====
@@ -12913,7 +13307,11 @@ const App = () => {
     if (!base) return;
     // Bosqich nomini ID dan emas, columnsMap dan o'zbek tilida olamiz
     const pipeId = base.pipelineId || activePipe;
-    const stageTitle = (columnsMap[pipeId] || []).find(c => c.id === newStatus)?.title || newStatus;
+    const cols = columnsMap[pipeId] || [];
+    const stageTitle = cols.find(c => c.id === newStatus)?.title || newStatus;
+    // V54: from-stage ma'lumotini ham yozamiz (Harakatlar Jurnali "qaysi bosqichdan qaysi bosqichga" filtri uchun)
+    const fromStatus = base.status;
+    const fromStageTitle = cols.find(c => c.id === fromStatus)?.title || fromStatus || '—';
     const targetLead = {
       ...base,
       status: newStatus,
@@ -12922,7 +13320,17 @@ const App = () => {
         type: 'sys',
         date: new Date().toISOString(),
         by: authUser.username,
-        text: `🔄 Bosqich o'zgardi → ${stageTitle}. Urinishlar nollashtirildi.`
+        isStageChange: true,
+        // V54: tab filteri uchun marker
+        fromStatus,
+        // V54
+        toStatus: newStatus,
+        // V54
+        fromStageTitle,
+        // V54
+        toStageTitle: stageTitle,
+        // V54
+        text: `🔄 Bosqich o'zgardi: ${fromStageTitle} → ${stageTitle}. Urinishlar nollashtirildi.`
       }]
     };
     setHasUnsavedChanges(true);
