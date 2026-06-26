@@ -2219,32 +2219,41 @@
           <div style={{display:'grid', gridTemplateColumns:'1fr 320px', gap:'14px', marginBottom:'14px'}}>
             <div className="card">
               <div style={{fontWeight:600, fontSize:'14px', marginBottom:'14px'}}>Operatorlar samaradorligi</div>
-              {operatorNames.map(op => {
-                const opLeads = leads.filter(l => l.owner === op);
-                const opCalls = opLeads.reduce((s, l) => s + (l.actualCallAttempts||0), 0);
-                const opWon = opLeads.filter(l => l.status==='WON').length;
-                const opLost = opLeads.filter(l => l.status==='LOST').length;
-                const maxCalls = Math.max(1, ...operatorNames.map(o => leads.filter(l=>l.owner===o).reduce((s,l)=>s+(l.actualCallAttempts||0),0)));
-                return (
-                  <div key={op} style={{padding:'12px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', marginBottom:'8px'}}>
-                    <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px'}}>
-                      <div className="avatar" style={{width:'32px', height:'32px', fontSize:'12px'}}>{op[0].toUpperCase()}</div>
-                      <div style={{flex:1}}>
-                        <div style={{fontWeight:600, fontSize:'13px'}}>{op}</div>
-                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{opLeads.length} ta mijoz</div>
+              {(() => {
+                // V52: Navbatda (queue placeholder) — haqiqiy operator emas, alohida ko'rsatamiz
+                const PLACEHOLDER_OWNERS = new Set(['Navbatda','navbatda','','—','-','unassigned','Unassigned']);
+                const realOps        = operatorNames.filter(o => o && !PLACEHOLDER_OWNERS.has(o));
+                const placeholderOps = operatorNames.filter(o => o && PLACEHOLDER_OWNERS.has(o));
+                const sortedOps      = [...realOps, ...placeholderOps];
+                return sortedOps.map(op => {
+                  const isPlaceholder = PLACEHOLDER_OWNERS.has(op);
+                  const opLeads = leads.filter(l => l.owner === op);
+                  const opCalls = opLeads.reduce((s, l) => s + (l.actualCallAttempts||0), 0);
+                  const opWon = opLeads.filter(l => l.status==='WON').length;
+                  const opLost = opLeads.filter(l => l.status==='LOST').length;
+                  const maxCalls = Math.max(1, ...operatorNames.map(o => leads.filter(l=>l.owner===o).reduce((s,l)=>s+(l.actualCallAttempts||0),0)));
+                  const displayName = isPlaceholder ? '⏳ Tayinlanmagan (queue)' : op;
+                  return (
+                    <div key={op} style={{padding:'12px', background:isPlaceholder?'rgba(245,158,11,0.06)':'var(--bg-base)', borderRadius:'8px', border:`1px solid ${isPlaceholder?'rgba(245,158,11,0.25)':'var(--border-light)'}`, marginBottom:'8px'}}>
+                      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px'}}>
+                        <div className="avatar" style={{width:'32px', height:'32px', fontSize:'12px', background:isPlaceholder?'rgba(245,158,11,0.18)':undefined}}>{isPlaceholder?'⏳':op[0].toUpperCase()}</div>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600, fontSize:'13px', color:isPlaceholder?'#f59e0b':undefined}}>{displayName}</div>
+                          <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{opLeads.length} ta mijoz</div>
+                        </div>
+                        <div style={{display:'flex', gap:'10px', fontSize:'12px'}}>
+                          <span style={{color:'#01a750', fontWeight:700}}>{opWon} ✓</span>
+                          <span style={{color:'#ef4444', fontWeight:700}}>{opLost} ✗</span>
+                          <span style={{color:'var(--text-muted)'}}>{opCalls} 📞</span>
+                        </div>
                       </div>
-                      <div style={{display:'flex', gap:'10px', fontSize:'12px'}}>
-                        <span style={{color:'#01a750', fontWeight:700}}>{opWon} ✓</span>
-                        <span style={{color:'#ef4444', fontWeight:700}}>{opLost} ✗</span>
-                        <span style={{color:'var(--text-muted)'}}>{opCalls} 📞</span>
+                      <div className="chart-bar-track" style={{height:'5px'}}>
+                        <div className="chart-bar-fill" style={{width:(opCalls/maxCalls*100)+'%', background:isPlaceholder?'#f59e0b':'var(--primary-container)'}}></div>
                       </div>
                     </div>
-                    <div className="chart-bar-track" style={{height:'5px'}}>
-                      <div className="chart-bar-fill" style={{width:(opCalls/maxCalls*100)+'%', background:'var(--primary-container)'}}></div>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
 
             <div className="card" style={{display:'flex', flexDirection:'column', gap:'10px'}}>
@@ -2645,40 +2654,55 @@
           </div>
 
           {/* ── Operators + Extra KPIs ── */}
+          {/* V52: Navbatda — tashqi forma orqali kelgan, hali tayinlanmagan leadlar uchun placeholder owner; haqiqiy xodim emas. */}
+          {(() => null)()}
           <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'14px', marginBottom:'14px'}}>
             <div className="card">
               <div className="card-title" style={{marginBottom:'14px'}}>Xodimlar samaradorligi</div>
-              {allOwners.length===0
-                ? <div style={{color:'var(--text-muted)',fontSize:'13px',textAlign:'center',padding:'20px 0'}}>Ma'lumot yo'q</div>
-                : allOwners.map(op=>{
+              {(() => {
+                // V52: 'Navbatda' va boshqa to'g'ridan-to'g'ri tayinlanmagan placeholderlarni haqiqiy xodimlardan ajratamiz
+                const PLACEHOLDER_OWNERS = new Set(['Navbatda','navbatda','','—','-','unassigned','Unassigned']);
+                const realOwners        = allOwners.filter(o => !PLACEHOLDER_OWNERS.has(o));
+                const placeholderOwners = allOwners.filter(o =>  PLACEHOLDER_OWNERS.has(o));
+                const sortedOwners      = [...realOwners, ...placeholderOwners]; // haqiqiy xodimlar yuqorida
+                if (allOwners.length===0)
+                  return <div style={{color:'var(--text-muted)',fontSize:'13px',textAlign:'center',padding:'20px 0'}}>Ma'lumot yo'q</div>;
+                return sortedOwners.map(op=>{
+                    const isPlaceholder = PLACEHOLDER_OWNERS.has(op);
                     const opL    = fl.filter(l=>l.owner===op);
                     const opWon  = opL.filter(l=>wonCol?l.status===wonCol.id:l.status==='WON').length;
                     const opCalls= opL.reduce((s,l)=>s+(l.actualCallAttempts||0),0);
                     const maxOp  = Math.max(1,...allOwners.map(o=>fl.filter(l=>l.owner===o).length));
                     const cvr    = opL.length?Math.round(opWon/opL.length*100):0;
+                    const displayName = isPlaceholder ? '⏳ Tayinlanmagan (queue)' : op;
                     return (
-                      <div key={op} style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', background:'var(--bg-base)', borderRadius:'8px', border:'1px solid var(--border-light)', marginBottom:'8px'}}>
-                        <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px'}}>{op[0].toUpperCase()}</div>
+                      <div key={op} style={{display:'flex', alignItems:'center', gap:'10px', padding:'10px', background:isPlaceholder?'rgba(245,158,11,0.06)':'var(--bg-base)', borderRadius:'8px', border:`1px solid ${isPlaceholder?'rgba(245,158,11,0.25)':'var(--border-light)'}`, marginBottom:'8px'}}>
+                        <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px', background:isPlaceholder?'rgba(245,158,11,0.18)':undefined}}>{isPlaceholder?'⏳':op[0].toUpperCase()}</div>
                         <div style={{flex:1}}>
                           <div style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
-                            <span style={{fontWeight:600, fontSize:'13px'}}>{op}</span>
+                            <span style={{fontWeight:600, fontSize:'13px', color:isPlaceholder?'#f59e0b':undefined}}>{displayName}</span>
                             <span style={{fontSize:'11px', color:'var(--text-muted)'}}>{opL.length} lead · {opCalls} 📞 · {cvr}% CVR</span>
                           </div>
                           <div className="chart-bar-track" style={{height:'5px'}}>
-                            <div className="chart-bar-fill" style={{width:`${opL.length/maxOp*100}%`, background:opWon>0?'#01a750':'var(--primary-container)'}}></div>
+                            <div className="chart-bar-fill" style={{width:`${opL.length/maxOp*100}%`, background:opWon>0?'#01a750':(isPlaceholder?'#f59e0b':'var(--primary-container)')}}></div>
                           </div>
                         </div>
                         <div style={{fontSize:'14px', fontWeight:700, color:'#01a750', minWidth:'24px', textAlign:'right'}}>{opWon}</div>
                       </div>
                     );
-                  })
-              }
+                  });
+              })()}
             </div>
             <div className="card">
               <div className="card-title" style={{marginBottom:'14px'}}>Qo'shimcha ko'rsatkichlar</div>
               {(() => {
                 const bestSrc = allSources[0];
-                const bestOp  = [...allOwners].sort((a,b)=>fl.filter(l=>l.owner===b&&(wonCol?l.status===wonCol.id:l.status==='WON')).length-fl.filter(l=>l.owner===a&&(wonCol?l.status===wonCol.id:l.status==='WON')).length)[0];
+                // V52: placeholderlarni "Eng samarali xodim" hisobidan chiqaramiz; agar real xodimlardan birortasi WON yutmagan bo'lsa — '—'
+                const PLACEHOLDER_OWNERS = new Set(['Navbatda','navbatda','','—','-','unassigned','Unassigned']);
+                const realOwners = allOwners.filter(o => !PLACEHOLDER_OWNERS.has(o));
+                const wonByOwner = (o) => fl.filter(l => l.owner===o && (wonCol?l.status===wonCol.id:l.status==='WON')).length;
+                const topOp      = realOwners.length ? [...realOwners].sort((a,b)=>wonByOwner(b)-wonByOwner(a))[0] : null;
+                const bestOp     = (topOp && wonByOwner(topOp) > 0) ? topOp : null;
                 return [
                   {label:"O'rtacha qo'ng'iroq / lead", val:fl.length?(totalCalls/fl.length).toFixed(1):'0',        icon:'analytics',      color:'#8b5cf6'},
                   {label:"Eng faol manba",              val:bestSrc?(SOURCE_LABELS[bestSrc]||bestSrc):'—',           icon:'trending_up',    color:'#01a750'},
