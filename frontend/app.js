@@ -5670,16 +5670,107 @@ const ActivityLogPanel = ({
   // 1) Barcha logni yig'amiz va kategoriya belgilaymiz
   const allColsFlat = Object.values(columnsMap || {}).flat();
   const stageTitleById = id => allColsFlat.find(c => c.id === id)?.title || String(id || '—');
+
+  // Bosqich nomi → ID reverse lookup (legacy yozuvlarni qayta tiklash uchun)
+  const titleToColId = new Map();
+  allColsFlat.forEach(c => {
+    if (c && c.title != null) titleToColId.set(String(c.title).trim().toLowerCase(), c.id);
+  });
+  const findColIdByTitle = title => {
+    if (!title) return undefined;
+    return titleToColId.get(String(title).trim().toLowerCase());
+  };
   const all = [];
   (leads || []).forEach(l => {
     const logs = Array.isArray(l.chatLogs) ? l.chatLogs : [];
+
+    // 1-bosqich: Har bir lid uchun chronologik (eskidan yangiga) yurib,
+    // legacy bosqich o'zgarish yozuvlarini matn parsing + running state orqali qayta tiklaymiz.
+    const sortedAsc = logs.map((log, i) => ({
+      log,
+      _origIdx: i
+    })).sort((a, b) => new Date(a.log.date || 0) - new Date(b.log.date || 0));
+    const reconstructed = new Map();
+    let curStatus = null; // running state — oxirgi ma'lum bosqich ID
+    let curStageTitle = null; // running state — oxirgi ma'lum bosqich nomi
+
+    sortedAsc.forEach(({
+      log,
+      _origIdx
+    }) => {
+      const isStageRec = log.isStageChange || log.type === 'sys' && /Bosqich o.zgardi/i.test(log.text || '');
+      if (!isStageRec) return;
+
+      // V54+ yozuvi to'liq ma'lumotga ega — running state ni yangilaymiz va o'tamiz
+      if (log.isStageChange && log.fromStatus !== undefined && log.toStatus !== undefined) {
+        curStatus = log.toStatus;
+        curStageTitle = log.toStageTitle || stageTitleById(log.toStatus);
+        return;
+      }
+
+      // Legacy yoki yarim-to'liq yozuv — matndan parse qilamiz
+      const text = log.text || '';
+      let parsedFrom = null;
+      let parsedTo = null;
+
+      // "Bosqich o'zgardi: FROM → TO." yoki "Bosqich o'zgardi → TO"
+      const mFull = text.match(/Bosqich o.zgardi\s*:?\s*([^→\n]*?)\s*→\s*([^.\n]+?)(?:\.|$)/i);
+      if (mFull) {
+        const a = (mFull[1] || '').trim();
+        const b = (mFull[2] || '').trim();
+        if (a) parsedFrom = a;
+        if (b) parsedTo = b;
+      } else {
+        // "Bosqich o'zgardi: TO" — eski oddiy format
+        const mSimple = text.match(/Bosqich o.zgardi\s*:\s*([^.\n]+?)(?:\.|$)/i);
+        if (mSimple) parsedTo = (mSimple[1] || '').trim();
+      }
+      let reconToStatus = log.toStatus;
+      let reconFromStatus = log.fromStatus;
+      if (reconToStatus === undefined && parsedTo) {
+        reconToStatus = findColIdByTitle(parsedTo);
+      }
+      if (reconFromStatus === undefined && parsedFrom) {
+        reconFromStatus = findColIdByTitle(parsedFrom);
+      }
+      // From hali ham noma'lum bo'lsa — running state'dan olamiz
+      if (reconFromStatus === undefined && curStatus !== null && curStatus !== undefined) {
+        reconFromStatus = curStatus;
+        if (!parsedFrom) parsedFrom = curStageTitle;
+      }
+      reconstructed.set(_origIdx, {
+        fromStatus: reconFromStatus,
+        toStatus: reconToStatus,
+        fromStageTitle: parsedFrom || (reconFromStatus !== undefined ? stageTitleById(reconFromStatus) : '—'),
+        toStageTitle: parsedTo || (reconToStatus !== undefined ? stageTitleById(reconToStatus) : '—')
+      });
+
+      // Running state'ni yangilaymiz
+      if (reconToStatus !== undefined && reconToStatus !== null) {
+        curStatus = reconToStatus;
+        curStageTitle = parsedTo || stageTitleById(reconToStatus);
+      } else if (parsedTo) {
+        curStageTitle = parsedTo;
+      }
+    });
+
+    // 2-bosqich: All-array qurish (reconstructed ma'lumotlarni qo'shamiz)
     logs.forEach((log, i) => {
-      // Eski logdagi "🔄 Bosqich o'zgardi → X" matnini ham qo'lga olamiz (V54'dan oldingi yozuvlar)
       const isLegacyStage = !log.isStageChange && log.type === 'sys' && /Bosqich o.zgardi/i.test(log.text || '');
       let cat = 'other';
       if (log.isStageChange || isLegacyStage) cat = 'stage';else if (log.type === 'msg') cat = 'comment';else if (log.isTask || log.isTaskComplete) cat = 'task';else if (log.type === 'audit') cat = 'edit';else if (log.type === 'call') cat = 'call';else if (log.type === 'telegram' || log.type === 'instagram') cat = 'chat_in';
+      const recon = reconstructed.get(i);
+      const merged = {
+        ...log
+      };
+      if (recon) {
+        if (merged.fromStatus === undefined) merged.fromStatus = recon.fromStatus;
+        if (merged.toStatus === undefined) merged.toStatus = recon.toStatus;
+        if (!merged.fromStageTitle) merged.fromStageTitle = recon.fromStageTitle;
+        if (!merged.toStageTitle) merged.toStageTitle = recon.toStageTitle;
+      }
       all.push({
-        ...log,
+        ...merged,
         _cat: cat,
         _legacy: isLegacyStage,
         leadId: l.id,
