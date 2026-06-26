@@ -6093,9 +6093,11 @@ const ActivityLogPanel = ({
     className: "input-base",
     style: {
       marginBottom: 0,
-      height: '30px',
+      height: '36px',
+      padding: '0 28px 0 12px',
+      lineHeight: '34px',
       fontSize: '12px',
-      minWidth: '150px'
+      minWidth: '160px'
     },
     value: empFilter,
     onChange: e => setEmpFilter(e.target.value)
@@ -6119,9 +6121,11 @@ const ActivityLogPanel = ({
     className: "input-base",
     style: {
       marginBottom: 0,
-      height: '30px',
+      height: '36px',
+      padding: '0 28px 0 12px',
+      lineHeight: '34px',
       fontSize: '12px',
-      minWidth: '130px'
+      minWidth: '150px'
     },
     value: fromFilter,
     onChange: e => setFromFilter(e.target.value)
@@ -6151,9 +6155,11 @@ const ActivityLogPanel = ({
     className: "input-base",
     style: {
       marginBottom: 0,
-      height: '30px',
+      height: '36px',
+      padding: '0 28px 0 12px',
+      lineHeight: '34px',
       fontSize: '12px',
-      minWidth: '130px'
+      minWidth: '150px'
     },
     value: toFilter,
     onChange: e => setToFilter(e.target.value)

@@ -2703,7 +2703,7 @@
           <div style={{padding:'10px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap', background:'var(--bg-base)'}}>
             <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
               <span className="material-symbols-outlined" style={{fontSize:'15px', color:'var(--text-muted)'}}>person</span>
-              <select className="input-base" style={{marginBottom:0, height:'30px', fontSize:'12px', minWidth:'150px'}}
+              <select className="input-base" style={{marginBottom:0, height:'36px', padding:'0 28px 0 12px', lineHeight:'34px', fontSize:'12px', minWidth:'160px'}}
                 value={empFilter} onChange={e=>setEmpFilter(e.target.value)}>
                 <option value="all">Barcha xodimlar</option>
                 {allBys.map(b => (
@@ -2715,7 +2715,7 @@
               <React.Fragment>
                 <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
                   <span style={{fontSize:'11px', color:'var(--text-muted)'}}>Bosqichdan:</span>
-                  <select className="input-base" style={{marginBottom:0, height:'30px', fontSize:'12px', minWidth:'130px'}}
+                  <select className="input-base" style={{marginBottom:0, height:'36px', padding:'0 28px 0 12px', lineHeight:'34px', fontSize:'12px', minWidth:'150px'}}
                     value={fromFilter} onChange={e=>setFromFilter(e.target.value)}>
                     <option value="all">— Barchasi —</option>
                     {stageOptions.map(s => <option key={s.id} value={String(s.id)}>{s.title}</option>)}
@@ -2724,7 +2724,7 @@
                 <span className="material-symbols-outlined" style={{fontSize:'16px', color:'#6366f1'}}>arrow_forward</span>
                 <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
                   <span style={{fontSize:'11px', color:'var(--text-muted)'}}>Bosqichga:</span>
-                  <select className="input-base" style={{marginBottom:0, height:'30px', fontSize:'12px', minWidth:'130px'}}
+                  <select className="input-base" style={{marginBottom:0, height:'36px', padding:'0 28px 0 12px', lineHeight:'34px', fontSize:'12px', minWidth:'150px'}}
                     value={toFilter} onChange={e=>setToFilter(e.target.value)}>
                     <option value="all">— Barchasi —</option>
                     {stageOptions.map(s => <option key={s.id} value={String(s.id)}>{s.title}</option>)}
