@@ -562,7 +562,7 @@
             const upd = {...prev};
             if (d?.configured) {
               // VoIP ulangan — ma'lumotlarni yangilash
-              upd.voip = { account_id:d.account_id, caller_id:d.caller_id, domain:d.domain, _connected_at:d.created_at||new Date().toISOString() };
+              upd.voip = { user_name:d.user_name, caller_id:d.caller_id, subdomain:d.subdomain, _connected_at:d.created_at||new Date().toISOString() };
             } else {
               // VoIP ulangan emas — localStorage dagi eski ma'lumotni o'chirish
               delete upd.voip;
@@ -594,8 +594,8 @@
           if (key === 'voip') {
             // VoIP: dedicated endpoint
             const r = await fetch('/api/voip/config', {method:'POST', headers:authH(), body:JSON.stringify({
-              account_id: data.account_id, api_token: data.api_token,
-              caller_id: data.caller_id, domain: data.domain||'app.moizvonki.ru',
+              user_name: data.user_name, api_key: data.api_key,
+              caller_id: data.caller_id, subdomain: data.subdomain,
             })});
             ok = r.ok;
             if (!r.ok) { const e=await r.json(); throw new Error(e.error||'Server xatosi'); }
@@ -633,7 +633,9 @@
       const disconnectIntg = async (key) => {
         if (!window.confirm('Integratsiyani uzasizmi?')) return;
         try {
-          if (key !== 'voip' && key !== 'telegram') {
+          if (key === 'voip') {
+            await fetch('/api/voip/config', {method:'DELETE', headers:authH()});
+          } else if (key !== 'telegram') {
             await fetch(`/api/integrations/${encodeURIComponent(key)}`, {method:'DELETE', headers:authH()});
           }
         } catch {}
@@ -737,10 +739,10 @@
         { key:'voip', name:'Moizvonki VoIP', logo:'📞', color:'#01a750', bg:'rgba(1,167,80,0.12)',
           desc:'IP-telefon, avtomatik qo\'ng\'iroq qayd etish va Call Center statistikasi',
           fields:[
-            {k:'account_id', label:'Account ID — Moizvonki kabinetidagi login', ph:'user@moizvonki.ru', t:'text'},
-            {k:'api_token',  label:'API Token — Moizvonki → Sozlamalar → API', ph:'your-api-token', t:'password'},
+            {k:'subdomain',  label:'Subdomain — https://___.moizvonki.ru', ph:'mycompany', t:'text'},
+            {k:'user_name',  label:'User Name — Moizvonki kabinetidagi login email', ph:'admin@example.com', t:'text'},
+            {k:'api_key',    label:'API Key — Moizvonki → Sozlamalar → API', ph:'your-api-key', t:'password'},
             {k:'caller_id',  label:'Caller ID — chiquvchi qo\'ng\'iroqlar uchun raqam', ph:'+998901234567', t:'text'},
-            {k:'domain',     label:'Domain', ph:'app.moizvonki.ru', t:'text'},
           ],
           wh:{label:'Callback Webhook — Moizvonki kabinetiga kiriting', url:`${origin}/api/webhook/moizvonki`} },
 

@@ -277,12 +277,20 @@ async function initDb() {
 
       CREATE TABLE IF NOT EXISTS crm_voip_config (
         id         SERIAL PRIMARY KEY,
-        account_id VARCHAR(100) NOT NULL,
-        api_token  TEXT NOT NULL,
-        caller_id  VARCHAR(50) DEFAULT '',
-        domain     VARCHAR(100) DEFAULT 'app.moizvonki.ru',
+        user_name  VARCHAR(100) NOT NULL,
+        api_key    TEXT NOT NULL,
+        subdomain  VARCHAR(100) NOT NULL DEFAULT 'app',
+        caller_id  VARCHAR(50)  DEFAULT '',
         company_id INT REFERENCES companies(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS crm_call_events (
+        call_id    VARCHAR(120),
+        event_type VARCHAR(40),
+        company_id INT,
+        received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (call_id, event_type)
       );
 
       CREATE TABLE IF NOT EXISTS automation_sms_settings (
@@ -367,6 +375,21 @@ async function initDb() {
       ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS extra_config JSONB    DEFAULT '{}';
       ALTER TABLE crm_integration_config ADD COLUMN IF NOT EXISTS created_at  TIMESTAMP DEFAULT NOW();
       ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS company_id  INT;
+      ALTER TABLE crm_voip_config        ADD COLUMN IF NOT EXISTS subdomain   VARCHAR(100);
+      ALTER TABLE crm_users              ADD COLUMN IF NOT EXISTS moizvonki_email VARCHAR(255);
+      DO $do$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_voip_config' AND column_name='account_id') THEN
+          ALTER TABLE crm_voip_config RENAME COLUMN account_id TO user_name;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_voip_config' AND column_name='api_token') THEN
+          ALTER TABLE crm_voip_config RENAME COLUMN api_token TO api_key;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='crm_voip_config' AND column_name='domain') THEN
+          UPDATE crm_voip_config SET subdomain = COALESCE(NULLIF(REPLACE(REPLACE(domain, '.moizvonki.ru', ''), 'https://', ''), ''), 'app') WHERE subdomain IS NULL;
+          ALTER TABLE crm_voip_config DROP COLUMN domain;
+        END IF;
+      END $do$;
       ALTER TABLE automation_rules       ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'sms';
       ALTER TABLE crm_users              ADD COLUMN IF NOT EXISTS email       VARCHAR(255);
       ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_won       BOOLEAN DEFAULT false;
@@ -711,8 +734,9 @@ app.post('/api/webhook/sheets', async (req, res) => {
 });
 
 // ── VoIP ─────────────────────────────────────────────────────────────────────
-app.get ('/api/voip/config',    voipController.getConfig);
-app.post('/api/voip/config',    voipController.saveConfig);
+app.get   ('/api/voip/config',  voipController.getConfig);
+app.post  ('/api/voip/config',  voipController.saveConfig);
+app.delete('/api/voip/config',  voipController.deleteConfig);
 app.post('/api/call',           voipController.initiateCall);
 app.get ('/api/calls/recent',   voipController.getRecentEvents); // frontend polling uchun
 

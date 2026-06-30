@@ -420,7 +420,7 @@
     const UserManagement = ({ users, setUsers }) => {
       const [isAdding, setIsAdding] = useState(false);
       const [editId,   setEditId]   = useState(null);
-      const [form,     setForm]     = useState({username:'', password:'', role:'MANAGER', email:''});
+      const [form,     setForm]     = useState({username:'', password:'', role:'MANAGER', email:'', moizvonki_email:''});
       const [apiUsers, setApiUsers] = useState(null); // null = not fetched yet
       const [saving,   setSaving]   = useState(false);
       const token = localStorage.getItem('mizon_token');
@@ -449,7 +449,7 @@
         } else {
           setUsers([...users, {...form, id:Date.now().toString()}]);
         }
-        setSaving(false); setIsAdding(false); setForm({username:'',password:'',role:'MANAGER'});
+        setSaving(false); setIsAdding(false); setForm({username:'',password:'',role:'MANAGER',email:'',moizvonki_email:''});
       };
 
       const deleteU = async (u) => {
@@ -482,6 +482,7 @@
                 <div key={uid} style={{padding:'12px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px', display:'flex', gap:'8px', flexWrap:'wrap'}}>
                   <input className="input-base" style={{marginBottom:0,flex:1,minWidth:'100px'}} value={form.username} disabled />
                   <input className="input-base" style={{marginBottom:0,flex:1,minWidth:'120px'}} placeholder="Yangi parol (ixtiyoriy)" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
+                  <input className="input-base" style={{marginBottom:0,flex:1,minWidth:'180px'}} type="email" placeholder="Moizvonki email (ixtiyoriy)" value={form.moizvonki_email||''} onChange={e=>setForm({...form,moizvonki_email:e.target.value})} />
                   <select className="input-base" style={{marginBottom:0}} value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                     <option value="MANAGER">MANAGER</option>
                     <option value="CEO">CEO</option>
@@ -502,11 +503,12 @@
                         <span style={{padding:'1px 7px', borderRadius:'10px', fontSize:'10px', fontWeight:700, background:`${roleColor}18`, color:roleColor}}>{u.role==='WATCHER'?'KUZATUVCHI':u.role}</span>
                         {u.full_name && u.full_name!==u.username && <span>{u.full_name}</span>}
                         {u.email && <span>{u.email}</span>}
+                        {u.moizvonki_email && <span style={{color:'#01a750'}}>📞 {u.moizvonki_email}</span>}
                       </div>
                     </div>
                   </div>
                   <div style={{display:'flex', gap:'8px'}}>
-                    <button className="btn-outline" style={{padding:'6px 12px'}} onClick={()=>{setEditId(uid);setForm({username:u.username,password:'',role:u.role||'MANAGER'});}}>Tahrirlash</button>
+                    <button className="btn-outline" style={{padding:'6px 12px'}} onClick={()=>{setEditId(uid);setForm({username:u.username,password:'',role:u.role||'MANAGER',email:u.email||'',moizvonki_email:u.moizvonki_email||''});}}>Tahrirlash</button>
                     <button className="btn-danger" style={{padding:'6px 12px'}} onClick={()=>deleteU(u)}>O'chirish</button>
                   </div>
                 </div>
@@ -519,6 +521,7 @@
               <input className="input-base" placeholder="Login (username)" value={form.username} onChange={e=>setForm({...form,username:e.target.value})} />
               <input className="input-base" placeholder="Email (login uchun)" type="email" value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})} />
               <input className="input-base" placeholder="Maxfiy parol" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} />
+              <input className="input-base" placeholder="Moizvonki email (ixtiyoriy — xodim Moizvonki ilovasiga qaysi email bilan kiradi)" type="email" value={form.moizvonki_email||''} onChange={e=>setForm({...form,moizvonki_email:e.target.value})} />
               <select className="input-base" value={form.role} onChange={e=>setForm({...form,role:e.target.value})}>
                 <option value="MANAGER">MANAGER (Sotuvchi)</option>
                 <option value="CEO">CEO (Boshqaruvchi)</option>
@@ -530,7 +533,7 @@
               </div>
             </div>
           ) : (
-            <button className="btn-outline" style={{marginTop:'14px'}} onClick={()=>{setForm({username:'',password:'',role:'MANAGER',email:''});setIsAdding(true);}}>+ Yangi xodim qo'shish</button>
+            <button className="btn-outline" style={{marginTop:'14px'}} onClick={()=>{setForm({username:'',password:'',role:'MANAGER',email:'',moizvonki_email:''});setIsAdding(true);}}>+ Yangi xodim qo'shish</button>
           )}
         </div>
       );
@@ -578,6 +581,22 @@
     };
 
     // ===== INTEGRATIONS =====
+    // ┌──────────────────────────────────────────────────────────────────────────┐
+    // │ WEBHOOK STATE RESET BUG — TUSHUNTIRISH (kod bilmaydigan uchun ham):        │
+    // │ WebhookFlow komponenti IntegrationsModule ICHIDA yaratilgan. Integrations   │
+    // │ Module har safar qayta chizilganda (masalan, "Nusxalash" tugmasi bosilganda │
+    // │ yoki har 30 soniyalik yangilanishda) WebhookFlow YANGI funksiya bo'lib       │
+    // │ qayta tug'ilardi. React buni "boshqa komponent" deb bilib, eskisini o'chirib │
+    // │ yangisini chizardi → foydalanuvchi tanlagan funnel, test natijasi, ochilgan  │
+    // │ bo'limlar — HAMMASI nolga qaytardi.                                          │
+    // │ YECHIM: WebhookFlow funksiyasini bir marta yaratamiz va shu yerda saqlaymiz  │
+    // │ (kesh). Keyingi safar o'sha bitta funksiyani qayta ishlatamiz — identifikatsi-│
+    // │ yasi o'zgarmaydi, shuning uchun React uni o'chirmaydi va holat saqlanib qoladi.│
+    // │ Barcha tashqi ma'lumotlar (URL, kalit, funnel ro'yxati va h.k.) PROPS orqali  │
+    // │ uzatiladi — shuning uchun eski (stale) qiymat muammosi ham bo'lmaydi.         │
+    // └──────────────────────────────────────────────────────────────────────────┘
+    let __WebhookFlowImpl = null;
+
     const IntegrationsModule = ({ formSettings, setFormSettings, formFields, setFormFields }) => {
       const [configs,     setConfigs]     = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_integrations')||'{}'); } catch{return {};} });
       const [apiKeys,     setApiKeys]     = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_api_keys_local')||'[]'); } catch{return [];} });
@@ -672,7 +691,7 @@
             const upd = {...prev};
             if (d?.configured) {
               // VoIP ulangan — ma'lumotlarni yangilash
-              upd.voip = { account_id:d.account_id, caller_id:d.caller_id, domain:d.domain, _connected_at:d.created_at||new Date().toISOString() };
+              upd.voip = { user_name:d.user_name, caller_id:d.caller_id, subdomain:d.subdomain, _connected_at:d.created_at||new Date().toISOString() };
             } else {
               // VoIP ulangan emas — localStorage dagi eski ma'lumotni o'chirish
               delete upd.voip;
@@ -752,8 +771,8 @@
           if (key === 'voip') {
             // VoIP: dedicated endpoint
             const r = await fetch('/api/voip/config', {method:'POST', headers:authH(), body:JSON.stringify({
-              account_id: data.account_id, api_token: data.api_token,
-              caller_id: data.caller_id, domain: data.domain||'app.moizvonki.ru',
+              user_name: data.user_name, api_key: data.api_key,
+              caller_id: data.caller_id, subdomain: data.subdomain,
             })});
             ok = r.ok;
             if (!r.ok) { const e=await r.json(); throw new Error(e.error||'Server xatosi'); }
@@ -791,7 +810,9 @@
       const disconnectIntg = async (key) => {
         if (!window.confirm('Integratsiyani uzasizmi?')) return;
         try {
-          if (key !== 'voip' && key !== 'telegram') {
+          if (key === 'voip') {
+            await fetch('/api/voip/config', {method:'DELETE', headers:authH()});
+          } else if (key !== 'telegram') {
             await fetch(`/api/integrations/${encodeURIComponent(key)}`, {method:'DELETE', headers:authH()});
           }
         } catch {}
@@ -889,14 +910,29 @@
           customUI: true },                  // V57: interactive WebhookFlow komponent ishlatiladi
 
         { key:'voip', name:'Moizvonki VoIP', logo:'📞', color:'#01a750', bg:'rgba(1,167,80,0.12)',
-          desc:'IP-telefon, avtomatik qo\'ng\'iroq qayd etish va Call Center statistikasi',
+          desc:'Mobil ilova orqali qo\'ng\'iroqlar avtomatik CRM ga yoziladi (kiruvchi + chiquvchi + yozuv)',
+          intro:{
+            title:'Moizvonki qanday ishlaydi?',
+            steps:[
+              '1️⃣  Xodim smartfoniga Moizvonki ilovasini o\'rnatadi va o\'z hisobiga kiradi.',
+              '2️⃣  Mijoz qo\'ng\'iroq qilganda yoki xodim qo\'ng\'iroq qilganda — ilova qo\'ng\'iroqni qayd etib, Moizvonki serveriga yuboradi.',
+              '3️⃣  Moizvonki serveri pastdagi Webhook URL orqali CRM ga xabar yuboradi → CRM lid kartochkasiga avtomatik yozib qo\'yadi.',
+              '4️⃣  CRM dan "Qo\'ng\'iroq qilish" tugmasi bosilsa — Moizvonki avval xodim telefonini, keyin mijozni jiringlatadi (click-to-call).',
+            ],
+            note:'⚠️  Moizvonki — bu SIP/VoIP-trunk emas, balki mobil ilova asosli xizmat. "Chiquvchi raqam" — bu xodim smartfonining raqami (Moizvonki ilovasi o\'rnatilgan), tashqi telefoniya raqami emas.',
+          },
           fields:[
-            {k:'account_id', label:'Account ID — Moizvonki kabinetidagi login', ph:'user@moizvonki.ru', t:'text'},
-            {k:'api_token',  label:'API Token — Moizvonki → Sozlamalar → API', ph:'your-api-token', t:'password'},
-            {k:'caller_id',  label:'Caller ID — chiquvchi qo\'ng\'iroqlar uchun raqam', ph:'+998901234567', t:'text'},
-            {k:'domain',     label:'Domain', ph:'app.moizvonki.ru', t:'text'},
+            {k:'subdomain',  label:'Subdomain — kompaniya prefiksi (https://___.moizvonki.ru)', ph:'mycompany', t:'text',
+              hint:'Moizvonki kabinetingiz manzili masalan https://mycompany.moizvonki.ru bo\'lsa — bu yerga faqat "mycompany" yozing (".moizvonki.ru" qismini qo\'shmang).'},
+            {k:'user_name',  label:'User Name — Moizvonki kabinetiga kirish email', ph:'admin@example.com', t:'text',
+              hint:'Moizvonki kabineti (mycompany.moizvonki.ru) ga qaysi email bilan kirsangiz — shuni kiriting. API so\'rovlarda autentifikatsiya uchun ishlatiladi.'},
+            {k:'api_key',    label:'API Key — Moizvonki kabineti → Настройки → API', ph:'mz_abc123...', t:'password',
+              hint:'Kalit kabinetning "Настройки → API" bo\'limidan olinadi. Har bir akkaunt uchun individual beriladi.'},
+            {k:'caller_id',  label:'Operator telefoni — Moizvonki ilovasi o\'rnatilgan smartfon raqami', ph:'+998901234567', t:'text',
+              hint:'CRM dan "Qo\'ng\'iroq" tugmasi bosilganda Moizvonki avval shu telefonni jiringlatadi, javob bersangiz — mijozga ulaydi. Bu xodim shaxsiy telefoni, SIP raqami emas.'},
           ],
-          wh:{label:'Callback Webhook — Moizvonki kabinetiga kiriting', url:`${origin}/api/webhook/moizvonki${(()=>{ try { const s = JSON.parse(localStorage.getItem('mizon_session')||'null'); return s?.companyId ? '?company_id='+s.companyId : ''; } catch { return ''; } })()}`} },
+          wh:{label:'⬇️  CALLBACK WEBHOOK — Moizvonki kabineti → Настройки → Интеграции → "Webhook URL" ga kiriting',
+              url:`${origin}/api/webhook/moizvonki${(()=>{ try { const s = JSON.parse(localStorage.getItem('mizon_session')||'null'); return s?.companyId ? '?company_id='+s.companyId : ''; } catch { return ''; } })()}`} },
 
         { key:'google_sheets', name:'Google Sheets', logo:'📊', color:'#0f9d58', bg:'rgba(15,157,88,0.12)',
           desc:'Facebook Lead Ads → Google Sheets → CRM: Apps Script orqali avtomatik sinxronizatsiya',
@@ -1804,26 +1840,33 @@
               );
             };
 
-            // ── Custom Webhook (V57 + V58) ──────────────────────────
-            // V57 Interactive UI: webhook URL, company_slug, pipeline tanlash, curl/JS misol, maydonlar jadvali
-            // V58 Xavfsizlik: API Key Bearer auth (ixtiyoriy), dublikat/validatsiya/sanitize haqida info
-            const WebhookFlow = () => {
+            // ── Custom Webhook (V57+V58+V59+V61+V62) ─────────────────────
+            // V61: Qayta yozildi — oddiy qadam-ba-qadam (step-by-step) UI.
+            // V62: STATE RESET BUG yechildi — komponent bir marta yaratilib keshlanadi
+            //      (yuqoridagi __WebhookFlowImpl izohiga qarang). Barcha tashqi qiymatlar
+            //      endi PROPS orqali keladi, IIFE scope'idan emas.
+            const WebhookFlow = __WebhookFlowImpl || (__WebhookFlowImpl = ({ origin, intgCompanySlug, intgPipelines, apiKeys, authH, copyText, copiedItem, genApiKey, setActiveModal }) => {
               const WH = '#6366f1';
               const webhookUrl = `${origin}/api/public/leads`;
               const slug = intgCompanySlug || 'sizning_slug';
+
+              // Asosiy holatlar — barchasi shu yerda, 30s timer yo'q
               const [selectedPipe, setSelectedPipe] = useState(intgPipelines[0]?.id || 'p1');
-              const [tab, setTab] = useState('curl'); // curl | js | fields | security
-              const [testStatus, setTestStatus] = useState(null); // null | 'loading' | {ok|err, id|msg}
-              // V58: API Key tanlangan — agar bor bo'lsa Authorization header bilan yuboriladi
-              //   apiKeys ro'yxati outer scope dan keladi (line 583), localStorage da token saqlanadi
+              const [testStatus,   setTestStatus]   = useState(null);   // null | 'loading' | {ok,err,...}
+              const [devOpen,      setDevOpen]       = useState(false);  // "Dasturchi uchun" section
+              const [actOpen,      setActOpen]       = useState(false);  // Aktivlik jurnali section
+              const [keyOpen,      setKeyOpen]       = useState(false);  // API kalit section
+              const [devTab,       setDevTab]        = useState('curl'); // curl|js|fields|security
+
+              // API kalit — V58
               const [selectedKeyId, setSelectedKeyId] = useState('');
               const selectedKey = apiKeys.find(k => String(k.id) === String(selectedKeyId));
               const bearerToken = selectedKey?.token || '';
               const hasAuth = Boolean(bearerToken);
 
-              // V59: Faollik jurnal — state + auto-fetch (tab 'activity' faol bo'lganda har 30s yangilanadi)
-              const [actLogs,  setActLogs]  = useState([]);     // recent log items
-              const [actStats, setActStats] = useState(null);   // {day, week, total, top_errors, last_at}
+              // Aktivlik jurnal — V59 (BUGFIX: setInterval YO'Q, faqat manual load)
+              const [actLogs,  setActLogs]  = useState([]);
+              const [actStats, setActStats] = useState(null);
               const [actLoad,  setActLoad]  = useState(false);
               const [actErr,   setActErr]   = useState(null);
               const loadActivity = async () => {
@@ -1833,135 +1876,20 @@
                     fetch('/api/webhook-log/recent?limit=50', { headers: authH() }),
                     fetch('/api/webhook-log/stats',           { headers: authH() }),
                   ]);
-                  if (!r1.ok || !r2.ok) throw new Error('HTTP ' + r1.status + '/' + r2.status);
-                  const d1 = await r1.json();
-                  const d2 = await r2.json();
+                  if (!r1.ok || !r2.ok) throw new Error(`HTTP ${r1.status}/${r2.status}`);
+                  const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
                   setActLogs(d1.items || []);
                   setActStats(d2);
-                } catch (e) {
-                  setActErr(e.message);
-                } finally {
-                  setActLoad(false);
-                }
+                } catch (e) { setActErr(e.message); }
+                finally { setActLoad(false); }
               };
-              useEffect(() => {
-                if (tab !== 'activity') return;
-                loadActivity();
-                const t = setInterval(loadActivity, 30000);  // 30s auto-refresh
-                return () => clearInterval(t);
-              }, [tab]);
+              // Aktivlik bo'limi ochilganda bir martta yuklanadi (timer yo'q)
+              useEffect(() => { if (actOpen && !actLogs.length && !actLoad) loadActivity(); }, [actOpen]);
 
-              const curlExample = hasAuth
-? `curl -X POST ${webhookUrl} \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${bearerToken}" \\
-  -d '{
-    "company_slug": "${slug}",
-    "name": "Ali Karimov",
-    "phone": "+998901234567",
-    "email": "ali@example.com",
-    "region": "Toshkent",
-    "source": "website",
-    "pipelineId": "${selectedPipe}",
-    "custom_data": {
-      "utm_source": "google",
-      "kasb": "Dasturchi",
-      "byudjet": "500000"
-    }
-  }'`
-: `curl -X POST ${webhookUrl} \\
-  -H "Content-Type: application/json" \\
-  # V58: Ixtiyoriy — qoshimcha himoya uchun API kalit:
-  # -H "Authorization: Bearer YOUR_API_KEY" \\
-  -d '{
-    "company_slug": "${slug}",
-    "name": "Ali Karimov",
-    "phone": "+998901234567",
-    "email": "ali@example.com",
-    "region": "Toshkent",
-    "source": "website",
-    "pipelineId": "${selectedPipe}",
-    "custom_data": {
-      "utm_source": "google",
-      "kasb": "Dasturchi",
-      "byudjet": "500000"
-    }
-  }'`;
-
-              const jsExample = hasAuth
-? `// V58: API Kalit bilan (qo'shimcha xavfsizlik)
-fetch('${webhookUrl}', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${bearerToken}',  // V58 — server kalit moslignini tekshiradi
-  },
-  body: JSON.stringify({
-    company_slug: '${slug}',                  // MAJBURIY — kompaniya kaliti
-    name:    document.querySelector('#name').value,
-    phone:   document.querySelector('#phone').value,
-    email:   document.querySelector('#email').value,
-    region:  document.querySelector('#region').value,
-    source:  'website',
-    pipelineId: '${selectedPipe}',
-    custom_data: {
-      utm_source:   new URLSearchParams(location.search).get('utm_source') || '',
-      utm_campaign: new URLSearchParams(location.search).get('utm_campaign') || '',
-      kasb:    document.querySelector('#kasb').value,
-      byudjet: document.querySelector('#byudjet').value,
-    },
-  }),
-})
-.then(r => r.json())
-.then(data => {
-  if (data.success) {
-    if (data.duplicate) console.log('Dublikat:', data.id);   // V58: telefon takror
-    else console.log('Lead yaratildi:', data.id);
-    window.location.href = '/rahmat.html';
-  } else {
-    alert('Xato: ' + data.error);
-  }
-})
-.catch(err => console.error('Vebhok xatosi:', err));`
-: `// Sayt formangiz submit eventidan yuborish misoli
-fetch('${webhookUrl}', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  // V58: Ixtiyoriy — qoshimcha himoya uchun API kalit qo'shing:
-  // headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_API_KEY' },
-  body: JSON.stringify({
-    company_slug: '${slug}',                  // MAJBURIY — kompaniya kaliti
-    name:    document.querySelector('#name').value,
-    phone:   document.querySelector('#phone').value,
-    email:   document.querySelector('#email').value,
-    region:  document.querySelector('#region').value,
-    source:  'website',                       // yoki: 'landing', 'facebook_ad', 'telegram_bot'
-    pipelineId: '${selectedPipe}',
-    custom_data: {
-      // Standart bo'lmagan har qanday maydon — avtomatik lid kartasiga tushadi
-      utm_source:   new URLSearchParams(location.search).get('utm_source') || '',
-      utm_campaign: new URLSearchParams(location.search).get('utm_campaign') || '',
-      kasb:    document.querySelector('#kasb').value,
-      byudjet: document.querySelector('#byudjet').value,
-    },
-  }),
-})
-.then(r => r.json())
-.then(data => {
-  if (data.success) {
-    if (data.duplicate) console.log('Dublikat (V58):', data.id);  // telefon bo'yicha takror
-    else console.log('Lead yaratildi:', data.id);
-    window.location.href = '/rahmat.html';
-  } else {
-    alert('Xato: ' + data.error);
-  }
-})
-.catch(err => console.error('Vebhok xatosi:', err));`;
-
+              // Test yuborish funksiyasi
               const sendTestRequest = async () => {
                 setTestStatus('loading');
                 try {
-                  // V58: Telefon raqamga timestamp qoshamiz — dublikat skip ga tushib qolmasligi uchun
                   const ts = Date.now().toString().slice(-7);
                   const headers = { 'Content-Type': 'application/json' };
                   if (hasAuth) headers['Authorization'] = 'Bearer ' + bearerToken;
@@ -1970,386 +1898,398 @@ fetch('${webhookUrl}', {
                     headers,
                     body: JSON.stringify({
                       company_slug: slug,
-                      name: 'Test Lead (Custom Webhook)',
+                      name: 'Test Mijoz (Webhook sinov)',
                       phone: '+99800' + ts,
                       source: 'webhook_test',
                       pipelineId: selectedPipe,
                       extra: 'CRM Integratsiya panelidan yuborilgan sinov',
-                      custom_data: { test: 'true', sent_from: 'crm_ui', auth: hasAuth ? 'bearer' : 'slug_only' },
+                      custom_data: { test: 'true', sent_from: 'crm_ui' },
                     }),
                   });
                   const data = await r.json();
-                  if (r.ok && data.success) {
-                    setTestStatus({
-                      ok: true,
-                      id: data.id,
-                      duplicate: !!data.duplicate,
-                    });
-                  } else {
-                    setTestStatus({ ok: false, msg: data.error || `HTTP ${r.status}` });
-                  }
-                } catch (e) {
-                  setTestStatus({ ok: false, msg: e.message });
-                }
+                  if (r.ok && data.success) setTestStatus({ ok: true, id: data.id, duplicate: !!data.duplicate });
+                  else setTestStatus({ ok: false, msg: data.error || `HTTP ${r.status}` });
+                } catch (e) { setTestStatus({ ok: false, msg: e.message }); }
               };
 
+              // Dasturchi uchun misol matni
+              const curlExample = hasAuth
+? `curl -X POST ${webhookUrl} \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${bearerToken}" \\
+  -d '{"company_slug":"${slug}","name":"Ali Karimov","phone":"+998901234567","email":"ali@example.com","pipelineId":"${selectedPipe}"}'`
+: `curl -X POST ${webhookUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{"company_slug":"${slug}","name":"Ali Karimov","phone":"+998901234567","email":"ali@example.com","pipelineId":"${selectedPipe}"}'`;
+
+              const jsExample =
+`// Sayt formangizdagi submit eventiga ulang:
+fetch('${webhookUrl}', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',${hasAuth ? `\n    'Authorization': 'Bearer ${bearerToken}',` : ''}
+  },
+  body: JSON.stringify({
+    company_slug: '${slug}',       // o'zgartirmang
+    name:  document.getElementById('ism').value,
+    phone: document.getElementById('telefon').value,
+    email: document.getElementById('email').value,
+    pipelineId: '${selectedPipe}',
+    // qo'shimcha ma'lumotlar (ixtiyoriy):
+    kasb:       document.getElementById('kasb')?.value,
+    utm_source: new URLSearchParams(location.search).get('utm_source'),
+  }),
+})
+.then(r => r.json())
+.then(d => {
+  if (d.success) window.location.href = '/rahmat.html';
+  else alert('Xato: ' + d.error);
+});`;
+
               const STANDARD_FIELDS = [
-                ['company_slug','string','MAJBURIY','sizning_slug'],
-                ['name',        'string','MAJBURIY','Ali Karimov'],
-                ['phone',       'string','—',       '+998901234567'],
-                ['email',       'string','—',       'ali@example.com'],
-                ['region',      'string','default: "Veb-Sayt"', 'Toshkent'],
-                ['source',      'string','default: "website"',  'landing, facebook_ad'],
-                ['pipelineId',  'string','default: 1-pipeline', 'p1, p2'],
-                ['extra',       'string','—',                   "qo'shimcha izoh"],
-                ['custom_data', 'object','—',                   '{ kasb:"...", utm_source:"..." }'],
+                ['company_slug','MAJBURIY','Kompaniya kaliti — yuqoridagi sariq qiymat'],
+                ['name',        'MAJBURIY','Mijoz ismi (to\'liq)'],
+                ['phone',       'ixtiyoriy','+998901234567 formatida'],
+                ['email',       'ixtiyoriy','Elektron pochta'],
+                ['region',      'ixtiyoriy','Shahar/viloyat (default: "Veb-Sayt")'],
+                ['source',      'ixtiyoriy','Manba: website, landing, facebook_ad ...'],
+                ['pipelineId',  'ixtiyoriy','Funnel ID (default: birinchi funnel)'],
+                ['extra',       'ixtiyoriy',"Qo'shimcha izoh matni"],
+                ['custom_data', 'ixtiyoriy','{ istalgan_maydon: "qiymat" } — lid kartasida chiqadi'],
               ];
+
+              // Collapsible bo'lim sarlavhasi uchun yordamchi
+              const SectionToggle = ({open, onToggle, label, badge}) => (
+                <button onClick={onToggle} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:open?'8px 8px 0 0':'8px',cursor:'pointer',textAlign:'left',fontWeight:600,fontSize:'12px',color:'var(--text-main)'}}>
+                  <span>{label}</span>
+                  <span style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                    {badge && <span style={{fontSize:'10px',padding:'1px 7px',background:`${WH}18`,color:WH,borderRadius:'10px',fontWeight:700}}>{badge}</span>}
+                    <span style={{fontSize:'14px',color:'var(--text-muted)',transform:open?'rotate(180deg)':'none',display:'inline-block',transition:'transform 0.2s'}}>▾</span>
+                  </span>
+                </button>
+              );
 
               return (
                 <div style={{padding:'20px 22px'}}>
-                  {/* 1. Webhook URL */}
-                  <div style={{background:'rgba(99,102,241,0.08)',border:`1px solid ${WH}30`,borderRadius:'10px',padding:'14px',marginBottom:'14px'}}>
-                    <div style={{fontSize:'10px',fontWeight:700,color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.07em'}}>
-                      🌐 Webhook URL (POST endpoint)
+
+                  {/* ── KIRISH BANNERI — qanday ishlaydi? ──────────── */}
+                  <div style={{background:`linear-gradient(135deg, ${WH}15 0%, ${WH}05 100%)`,border:`1px solid ${WH}25`,borderRadius:'12px',padding:'16px',marginBottom:'18px'}}>
+                    <div style={{fontWeight:700,fontSize:'13px',color:'var(--text-main)',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontSize:'20px'}}>📡</span> Webhook — saytdan CRM ga avtomatik ulash
                     </div>
-                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                      <code style={{flex:1,fontSize:'12px',color:'var(--text-main)',background:'var(--bg-base)',padding:'8px 12px',borderRadius:'6px',wordBreak:'break-all',border:'1px solid var(--outline-variant)',fontFamily:'ui-monospace, Menlo, Monaco, monospace'}}>{webhookUrl}</code>
-                      <button onClick={()=>copyText(webhookUrl,'wh_url')} style={{padding:'8px 12px',fontSize:'11px',fontWeight:700,background:copiedItem==='wh_url'?'#01a750':WH,color:'white',border:'none',borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap'}}>
-                        {copiedItem==='wh_url'?'✓ Nusxalandi':'📋 Nusxa'}
-                      </button>
-                    </div>
-                    <div style={{fontSize:'11px',color:'var(--text-secondary)',marginTop:'8px',lineHeight:1.5}}>
-                      Bu manzilga sayt formangiz JSON yuboradi. <b>company_slug</b> body parametrida MAJBURIY.
-                    </div>
-                  </div>
-
-                  {/* 2. Company Slug */}
-                  <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'9px',padding:'12px 14px',marginBottom:'14px'}}>
-                    <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>
-                      🔑 Sizning kompaniya kalitingiz (company_slug)
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                      <code style={{flex:1,fontSize:'13px',color:'var(--primary)',fontWeight:700,background:'var(--surface-variant)',padding:'6px 12px',borderRadius:'5px',fontFamily:'ui-monospace, Menlo, Monaco, monospace'}}>{slug}</code>
-                      <button onClick={()=>copyText(slug,'wh_slug')} style={{padding:'5px 10px',fontSize:'11px',fontWeight:700,background:copiedItem==='wh_slug'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_slug'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer'}}>
-                        {copiedItem==='wh_slug'?'✓':'📋'}
-                      </button>
-                    </div>
-                    <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>Har bir so'rovga shu kalit qo'shilishi kerak — bu sizning kompaniyangizni aniqlaydi.</div>
-                  </div>
-
-                  {/* 3. Pipeline Selector */}
-                  {intgPipelines.length > 0 && (
-                    <div style={{marginBottom:'14px'}}>
-                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>
-                        📊 Misolda ko'rsatiluvchi pipeline (lidlar qaerga tushishi)
-                      </div>
-                      <select className="input-base" style={{marginBottom:0,height:'36px',padding:'0 12px',lineHeight:'34px',fontSize:'13px'}}
-                        value={selectedPipe} onChange={e=>setSelectedPipe(e.target.value)}>
-                        {intgPipelines.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
-                      </select>
-                    </div>
-                  )}
-
-                  {/* 3b. V58: API Key Picker (ixtiyoriy — qo'shimcha xavfsizlik) */}
-                  <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'9px',padding:'12px 14px',marginBottom:'14px'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',marginBottom:'8px',flexWrap:'wrap'}}>
-                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.07em'}}>
-                        🔒 API Kalit (V58 — ixtiyoriy)
-                      </div>
-                      <button onClick={genApiKey}
-                        style={{padding:'4px 10px',fontSize:'10px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'5px',cursor:'pointer'}}>
-                        + Yangi yaratish
-                      </button>
-                    </div>
-                    {apiKeys.length === 0 ? (
-                      <div style={{fontSize:'11px',color:'var(--text-muted)',padding:'6px 0',lineHeight:1.5}}>
-                        Hali kalit yo'q. <b>Slug-faqat</b> rejimida ishlaydi (boshlang'ich xavfsizlik darajasi).
-                        Spam yoki begona saytlardan himoya qilish uchun <b>+ Yangi yaratish</b> bosing.
-                      </div>
-                    ) : (
-                      <div>
-                        <select className="input-base" style={{marginBottom:'8px',height:'34px',padding:'0 12px',lineHeight:'32px',fontSize:'12px'}}
-                          value={selectedKeyId} onChange={e=>setSelectedKeyId(e.target.value)}>
-                          <option value="">— Kalitsiz (slug-faqat) —</option>
-                          {apiKeys.map(k => (
-                            <option key={k.id} value={k.id}>
-                              {k.token ? `${String(k.token).slice(0,18)}…` : `Kalit #${k.id}`}
-                              {k.created_at ? `  (${new Date(k.created_at).toLocaleDateString()})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedKey && selectedKey.token && (
-                          <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'4px'}}>
-                            <code style={{flex:1,fontSize:'10px',padding:'5px 9px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'5px',fontFamily:'ui-monospace, Menlo, monospace',wordBreak:'break-all',color:'var(--text-secondary)'}}>{selectedKey.token}</code>
-                            <button onClick={()=>copyText(selectedKey.token,'wh_key')}
-                              style={{padding:'5px 9px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_key'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_key'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer'}}>
-                              {copiedItem==='wh_key'?'✓':'📋'}
-                            </button>
-                          </div>
-                        )}
-                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px',lineHeight:1.5}}>
-                          Tanlangan kalit pastdagi cURL/JS misollarga avtomatik qo'shiladi va Test so'rovida ham yuboriladi.
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 4. Tab Switcher (V59: + Faollik tab) */}
-                  <div style={{display:'flex',gap:'6px',marginBottom:'10px',flexWrap:'wrap'}}>
-                    {[{id:'curl',l:'🖥 cURL'},{id:'js',l:'🌐 JS'},{id:'fields',l:'📋 Maydonlar'},{id:'security',l:'🔒 Xavfsizlik'},{id:'activity',l:'📊 Faollik (V59)'}].map(t => (
-                      <button key={t.id} onClick={()=>setTab(t.id)}
-                        style={{padding:'7px 13px',fontSize:'11px',fontWeight:600,borderRadius:'7px',
-                          border:`1px solid ${tab===t.id?WH:'var(--outline-variant)'}`,
-                          background:tab===t.id?`${WH}18`:'var(--bg-base)',
-                          color:tab===t.id?WH:'var(--text-secondary)',cursor:'pointer'}}>
-                        {t.l}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* 5. Examples / Fields / Security */}
-                  {(tab === 'curl' || tab === 'js') && (
-                    <div style={{position:'relative'}}>
-                      <button onClick={()=>copyText(tab==='curl'?curlExample:jsExample,'wh_ex')}
-                        style={{position:'absolute',top:'8px',right:'8px',padding:'5px 10px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_ex'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'5px',cursor:'pointer',zIndex:2}}>
-                        {copiedItem==='wh_ex'?'✓ Nusxalandi':'📋 Nusxa'}
-                      </button>
-                      <pre style={{margin:0,padding:'14px 16px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',fontSize:'11px',color:'var(--text-main)',overflow:'auto',maxHeight:'340px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, Monaco, monospace',whiteSpace:'pre'}}>
-                        {tab==='curl' ? curlExample : jsExample}
-                      </pre>
-                    </div>
-                  )}
-
-                  {tab === 'fields' && (
-                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px',lineHeight:1.65}}>
-                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>STANDART MAYDONLAR (jadval ustunlariga yoziladi)</div>
-                      <div style={{overflow:'auto'}}>
-                        <table style={{width:'100%',fontSize:'11px',marginBottom:'14px',borderCollapse:'collapse'}}>
-                          <tbody>
-                            {STANDARD_FIELDS.map(([k,t,r,ex]) => (
-                              <tr key={k} style={{borderBottom:'1px solid var(--outline-variant)'}}>
-                                <td style={{padding:'6px 8px',fontFamily:'ui-monospace, Menlo, monospace',color:'var(--primary)',fontWeight:700,whiteSpace:'nowrap'}}>{k}</td>
-                                <td style={{padding:'6px 8px',color:'var(--text-muted)'}}>{t}</td>
-                                <td style={{padding:'6px 8px',color:r==='MAJBURIY'?'#ef4444':'var(--text-muted)',fontWeight:r==='MAJBURIY'?700:400,fontSize:'10px',whiteSpace:'nowrap'}}>{r}</td>
-                                <td style={{padding:'6px 8px',color:'var(--text-secondary)',fontStyle:'italic',fontSize:'10px'}}>{ex}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>QO'SHIMCHA MAYDONLAR (avtomatik custom_data ga tushadi)</div>
-                      <div style={{color:'var(--text-secondary)',marginBottom:'8px',fontSize:'11px'}}>Body ga qo'shgan har qanday standart bo'lmagan maydon avtomatik <code style={{background:'var(--surface-variant)',padding:'1px 5px',borderRadius:'3px',fontSize:'10px'}}>custom_data</code> JSONB ga yoziladi va lid kartasida ko'rinadi (V51 dan beri).</div>
-                      <pre style={{margin:'0 0 14px',padding:'10px 12px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace',overflow:'auto'}}>{`{
-  "company_slug": "${slug}",
-  "name": "Ali",
-  "phone": "+998901234567",
-  "kasb": "Dasturchi",        // → custom_data.kasb
-  "byudjet": "500000",        // → custom_data.byudjet
-  "utm_source": "google"      // → custom_data.utm_source
-}`}</pre>
-                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>JAVOB (Response)</div>
-                      <pre style={{margin:0,padding:'10px 12px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace'}}>{`// Muvaffaqiyat (201):
-{ "success": true, "id": 12345 }
-
-// V58 Dublikat (telefon takror — 200):
-{ "success": true, "duplicate": true, "id": 12344, "message": "..." }
-
-// Xatolar:
-{ "error": "company_slug majburiy" }                  // 400
-{ "error": "Ism majburiy" }                           // 400
-{ "error": "Email format noto'g'ri" }                 // 400  (V58)
-{ "error": "Telefon raqam noto'g'ri ..." }            // 400  (V58)
-{ "error": "Yaroqsiz API kalit" }                     // 401  (V58)
-{ "error": "API kalit boshqa kompaniyaga tegishli" }  // 403  (V58)
-{ "error": "Kompaniya topilmadi yoki faol emas" }     // 404`}</pre>
-                    </div>
-                  )}
-
-                  {/* V58: Security tab */}
-                  {tab === 'security' && (
-                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px',lineHeight:1.65}}>
-                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'10px',textTransform:'uppercase',letterSpacing:'0.05em'}}>V58 XAVFSIZLIK QATLAMLARI</div>
-
+                    {/* Vizual sxema */}
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'4px',marginBottom:'10px',flexWrap:'nowrap',overflow:'hidden'}}>
                       {[
-                        {ico:'🚫', t:'Dublikat bloklash (telefon)', d:"Bir xil telefon raqam ikkinchi marta yuborilsa — server yangi lead yaratmaydi, mavjudini qaytaradi. Spam botlar bir formaga 100 marta yuborganda 100 ta dublikat to'planmaydi. Javob: success:true + duplicate:true."},
-                        {ico:'🔑', t:'API Key Bearer (ixtiyoriy)', d:"Sayt formangizdan Authorization: Bearer <kalit> yuborsangiz — server kalitni crm_api_keys jadvalidan tekshiradi va u kompaniya slug ga mosligini verify qiladi. Slug-faqat rejimi ham ishlaydi (backward compat)."},
-                        {ico:'📧', t:"Email validatsiya", d:"RFC 5322 (soddalashtirilgan) regex bo'yicha tekshirish. Format buzilgan email lar 400 bilan rad etiladi (field nomi javobda qaytariladi)."},
-                        {ico:'📱', t:'Telefon validatsiya', d:"E.164: 7-15 ta raqam bo'lishi shart (oraliqdagi probel, qavs, defis qabul). Format buzilgan telefonlar 400 bilan rad etiladi."},
-                        {ico:'🧼', t:'HTML/JS sanitizatsiya (XSS)', d:"name, extra, region, source maydonlari va custom_data dagi barcha key/value — <script>, <iframe>, javascript: URI, on* eventlar olib tashlanadi. Lid kartasida zararsiz matn ko'rinadi."},
-                        {ico:'🌍', t:'CORS — har qanday saytdan', d:"/api/public/* uchun permissive CORS yoqilgan. Sayt formangiz boshqa domenda bo'lsa ham, JS dan fetch qila olasiz (CORS preflight 200 qaytaradi)."},
-                        {ico:'🏢', t:'Multi-tenancy izolyatsiyasi', d:"Har bir lead faqat company_slug → companies.id orqali topilgan kompaniyaga yoziladi. Boshqa kompaniyaning kaliti bilan boshqa kompaniyaga lead yuborib bo'lmaydi (403)."},
-                      ].map((row,i) => (
-                        <div key={i} style={{display:'flex',gap:'10px',padding:'10px 8px',borderBottom:i<6?'1px solid var(--outline-variant)':'none'}}>
-                          <div style={{fontSize:'18px',lineHeight:1.2,flexShrink:0}}>{row.ico}</div>
-                          <div>
-                            <div style={{fontWeight:700,color:'var(--text-main)',fontSize:'12px',marginBottom:'2px'}}>{row.t}</div>
-                            <div style={{fontSize:'11px',color:'var(--text-secondary)',lineHeight:1.5}}>{row.d}</div>
+                        {ico:'🌐',t:'Saytingiz',d:'Mijoz forma to\'ldiradi'},
+                        {ico:'→',t:'',d:''},
+                        {ico:'📨',t:'Webhook',d:'Ma\'lumot avtomatik yuboriladi'},
+                        {ico:'→',t:'',d:''},
+                        {ico:'📋',t:'CRM',d:'Lead ro\'yxatiga tushadi'},
+                      ].map((s,i)=> i%2===1
+                        ? <span key={i} style={{fontSize:'16px',color:`${WH}80`,flexShrink:0}}>→</span>
+                        : <div key={i} style={{flex:1,textAlign:'center',background:'var(--bg-surface)',borderRadius:'8px',padding:'7px 4px',border:`1px solid ${WH}20`,minWidth:0}}>
+                            <div style={{fontSize:'18px'}}>{s.ico}</div>
+                            <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-main)',marginTop:'2px'}}>{s.t}</div>
+                            <div style={{fontSize:'9px',color:'var(--text-muted)',lineHeight:1.3,marginTop:'1px'}}>{s.d}</div>
                           </div>
-                        </div>
-                      ))}
-
-                      <div style={{marginTop:'12px',padding:'10px 12px',background:'rgba(99,102,241,0.07)',border:`1px solid ${WH}30`,borderRadius:'6px',fontSize:'11px',color:'var(--text-secondary)',lineHeight:1.55}}>
-                        💡 <b style={{color:WH}}>Tavsiya:</b> Ishlab chiqarish saytlari uchun API Key generatsiya qiling (yuqorida)
-                        va sayt formangiz JS koddagi <code style={{fontSize:'10px',background:'var(--surface-variant)',padding:'1px 4px',borderRadius:'3px'}}>Authorization</code> header iga qo'shing.
-                        Kalitni faqat server tomonda yoki obfuscate qilingan JS da saqlang.
-                      </div>
+                      )}
                     </div>
-                  )}
+                    <div style={{fontSize:'11px',color:'var(--text-secondary)',lineHeight:1.5,padding:'8px 10px',background:'var(--bg-surface)',borderRadius:'7px',border:`1px solid ${WH}15`}}>
+                      💡 <b>Qanday ishlaydi?</b> Saytingizda mijoz formani to'ldirib "Yuborish" tugmasini bosganda, uning ismi, telefoni va boshqa ma'lumotlari <b>bir zumda</b> CRM ga tushadi. Siz alohida hech narsa qilmaysiz — hamma narsa avtomatik.
+                    </div>
+                  </div>
 
-                  {/* V59: Activity tab — real-time webhook faollik jurnal */}
-                  {tab === 'activity' && (
-                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px'}}>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'12px',flexWrap:'wrap'}}>
-                        <div>
-                          <div style={{fontWeight:700,fontSize:'11px',color:WH,textTransform:'uppercase',letterSpacing:'0.05em'}}>V59 — WEBHOOK FAOLLIK JURNAL</div>
-                          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'3px'}}>Server xotirasidagi so'nggi 500 ta so'rov (har restart da tozalanadi) — har 30 sekundda yangilanadi</div>
-                        </div>
-                        <button onClick={loadActivity} disabled={actLoad}
-                          style={{padding:'5px 11px',fontSize:'10px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'5px',cursor:actLoad?'wait':'pointer'}}>
-                          {actLoad ? '⏳' : '🔄 Yangilash'}
+                  {/* ── BOSQICH SARLAVHASI ─────────────────────────── */}
+                  <div style={{fontSize:'11px',fontWeight:700,color:`${WH}`,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'12px',display:'flex',alignItems:'center',gap:'6px'}}>
+                    <span>Ulash uchun 3 qadam</span>
+                    <span style={{flex:1,height:'1px',background:`${WH}20`}}></span>
+                    <span style={{fontSize:'10px',color:'var(--text-muted)',textTransform:'none',fontWeight:400,letterSpacing:0}}>faqat 1-2 daqiqa</span>
+                  </div>
+
+                  {/* ── QADAM 1: URL ───────────────────────────────── */}
+                  <div style={{display:'flex',gap:'12px',marginBottom:'14px',alignItems:'flex-start'}}>
+                    <div style={{width:'30px',height:'30px',borderRadius:'50%',background:WH,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:'14px',flexShrink:0,marginTop:'1px',boxShadow:`0 2px 8px ${WH}40`}}>1</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:'13px',marginBottom:'3px'}}>
+                        CRM manzilini nusxalang va sayt yaratuvchiga yuboring
+                      </div>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'8px',lineHeight:1.45}}>
+                        Bu manzil saytdagi formalardan <b>ma'lumot qabul qiladigan joy</b>.
+                        Sayt yaratuvchi yoki dasturchi bo'lsa — shu manzilni ularga yuboring. O'zingiz biladigan bo'lsangiz — quyidagi kodlarni ishlating.
+                      </div>
+                      <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+                        <code style={{flex:1,fontSize:'11px',padding:'10px 12px',background:'var(--bg-base)',border:`2px solid ${WH}40`,borderRadius:'8px',wordBreak:'break-all',fontFamily:'ui-monospace, Menlo, monospace',color:'var(--text-main)',lineHeight:1.4}}>{webhookUrl}</code>
+                        <button onClick={()=>copyText(webhookUrl,'wh_url')} style={{flexShrink:0,padding:'10px 16px',fontSize:'12px',fontWeight:700,background:copiedItem==='wh_url'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.2s',boxShadow:copiedItem==='wh_url'?'none':`0 2px 6px ${WH}40`}}>
+                          {copiedItem==='wh_url'?'✓ Nusxalandi':'📋 Nusxalash'}
                         </button>
                       </div>
+                    </div>
+                  </div>
 
-                      {actErr && (
-                        <div style={{padding:'8px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'6px',fontSize:'11px',color:'#ef4444',marginBottom:'10px'}}>
-                          ❌ Yuklanmadi: {actErr}
-                        </div>
-                      )}
-
-                      {/* Stats cards: 24h */}
-                      {actStats && (
-                        <div style={{marginBottom:'14px'}}>
-                          <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>SO'NGGI 24 SOAT</div>
-                          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(95px,1fr))',gap:'8px'}}>
-                            {[
-                              {l:'Hammasi',     v:actStats.day.total,     c:'var(--text-main)', bg:'var(--surface-variant)'},
-                              {l:'Muvaffaq.',   v:actStats.day.success,   c:'#01a750',          bg:'rgba(1,167,80,0.10)'},
-                              {l:'Dublikat',    v:actStats.day.duplicate, c:'#d97706',          bg:'rgba(245,158,11,0.10)'},
-                              {l:'Xato',        v:actStats.day.error,     c:'#ef4444',          bg:'rgba(239,68,68,0.10)'},
-                            ].map(s => (
-                              <div key={s.l} style={{padding:'10px',background:s.bg,borderRadius:'7px',border:'1px solid var(--outline-variant)',textAlign:'center'}}>
-                                <div style={{fontSize:'20px',fontWeight:800,color:s.c,lineHeight:1.1}}>{s.v}</div>
-                                <div style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,marginTop:'2px'}}>{s.l}</div>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{display:'flex',gap:'14px',marginTop:'8px',fontSize:'10px',color:'var(--text-muted)'}}>
-                            <span>📅 7 kun: <b style={{color:'var(--text-secondary)'}}>{actStats.week.total}</b></span>
-                            <span>♾ Restartdan beri: <b style={{color:'var(--text-secondary)'}}>{actStats.total.total}</b></span>
-                            {actStats.last_at && <span>🕒 Oxirgi: <b style={{color:'var(--text-secondary)'}}>{new Date(actStats.last_at).toLocaleString()}</b></span>}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Top errors */}
-                      {actStats && actStats.top_errors && actStats.top_errors.length > 0 && (
-                        <div style={{marginBottom:'14px',padding:'10px 12px',background:'rgba(239,68,68,0.05)',border:'1px solid rgba(239,68,68,0.20)',borderRadius:'7px'}}>
-                          <div style={{fontSize:'10px',fontWeight:700,color:'#ef4444',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>🚨 Eng ko'p uchragan xatolar</div>
-                          {actStats.top_errors.map((e, i) => (
-                            <div key={i} style={{display:'flex',justifyContent:'space-between',gap:'8px',padding:'3px 0',fontSize:'11px',borderBottom:i<actStats.top_errors.length-1?'1px solid rgba(239,68,68,0.10)':'none'}}>
-                              <span style={{color:'var(--text-secondary)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.msg}</span>
-                              <span style={{color:'#ef4444',fontWeight:700,flexShrink:0}}>×{e.cnt}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Recent logs table */}
-                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>
-                        SO'NGGI SO'ROVLAR ({actLogs.length})
+                  {/* ── QADAM 2: SLUG ──────────────────────────────── */}
+                  <div style={{display:'flex',gap:'12px',marginBottom:'14px',alignItems:'flex-start'}}>
+                    <div style={{width:'30px',height:'30px',borderRadius:'50%',background:WH,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:'14px',flexShrink:0,marginTop:'1px',boxShadow:`0 2px 8px ${WH}40`}}>2</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:'13px',marginBottom:'3px'}}>
+                        Kompaniya kalitini ham yuboring
                       </div>
-                      {actLogs.length === 0 ? (
-                        <div style={{padding:'24px 12px',textAlign:'center',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'12px',color:'var(--text-muted)'}}>
-                          {actLoad ? '⏳ Yuklanmoqda...' : "📭 Hali so'rov yo'q — pastdagi Test tugmasi bilan sinab ko'ring"}
-                        </div>
-                      ) : (
-                        <div style={{maxHeight:'340px',overflow:'auto',border:'1px solid var(--outline-variant)',borderRadius:'7px'}}>
-                          <table style={{width:'100%',fontSize:'11px',borderCollapse:'collapse'}}>
-                            <thead style={{position:'sticky',top:0,background:'var(--bg-surface)',zIndex:1}}>
-                              <tr style={{borderBottom:'1px solid var(--outline-variant)'}}>
-                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Vaqt</th>
-                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Holat</th>
-                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Ism</th>
-                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Telefon</th>
-                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Auth</th>
-                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>IP</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {actLogs.map(l => {
-                                const sCfg = l.status === 'success'   ? {c:'#01a750', bg:'rgba(1,167,80,0.10)',   ic:'✓', t:'OK'}
-                                           : l.status === 'duplicate' ? {c:'#d97706', bg:'rgba(245,158,11,0.10)', ic:'⚠', t:'Dub'}
-                                           :                            {c:'#ef4444', bg:'rgba(239,68,68,0.10)',  ic:'✗', t:l.http_status||'Err'};
-                                return (
-                                  <tr key={l.id} style={{borderBottom:'1px solid var(--outline-variant)'}}
-                                      title={l.error_msg || (l.lead_id ? `Lead #${l.lead_id}` : '')}>
-                                    <td style={{padding:'6px 8px',color:'var(--text-secondary)',whiteSpace:'nowrap',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'10px'}}>
-                                      {new Date(l.ts).toLocaleTimeString()}
-                                    </td>
-                                    <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
-                                      <span style={{display:'inline-block',padding:'2px 7px',background:sCfg.bg,color:sCfg.c,borderRadius:'4px',fontSize:'10px',fontWeight:700}}>
-                                        {sCfg.ic} {sCfg.t}
-                                      </span>
-                                    </td>
-                                    <td style={{padding:'6px 8px',color:'var(--text-main)',maxWidth:'120px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.name || '—'}</td>
-                                    <td style={{padding:'6px 8px',color:'var(--text-secondary)',whiteSpace:'nowrap',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'10px'}}>{l.phone_mask || '—'}</td>
-                                    <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
-                                      {l.auth_method === 'bearer'
-                                        ? <span style={{padding:'1px 5px',background:`${WH}18`,color:WH,borderRadius:'3px',fontSize:'9px',fontWeight:700}}>🔑 BEARER</span>
-                                        : <span style={{padding:'1px 5px',background:'var(--surface-variant)',color:'var(--text-muted)',borderRadius:'3px',fontSize:'9px'}}>slug</span>
-                                      }
-                                    </td>
-                                    <td style={{padding:'6px 8px',color:'var(--text-muted)',whiteSpace:'nowrap',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'10px'}}>{l.source_ip || '—'}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-
-                      <div style={{marginTop:'10px',padding:'8px 10px',background:`${WH}08`,border:`1px solid ${WH}20`,borderRadius:'6px',fontSize:'10px',color:'var(--text-muted)',lineHeight:1.5}}>
-                        💡 <b style={{color:WH}}>Maslahat:</b> Telefon va email maskalangan ko'rinishda saqlanadi (privacy). Faqat siz o'z kompaniyangiz so'rovlarini ko'rasiz.
-                        Doimiy jurnal kerak bo'lsa (DB jadval) — V60 da rejalashtirilgan.
+                      <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'8px',lineHeight:1.45}}>
+                        Bu kalit CRM ga <b>qaysi kompaniyaga</b> lead tushishini bildiradi.
+                        Sayt yaratuvchiga 1-qadamdagi manzil bilan birga ushbu kalitni ham yuboring.
+                      </div>
+                      <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+                        <div style={{flex:1,padding:'10px 16px',background:'#fef9c3',border:'2px solid #fde047',borderRadius:'8px',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'15px',fontWeight:800,color:'#92400e',letterSpacing:'0.05em'}}>{slug}</div>
+                        <button onClick={()=>copyText(slug,'wh_slug')} style={{flexShrink:0,padding:'10px 16px',fontSize:'12px',fontWeight:700,background:copiedItem==='wh_slug'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_slug'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'8px',cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.2s'}}>
+                          {copiedItem==='wh_slug'?'✓ Nusxalandi':'📋 Nusxalash'}
+                        </button>
+                      </div>
+                      <div style={{marginTop:'7px',fontSize:'10px',color:'var(--text-muted)',padding:'6px 10px',background:'rgba(254,243,199,0.4)',border:'1px solid rgba(253,224,71,0.4)',borderRadius:'5px'}}>
+                        ⚠️ Bu kalit <b>sir emas</b> — lekin o'zgartirmang, har doim shu qiymatni ishlating.
                       </div>
                     </div>
-                  )}
+                  </div>
 
-                  {/* 6. Test Webhook */}
-                  <div style={{marginTop:'16px',padding:'12px 14px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:'12px',fontWeight:700,marginBottom:'2px'}}>
-                          🧪 Test so'rovi yuborish
-                          {hasAuth && <span style={{marginLeft:'6px',fontSize:'9px',padding:'2px 6px',background:`${WH}20`,color:WH,borderRadius:'4px',fontWeight:700}}>🔑 BEARER</span>}
+                  {/* ── QADAM 3: PIPELINE ──────────────────────────── */}
+                  <div style={{display:'flex',gap:'12px',marginBottom:'18px',alignItems:'flex-start'}}>
+                    <div style={{width:'30px',height:'30px',borderRadius:'50%',background:WH,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:'14px',flexShrink:0,marginTop:'1px',boxShadow:`0 2px 8px ${WH}40`}}>3</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:'13px',marginBottom:'3px'}}>
+                        Kelgan leadlar qaysi yo'nalishga tushsin?
+                      </div>
+                      <div style={{fontSize:'11px',color:'var(--text-muted)',marginBottom:'8px',lineHeight:1.45}}>
+                        Sayt orqali yangi kelgan mijoz <b>qaysi sotuv varonkasiga</b> avtomatik qo'shilsin — tanlang.
+                      </div>
+                      {intgPipelines.length > 0 ? (
+                        <select className="input-base" style={{marginBottom:0,height:'42px',padding:'0 14px',fontSize:'13px',fontWeight:600}}
+                          value={selectedPipe} onChange={e=>setSelectedPipe(e.target.value)}>
+                          {intgPipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      ) : (
+                        <div style={{fontSize:'11px',color:'var(--text-muted)',padding:'8px 12px',background:'var(--surface-variant)',borderRadius:'7px'}}>
+                          Funnel topilmadi — default birinchi funnel ishlatiladi.
                         </div>
-                        <div style={{fontSize:'10px',color:'var(--text-muted)'}}>
-                          {hasAuth ? "API kalit bilan test lead yaratiladi" : "Slug-faqat rejimda test lead yaratiladi"}
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── SINOV TUGMASI ─────────────────────────────── */}
+                  <div style={{background:'var(--bg-base)',border:`1px solid ${WH}30`,borderRadius:'12px',padding:'16px',marginBottom:'14px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:'13px',fontWeight:700,marginBottom:'3px'}}>
+                          🧪 Ulash ishlayaptimi? Hoziroq sinab ko'ring
+                        </div>
+                        <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:1.45}}>
+                          Tugmani bosing — CRM ga sinov mijoz yuboriladi va Sotuv varonkasida paydo bo'ladi.
                         </div>
                       </div>
                       <button onClick={sendTestRequest} disabled={testStatus==='loading'}
-                        style={{padding:'8px 16px',fontSize:'12px',fontWeight:700,background:testStatus==='loading'?'var(--surface-variant)':WH,color:'#fff',border:'none',borderRadius:'7px',cursor:testStatus==='loading'?'wait':'pointer',whiteSpace:'nowrap'}}>
-                        {testStatus==='loading'?'⏳ Yuborilmoqda...':'▶ Test yuborish'}
+                        style={{padding:'11px 22px',fontSize:'13px',fontWeight:700,background:testStatus==='loading'?'var(--surface-variant)':(testStatus?.ok===true?'#01a750':WH),color:'#fff',border:'none',borderRadius:'9px',cursor:testStatus==='loading'?'wait':'pointer',whiteSpace:'nowrap',flexShrink:0,transition:'background 0.25s',boxShadow:testStatus==='loading'?'none':`0 2px 8px ${WH}40`}}>
+                        {testStatus==='loading' ? '⏳ Yuborilmoqda...' : testStatus?.ok===true ? '✓ Ishlayapti!' : '▶ Sinab ko\'rish'}
                       </button>
                     </div>
                     {testStatus && testStatus !== 'loading' && (
-                      <div style={{marginTop:'10px',padding:'8px 12px',background:testStatus.ok?(testStatus.duplicate?'rgba(245,158,11,0.1)':'rgba(1,167,80,0.1)'):'rgba(239,68,68,0.1)',border:`1px solid ${testStatus.ok?(testStatus.duplicate?'rgba(245,158,11,0.3)':'rgba(1,167,80,0.3)'):'rgba(239,68,68,0.3)'}`,borderRadius:'6px',fontSize:'11px',color:testStatus.ok?(testStatus.duplicate?'#d97706':'#01a750'):'#ef4444',lineHeight:1.5}}>
-                        {testStatus.ok
-                          ? (testStatus.duplicate
-                              ? `⚠️ V58 Dublikat: Telefon raqam allaqachon bazada bor (mavjud lead #${testStatus.id}). Spam himoyasi ishlayapti.`
-                              : `✅ Muvaffaqiyatli! Test lead ID = ${testStatus.id}. Sotuv Varonkasi bo'limidan ko'ring.`)
-                          : `❌ Xato: ${testStatus.msg}`}
+                      <div style={{marginTop:'12px',padding:'12px 14px',background:testStatus.ok?(testStatus.duplicate?'rgba(245,158,11,0.08)':'rgba(1,167,80,0.08)'):'rgba(239,68,68,0.08)',border:`1px solid ${testStatus.ok?(testStatus.duplicate?'rgba(245,158,11,0.4)':'rgba(1,167,80,0.4)'):'rgba(239,68,68,0.4)'}`,borderRadius:'9px',lineHeight:1.55}}>
+                        <div style={{fontSize:'13px',fontWeight:700,color:testStatus.ok?(testStatus.duplicate?'#d97706':'#01a750'):'#ef4444'}}>
+                          {testStatus.ok
+                            ? (testStatus.duplicate
+                                ? `⚠️ Spam himoyasi ishlayapti — bu telefon allaqachon bazada bor (Lead #${testStatus.id})`
+                                : `✅ Ajoyib! Ulash muvaffaqiyatli ishlayapti (Test lead #${testStatus.id} yaratildi)`)
+                            : `❌ Xato: ${testStatus.msg}`}
+                        </div>
+                        {testStatus.ok && !testStatus.duplicate && (
+                          <div style={{marginTop:'8px',fontSize:'11px',color:'var(--text-secondary)',borderTop:'1px solid rgba(1,167,80,0.2)',paddingTop:'8px'}}>
+                            🎉 Endi sayt formangizdagi "Yuborish" tugmasi bosilganda, <b>mijoz ma'lumotlari avtomatik CRM ga tushadi</b>.<br/>
+                            Sotuv varonkasiga o'ting va "Test Mijoz (Webhook sinov)" nomli yozuvni ko'ring.
+                          </div>
+                        )}
+                        {testStatus.ok === false && (
+                          <div style={{marginTop:'6px',fontSize:'11px',color:'var(--text-muted)'}}>
+                            Server bilan ulanishda muammo. Internet mavjudligini tekshiring yoki tizim adminga murojaat qiling.
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  {/* 7. Close */}
-                  <div style={{display:'flex',gap:'9px',marginTop:'16px'}}>
-                    <button className="btn-outline" style={{padding:'10px 14px',flex:1}} onClick={()=>setActiveModal(null)}>Yopish</button>
+                  {/* ── QO'SHIMCHA HIMOYA (API Kalit) — collapsible ── */}
+                  <div style={{marginBottom:'8px'}}>
+                    <SectionToggle open={keyOpen} onToggle={()=>setKeyOpen(p=>!p)}
+                      label="🔒 Qo'shimcha himoya — API kalit (ixtiyoriy)"
+                      badge={apiKeys.length ? apiKeys.length + ' kalit' : null} />
+                    {keyOpen && (
+                      <div style={{border:'1px solid var(--outline-variant)',borderTop:'none',borderRadius:'0 0 8px 8px',padding:'14px',background:'var(--bg-base)'}}>
+                        <div style={{fontSize:'11px',color:'var(--text-secondary)',marginBottom:'12px',lineHeight:1.6,padding:'8px 10px',background:'rgba(99,102,241,0.04)',borderRadius:'7px',border:'1px solid rgba(99,102,241,0.12)'}}>
+                          <b>Bu nima?</b> Odatda faqat kompaniya kaliti (2-qadam) yetarli himoya beradi.
+                          Lekin agar begona odam sizning kalitingizni bilib, spam yuborishidan qo'rqsangiz — API kalit yarating.
+                          Bu qo'shimcha maxfiy parol bo'lib, faqat sizning saytingiz biladi.
+                        </div>
+                        <button onClick={genApiKey} style={{padding:'8px 16px',fontSize:'11px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'7px',cursor:'pointer',marginBottom:'10px'}}>
+                          + Yangi maxfiy kalit yaratish
+                        </button>
+                        {apiKeys.length > 0 && (
+                          <div>
+                            <div style={{fontSize:'10px',color:'var(--text-muted)',marginBottom:'5px',fontWeight:600}}>Yaratilgan kalitlar:</div>
+                            <select className="input-base" style={{marginBottom:'8px',height:'36px',padding:'0 10px',fontSize:'12px'}}
+                              value={selectedKeyId} onChange={e=>setSelectedKeyId(e.target.value)}>
+                              <option value="">— Kalitsiz ishlash (slug-faqat) —</option>
+                              {apiKeys.map(k=>(
+                                <option key={k.id} value={k.id}>
+                                  {k.token ? String(k.token).slice(0,20)+'…' : 'Kalit #'+k.id}
+                                  {k.created_at ? ' · '+new Date(k.created_at).toLocaleDateString() : ''}
+                                </option>
+                              ))}
+                            </select>
+                            {selectedKey?.token && (
+                              <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
+                                <code style={{flex:1,fontSize:'10px',padding:'7px 10px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'6px',fontFamily:'ui-monospace, Menlo, monospace',wordBreak:'break-all',color:'var(--text-secondary)'}}>{selectedKey.token}</code>
+                                <button onClick={()=>copyText(selectedKey.token,'wh_key')} style={{padding:'7px 11px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_key'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_key'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'6px',cursor:'pointer'}}>
+                                  {copiedItem==='wh_key'?'✓':'📋'}
+                                </button>
+                              </div>
+                            )}
+                            {hasAuth && <div style={{marginTop:'7px',fontSize:'10px',color:'#01a750',fontWeight:600}}>✅ Tanlangan kalit quyidagi dasturchi kod misollariga avtomatik qo'shiladi</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* ── FAOLLIK JURNALI — collapsible ──────────────── */}
+                  <div style={{marginBottom:'8px'}}>
+                    <SectionToggle open={actOpen} onToggle={()=>setActOpen(p=>!p)} label="📊 Kirish jurnali — qachon va kim yubordi" />
+                    {actOpen && (
+                      <div style={{border:'1px solid var(--outline-variant)',borderTop:'none',borderRadius:'0 0 8px 8px',padding:'12px 14px',background:'var(--bg-base)'}}>
+                        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'10px'}}>
+                          <button onClick={loadActivity} disabled={actLoad} style={{padding:'5px 12px',fontSize:'10px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'5px',cursor:actLoad?'wait':'pointer'}}>
+                            {actLoad?'⏳':'🔄 Yangilash'}
+                          </button>
+                        </div>
+                        {actErr && <div style={{padding:'7px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'6px',fontSize:'11px',color:'#ef4444',marginBottom:'8px'}}>❌ {actErr}</div>}
+                        {actStats && (
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px',marginBottom:'10px'}}>
+                            {[{l:'Hammasi',v:actStats.day.total,c:'var(--text-main)',bg:'var(--surface-variant)'},{l:'OK',v:actStats.day.success,c:'#01a750',bg:'rgba(1,167,80,0.1)'},{l:'Takror',v:actStats.day.duplicate,c:'#d97706',bg:'rgba(245,158,11,0.1)'},{l:'Xato',v:actStats.day.error,c:'#ef4444',bg:'rgba(239,68,68,0.1)'}].map(s=>(
+                              <div key={s.l} style={{padding:'8px 6px',background:s.bg,borderRadius:'6px',border:'1px solid var(--outline-variant)',textAlign:'center'}}>
+                                <div style={{fontSize:'18px',fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
+                                <div style={{fontSize:'9px',color:'var(--text-muted)',marginTop:'2px',fontWeight:600}}>{s.l}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {actStats && actStats.top_errors?.length > 0 && (
+                          <div style={{marginBottom:'10px',padding:'8px 10px',background:'rgba(239,68,68,0.05)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'6px'}}>
+                            <div style={{fontSize:'10px',fontWeight:700,color:'#ef4444',marginBottom:'4px'}}>🚨 Xatolar:</div>
+                            {actStats.top_errors.map((e,i)=>(
+                              <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text-secondary)',padding:'2px 0'}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{e.msg}</span><b style={{color:'#ef4444',marginLeft:'8px',flexShrink:0}}>×{e.cnt}</b></div>
+                            ))}
+                          </div>
+                        )}
+                        {actLogs.length === 0 ? (
+                          <div style={{padding:'16px',textAlign:'center',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'11px',color:'var(--text-muted)'}}>
+                            {actLoad?'⏳ Yuklanmoqda...':'📭 Hali so\'rov yo\'q — yuqoridagi "Sinab ko\'rish" tugmasini bosing'}
+                          </div>
+                        ) : (
+                          <div style={{overflow:'auto',maxHeight:'260px',border:'1px solid var(--outline-variant)',borderRadius:'6px'}}>
+                            <table style={{width:'100%',fontSize:'10px',borderCollapse:'collapse'}}>
+                              <thead style={{position:'sticky',top:0,background:'var(--bg-surface)'}}>
+                                <tr style={{borderBottom:'1px solid var(--outline-variant)'}}>
+                                  {['Vaqt','Holat','Ism','Telefon','IP'].map(h=><th key={h} style={{padding:'5px 7px',textAlign:'left',fontWeight:700,color:'var(--text-muted)',fontSize:'9px'}}>{h}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {actLogs.map(l=>{
+                                  const s=l.status==='success'?{c:'#01a750',t:'✓ OK'}:l.status==='duplicate'?{c:'#d97706',t:'⚠ Takror'}:{c:'#ef4444',t:'✗ Xato'};
+                                  return <tr key={l.id} style={{borderBottom:'1px solid var(--outline-variant)'}} title={l.error_msg||''}>
+                                    <td style={{padding:'5px 7px',color:'var(--text-muted)',whiteSpace:'nowrap'}}>{new Date(l.ts).toLocaleTimeString()}</td>
+                                    <td style={{padding:'5px 7px',whiteSpace:'nowrap',color:s.c,fontWeight:700}}>{s.t}</td>
+                                    <td style={{padding:'5px 7px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'100px'}}>{l.name||'—'}</td>
+                                    <td style={{padding:'5px 7px',fontFamily:'monospace',whiteSpace:'nowrap'}}>{l.phone_mask||'—'}</td>
+                                    <td style={{padding:'5px 7px',color:'var(--text-muted)',fontFamily:'monospace',fontSize:'9px',whiteSpace:'nowrap'}}>{l.source_ip||'—'}</td>
+                                  </tr>;
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── DASTURCHI UCHUN — collapsible ──────────────── */}
+                  <div style={{marginBottom:'16px'}}>
+                    <SectionToggle open={devOpen} onToggle={()=>setDevOpen(p=>!p)} label="👨‍💻 Dasturchi/Webmaster uchun — tayyor kod misollari" />
+                    {devOpen && (
+                      <div style={{border:'1px solid var(--outline-variant)',borderTop:'none',borderRadius:'0 0 8px 8px',background:'var(--bg-base)'}}>
+                        {/* Sub-tabs */}
+                        <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--outline-variant)'}}>
+                          {[{id:'curl',l:'cURL'},{id:'js',l:'JavaScript'},{id:'fields',l:'Maydonlar'},{id:'security',l:'Xavfsizlik'}].map(t=>(
+                            <button key={t.id} onClick={()=>setDevTab(t.id)} style={{padding:'8px 14px',fontSize:'11px',fontWeight:600,background:devTab===t.id?`${WH}14`:'transparent',color:devTab===t.id?WH:'var(--text-muted)',border:'none',borderRight:'1px solid var(--outline-variant)',cursor:'pointer',borderBottom:devTab===t.id?`2px solid ${WH}`:'none'}}>
+                              {t.l}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{padding:'14px'}}>
+                          {(devTab==='curl'||devTab==='js') && (
+                            <div style={{position:'relative'}}>
+                              <button onClick={()=>copyText(devTab==='curl'?curlExample:jsExample,'wh_ex')} style={{position:'absolute',top:'8px',right:'8px',padding:'4px 9px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_ex'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',zIndex:2}}>
+                                {copiedItem==='wh_ex'?'✓':'📋 Nusxa'}
+                              </button>
+                              <pre style={{margin:0,padding:'12px',background:'var(--surface-variant)',borderRadius:'7px',fontSize:'10px',overflow:'auto',maxHeight:'280px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace',whiteSpace:'pre',color:'var(--text-main)'}}>
+                                {devTab==='curl'?curlExample:jsExample}
+                              </pre>
+                            </div>
+                          )}
+                          {devTab==='fields' && (
+                            <div>
+                              <table style={{width:'100%',fontSize:'11px',borderCollapse:'collapse',marginBottom:'12px'}}>
+                                <thead><tr style={{borderBottom:'2px solid var(--outline-variant)'}}>
+                                  <th style={{padding:'5px 8px',textAlign:'left',fontWeight:700,color:'var(--primary)'}}>Maydon</th>
+                                  <th style={{padding:'5px 8px',textAlign:'left',fontWeight:700,color:'var(--text-muted)'}}>Majburiy?</th>
+                                  <th style={{padding:'5px 8px',textAlign:'left',fontWeight:700,color:'var(--text-muted)'}}>Izoh</th>
+                                </tr></thead>
+                                <tbody>
+                                  {STANDARD_FIELDS.map(([k,req,note])=>(
+                                    <tr key={k} style={{borderBottom:'1px solid var(--outline-variant)'}}>
+                                      <td style={{padding:'6px 8px',fontFamily:'ui-monospace, Menlo, monospace',color:'var(--primary)',fontWeight:700}}>{k}</td>
+                                      <td style={{padding:'6px 8px',color:req==='MAJBURIY'?'#ef4444':'var(--text-muted)',fontWeight:req==='MAJBURIY'?700:400,whiteSpace:'nowrap'}}>{req}</td>
+                                      <td style={{padding:'6px 8px',color:'var(--text-secondary)',fontSize:'10px'}}>{note}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              <div style={{padding:'10px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',color:'var(--text-secondary)',lineHeight:1.55}}>
+                                💡 <b>Qo'shimcha maydon</b> — standart bo'lmagan har qanday maydon (masalan: <code>kasb</code>, <code>byudjet</code>, <code>utm_source</code>) avtomatik lid kartasida chiqadi. Alohida belgilash shart emas.
+                              </div>
+                            </div>
+                          )}
+                          {devTab==='security' && (
+                            <div style={{fontSize:'11px',lineHeight:1.6}}>
+                              {[
+                                {ico:'🚫',t:'Dublikat blok',d:"Bir telefon ikkinchi marta kelsa — yangi lead yaratilmaydi, eskisi qaytariladi (success:true + duplicate:true)"},
+                                {ico:'🔑',t:'API Key Bearer',d:"Authorization: Bearer <kalit> headerida — server kalitni va kompaniya mosligini tekshiradi (401/403)"},
+                                {ico:'📧',t:'Email/telefon format',d:"Format noto'g'ri bo'lsa 400 qaytariladi; telefon 7-15 raqam, email RFC 5322"},
+                                {ico:'🧼',t:'XSS sanitizatsiya',d:"name, extra, region, source va custom_data — HTML/script/javascript: URI tozalanadi"},
+                                {ico:'🌍',t:'CORS',d:"/api/public/* — har qanday domenden fetch ishlaydi (preflight 24 soat cache)"},
+                              ].map((r,i)=>(
+                                <div key={i} style={{display:'flex',gap:'10px',padding:'8px 0',borderBottom:i<4?'1px solid var(--outline-variant)':'none'}}>
+                                  <span style={{fontSize:'16px',flexShrink:0}}>{r.ico}</span>
+                                  <div><b style={{color:'var(--text-main)'}}>{r.t}</b> — <span style={{color:'var(--text-secondary)'}}>{r.d}</span></div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ── YOPISH ────────────────────────────────────── */}
+                  <button className="btn-outline" style={{width:'100%',padding:'10px'}} onClick={()=>setActiveModal(null)}>
+                    Yopish
+                  </button>
                 </div>
               );
-            };
+            });
 
             // ── Modal wrapper ───────────────────────────────────────
             const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets' || activeModal.key === 'meta_capi' || activeModal.key === 'webhook';
@@ -2383,11 +2323,29 @@ fetch('${webhookUrl}', {
                   {activeModal.key === 'meta_capi' && <CapiFlow />}
 
                   {/* V57: Custom Webhook (interactive) */}
-                  {activeModal.key === 'webhook' && <WebhookFlow />}
+                  {activeModal.key === 'webhook' && <WebhookFlow origin={origin} intgCompanySlug={intgCompanySlug} intgPipelines={intgPipelines} apiKeys={apiKeys} authH={authH} copyText={copyText} copiedItem={copiedItem} genApiKey={genApiKey} setActiveModal={setActiveModal} />}
 
                   {/* Standard form modal (telegram, voip) */}
                   {!isCustomUI && (
                     <div style={{padding:'20px 22px'}}>
+                      {/* Intro blok — qadamma-qadam tushuntirish (kod bilmaydiganlar uchun) */}
+                      {activeModal.intro && (
+                        <div style={{background:'var(--bg-base)',border:`1px solid ${activeModal.color}35`,borderRadius:'10px',padding:'14px 16px',marginBottom:'16px'}}>
+                          <div style={{fontSize:'12px',fontWeight:700,color:activeModal.color,marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
+                            <span>💡</span>{activeModal.intro.title}
+                          </div>
+                          <div style={{display:'flex',flexDirection:'column',gap:'7px',marginBottom:activeModal.intro.note?'12px':0}}>
+                            {activeModal.intro.steps.map((s,i)=>(
+                              <div key={i} style={{fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.55'}}>{s}</div>
+                            ))}
+                          </div>
+                          {activeModal.intro.note && (
+                            <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.55',padding:'9px 11px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:'7px'}}>
+                              {activeModal.intro.note}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {activeModal.wh && (
                         <div style={{background:activeModal.bg,border:`1px solid ${activeModal.color}30`,borderRadius:'9px',padding:'11px 14px',marginBottom:'16px'}}>
                           <div style={{fontSize:'10px',fontWeight:700,color:activeModal.color,marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>{activeModal.wh.label}</div>
@@ -2411,9 +2369,14 @@ fetch('${webhookUrl}', {
                         </div>
                       )}
                       {activeModal.fields.map(f => (
-                        <div key={f.k} style={{marginBottom:'12px'}}>
+                        <div key={f.k} style={{marginBottom:'14px'}}>
                           <span className="label-sm">{f.label}</span>
                           <input className="input-base" type={f.t} placeholder={f.ph} value={formData[f.k]||''} onChange={e=>setFormData({...formData,[f.k]:e.target.value})} style={{marginBottom:0}}/>
+                          {f.hint && (
+                            <div style={{fontSize:'10.5px',color:'var(--text-muted)',marginTop:'4px',lineHeight:'1.5',paddingLeft:'2px'}}>
+                              ℹ️  {f.hint}
+                            </div>
+                          )}
                         </div>
                       ))}
                       <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
@@ -6389,13 +6352,22 @@ fetch('${webhookUrl}', {
         return () => clearInterval(iv);
       }, [authUser, addNotif]);
 
-      // Veb-forma / tashqi lidlar — har 20 sek pipeline'ni avtomatik yangilash
+      // Veb-forma / tashqi lidlar — har 20 sek pipeline'ni avtomatik yangilash.
+      // ⚠️ Bu interval avval webhook oynasidagi tanlovlarni reset qilardi (komponent
+      //    har re-render'da qaytadan yaratilardi). Bu muammo V62'da __WebhookFlowImpl
+      //    kesh patterni bilan to'g'irlandi — endi interval xavfsiz.
+      // Visibilitychange ham qo'shildi: tab orqasidan qaytganda darhol yangilash.
       useEffect(() => {
         if (!authUser) return;
-        const iv = setInterval(() => {
+        const refresh = () => {
           if (document.visibilityState === 'visible') reloadLeadsFromApi();
-        }, 20000);
-        return () => clearInterval(iv);
+        };
+        const iv = setInterval(refresh, 20000);
+        document.addEventListener('visibilitychange', refresh);
+        return () => {
+          clearInterval(iv);
+          document.removeEventListener('visibilitychange', refresh);
+        };
       }, [authUser]);
 
       // ── Kanban + tanlash + drag state hook'lari (early return'lardan oldin chaqirilishi shart) ──
