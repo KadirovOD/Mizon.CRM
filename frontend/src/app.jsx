@@ -2985,12 +2985,28 @@ fetch('${webhookUrl}', {
     // ===== V54: ACTIVITY LOG PANEL — Hisobotlar > Harakatlar Jurnali =====
     // Hodimlar bo'yicha filtr, bo'limlarga ajratish (bosqich/komment/vazifa/tahrir/qo'ng'iroq/boshqalar)
     // Bosqich tab'ida qo'shimcha "qaysi bosqichdan qaysi bosqichga" filtri + son
+    // V60: Doimiy audit jurnal (crm_audit_log) dan ham o'qiymiz — o'chirilgan lidlar ham ko'rinadi
     const ActivityLogPanel = ({ leads, columnsMap, companyUsers, setSelectedLeadId }) => {
-      const [tab,         setTab]         = useState('all');     // all|stage|comment|task|edit|call|other
+      const [tab,         setTab]         = useState('all');     // all|stage|comment|task|edit|call|delete|other
       const [empFilter,   setEmpFilter]   = useState('all');     // username yoki 'all'
       const [fromFilter,  setFromFilter]  = useState('all');     // stage id (faqat stage tab)
       const [toFilter,    setToFilter]    = useState('all');     // stage id (faqat stage tab)
       const [showAll,     setShowAll]     = useState(false);     // 200 vs hammasi
+
+      // V60: Doimiy audit (lid o'chsa ham qoladigan) yozuvlarni yuklash
+      const [auditEntries, setAuditEntries] = useState([]);
+      useEffect(() => {
+        let cancelled = false;
+        (async () => {
+          try {
+            const r = await fetch('/api/audit-log/recent?limit=500', { headers: authH() });
+            if (!r.ok) return;
+            const d = await r.json();
+            if (!cancelled) setAuditEntries(Array.isArray(d.items) ? d.items : []);
+          } catch { /* ignore — chatlogs faqat ko'rinadi */ }
+        })();
+        return () => { cancelled = true; };
+      }, []);
 
       // 1) Barcha logni yig'amiz va kategoriya belgilaymiz
       const allColsFlat = Object.values(columnsMap || {}).flat();
@@ -3109,9 +3125,40 @@ fetch('${webhookUrl}', {
           });
         });
       });
+      // V60: Audit jurnal (lid o'chsa ham qoladigan) yozuvlarini qo'shamiz.
+      // crm_audit_log dan kelgan har bir yozuv → activity stream ga "delete" kategoriyasi sifatida.
+      // O'chirilgan lid uchun leadId = audit.lead_id (lid mavjud emas, lekin ID saqlangan),
+      // leadName/leadPhone snapshotdan olinadi (lid o'chsa ham ko'rinadi).
+      (auditEntries || []).forEach(a => {
+        const det = a.details || {};
+        const dur = det.lead_created_at ? Math.round((new Date(a.created_at) - new Date(det.lead_created_at)) / (1000*60*60*24)) : null;
+        const ageStr = (dur != null && !Number.isNaN(dur))
+          ? (dur === 0 ? '(o\'sha kuni)' : `(yaratilganidan ${dur} kun o'tib)`)
+          : '';
+        // Matn — bosqich nomini ham qo'shamiz
+        const stageInfo = det.stage_name ? ` · ${det.stage_name} bosqichidan` : '';
+        const txt = a.action === 'delete'
+          ? `🗑️ Lid o'chirildi: "${a.lead_name || '(noma\'lum)'}" ${ageStr}${stageInfo}`
+          : `${a.action}: ${a.lead_name || ''}`;
+        all.push({
+          _key:         `audit_${a.id}`,
+          _cat:         a.action === 'delete' ? 'delete' : 'other',
+          _audit:       true,                          // marker — ko'rinishda farqlash uchun
+          _auditAction: a.action,
+          _auditDetails:det,
+          type:         'audit_persistent',
+          date:         a.created_at,
+          by:           a.actor_user || '',
+          text:         txt,
+          leadId:       a.lead_id,
+          leadName:     a.lead_name,
+          leadPhone:    a.lead_phone,
+        });
+      });
+
       all.sort((a,b) => new Date(b.date) - new Date(a.date));
 
-      // 2) Bo'lim bo'yicha tekshirish
+      // 2) Bo'lim bo'yicha tekshirish (V60: + delete)
       const bySection = {
         all:     all,
         stage:   all.filter(x => x._cat === 'stage'),
@@ -3119,6 +3166,7 @@ fetch('${webhookUrl}', {
         task:    all.filter(x => x._cat === 'task'),
         edit:    all.filter(x => x._cat === 'edit'),
         call:    all.filter(x => x._cat === 'call'),
+        delete:  all.filter(x => x._cat === 'delete'),
         other:   all.filter(x => x._cat === 'other' || x._cat === 'chat_in'),
       };
 
@@ -3129,6 +3177,7 @@ fetch('${webhookUrl}', {
         { id:'task',    label:'Vazifalar',     icon:'task_alt',       color:'#f59e0b' },
         { id:'edit',    label:'Tahrirlash',    icon:'edit_note',      color:'#3b82f6' },
         { id:'call',    label:"Qo'ng'iroqlar", icon:'call',           color:'#8b5cf6' },
+        { id:'delete',  label:"O'chirilganlar (V60)", icon:'delete',  color:'#ef4444' },
         { id:'other',   label:'Boshqalar',     icon:'more_horiz',     color:'var(--text-muted)' },
       ];
 
@@ -3173,14 +3222,16 @@ fetch('${webhookUrl}', {
         const dtStr = dt.toLocaleDateString('uz-UZ', {day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + dt.toLocaleTimeString('uz-UZ', {hour:'2-digit',minute:'2-digit'});
         const tabDef = TAB_DEFS.find(t => t.id === log._cat) || TAB_DEFS[6];
         // Stage transition uchun maxsus ko'rinish
-        const isStage = log._cat === 'stage';
+        const isStage  = log._cat === 'stage';
+        const isDelete = log._cat === 'delete';        // V60: o'chirilgan lid — click qilinmaydi
         const fromT = log.fromStageTitle || stageTitleById(log.fromStatus);
         const toT   = log.toStageTitle   || stageTitleById(log.toStatus);
+        const clickable = setSelectedLeadId && !isDelete;
         return (
-          <div key={log._key} style={{display:'flex', gap:'10px', alignItems:'flex-start', padding:'10px 20px', borderBottom:'1px solid var(--outline-variant)', cursor:setSelectedLeadId?'pointer':'default'}}
-            onClick={()=>setSelectedLeadId&&setSelectedLeadId(log.leadId)}
-            onMouseEnter={e=>{if(setSelectedLeadId)e.currentTarget.style.background='var(--bg-hover)';}}
-            onMouseLeave={e=>e.currentTarget.style.background=''}>
+          <div key={log._key} style={{display:'flex', gap:'10px', alignItems:'flex-start', padding:'10px 20px', borderBottom:'1px solid var(--outline-variant)', cursor:clickable?'pointer':'default', background:isDelete?'rgba(239,68,68,0.04)':undefined}}
+            onClick={()=>clickable && setSelectedLeadId(log.leadId)}
+            onMouseEnter={e=>{if(clickable)e.currentTarget.style.background='var(--bg-hover)';}}
+            onMouseLeave={e=>e.currentTarget.style.background=isDelete?'rgba(239,68,68,0.04)':''}>
             <div style={{width:'26px', height:'26px', borderRadius:'6px', background:`${tabDef.color}18`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:'2px'}}>
               <span className="material-symbols-outlined" style={{fontSize:'15px', color:tabDef.color}}>{tabDef.icon}</span>
             </div>
@@ -3193,21 +3244,34 @@ fetch('${webhookUrl}', {
                   {log._legacy && <span style={{fontSize:'9px', color:'var(--text-muted)', fontStyle:'italic'}}>(legacy)</span>}
                 </div>
               ) : (
-                <div style={{fontSize:'12px', color:'var(--text-secondary)', lineHeight:1.4}}>{log.text}</div>
+                <div style={{fontSize:'12px', color:isDelete?'#ef4444':'var(--text-secondary)', lineHeight:1.4, fontWeight:isDelete?600:400}}>{log.text}</div>
               )}
-              <div style={{display:'flex', gap:'10px', marginTop:'4px', flexWrap:'wrap'}}>
+              <div style={{display:'flex', gap:'10px', marginTop:'4px', flexWrap:'wrap', alignItems:'center'}}>
                 <span style={{fontSize:'10px', color:'var(--text-muted)'}}>{dtStr}</span>
                 {log.leadName && (
-                  <span style={{fontSize:'10px', color:'var(--primary)', fontWeight:600}}>
+                  <span style={{fontSize:'10px', color:isDelete?'#ef4444':'var(--primary)', fontWeight:600, textDecoration:isDelete?'line-through':'none'}}>
                     {log.leadName}{log.leadPhone ? ` · ${log.leadPhone}` : ''}
                   </span>
                 )}
+                {isDelete && log.leadId && (
+                  <span style={{fontSize:'10px', color:'var(--text-muted)', fontFamily:'ui-monospace, Menlo, monospace'}}>#{log.leadId}</span>
+                )}
                 {log.by && (
-                  <span style={{fontSize:'10px', color:knownUsernames.has(log.by)?'var(--text-muted)':'#f59e0b'}}>
-                    by {log.by}{!knownUsernames.has(log.by) && ' ⚠️'}
+                  <span style={{fontSize:'10px', color:isDelete?'#ef4444':(knownUsernames.has(log.by)?'var(--text-muted)':'#f59e0b'), fontWeight:isDelete?700:400}}>
+                    {isDelete ? '🧑 o\'chirgan: ' : 'by '}{log.by}{!isDelete && !knownUsernames.has(log.by) && ' ⚠️'}
                   </span>
                 )}
                 {log.assignee && <span style={{fontSize:'10px', color:'#f59e0b'}}>→ {log.assignee}</span>}
+                {isDelete && log._auditDetails && log._auditDetails.stage_name && (
+                  <span style={{fontSize:'9px', padding:'1px 6px', background:'rgba(239,68,68,0.10)', color:'#ef4444', borderRadius:'4px', fontWeight:600}}>
+                    {log._auditDetails.stage_name} bosqichidan
+                  </span>
+                )}
+                {isDelete && log._auditDetails && log._auditDetails.chatlogs_count > 0 && (
+                  <span style={{fontSize:'9px', color:'var(--text-muted)'}} title="O'chirilgan lid chatlogs soni (ma'lumot tiklab bo'lmaydi)">
+                    📜 {log._auditDetails.chatlogs_count} ta yozuv yo'qoldi
+                  </span>
+                )}
               </div>
             </div>
           </div>

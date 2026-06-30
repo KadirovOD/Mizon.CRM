@@ -276,6 +276,11 @@ exports.claimLead = async (req, res) => {
 };
 
 // DELETE /api/leads/:id — delete a lead
+//
+// V60: O'chirishdan oldin lid snapshotini olib, crm_audit_log ga yozamiz.
+// Aks holda chatlogs JSONB lid bilan birga o'chib ketadi va "kim o'chirdi?"
+// degan savolga javob qolmaydi. Audit yozuvi lid o'chsa ham saqlanib qoladi
+// (lead_id NULL bo'lib ketadi, lekin lead_name/lead_phone snapshot ko'rinadi).
 exports.deleteLead = async (req, res) => {
   if (!req.db) return res.status(503).json({ error: 'Database not configured' });
   // Task 1: Faqat CEO va SUPERADMIN o'chira oladi
@@ -285,11 +290,63 @@ exports.deleteLead = async (req, res) => {
   const cid = req.user?.companyId;
   const { id } = req.params;
   try {
+    // V60: AVVAL snapshot olamiz — lid o'chgandan keyin maydonlarini bilolmaymiz
+    const snap = await req.db.query(
+      `SELECT l.id, l.name, l.phone, l.email, l.owner, l.mizon_source,
+              l.pipelineid, l.region, l.lead_score, l.created_at,
+              l.chatlogs, l.stage_id,
+              s.name AS stage_name
+         FROM crm_lead l
+         LEFT JOIN crm_stage s ON s.id = l.stage_id
+        WHERE l.id = $1 AND l.company_id = $2
+        LIMIT 1`,
+      [id, cid]
+    );
+    if (!snap.rows.length) return res.status(404).json({ error: 'Lead not found' });
+    const lead = snap.rows[0];
+
+    // O'chirish (CASCADE bilan chatlogs ham yo'qoladi — shu sababli audit yuqorida saqladik)
     const result = await req.db.query(
       'DELETE FROM crm_lead WHERE id = $1 AND company_id = $2 RETURNING id',
       [id, cid]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Lead not found' });
+
+    // V60: AUDIT yozuvi (lid o'chsa ham qoladi — lead_id keyinroq FK bo'lmagani uchun saqlanaveradi)
+    try {
+      let chatlogsCount = 0;
+      try { chatlogsCount = Array.isArray(lead.chatlogs) ? lead.chatlogs.length : (JSON.parse(lead.chatlogs || '[]')?.length || 0); } catch {}
+      await req.db.query(
+        `INSERT INTO crm_audit_log
+           (company_id, lead_id, lead_name, lead_phone, action, actor_user, actor_role, details)
+         VALUES ($1, $2, $3, $4, 'delete', $5, $6, $7::jsonb)`,
+        [
+          cid,
+          lead.id,
+          lead.name  || '',
+          lead.phone || '',
+          req.user.username || '',
+          req.user.role     || '',
+          JSON.stringify({
+            email:          lead.email          || null,
+            owner:          lead.owner          || null,
+            source:         lead.mizon_source   || null,
+            pipelineid:     lead.pipelineid     || null,
+            region:         lead.region         || null,
+            lead_score:     lead.lead_score     || 0,
+            stage_id:       lead.stage_id       || null,
+            stage_name:     lead.stage_name     || null,
+            lead_created_at:lead.created_at     || null,
+            chatlogs_count: chatlogsCount,
+          }),
+        ]
+      );
+      console.log(`🗑️  Lid o'chirildi: id=${id} name="${lead.name}" by=${req.user.username} (audit yozildi)`);
+    } catch (auditErr) {
+      // Audit yoza olmasak ham — o'chirish allaqachon bajarilgan, faqat warning chiqaramiz
+      console.error('⚠️  Audit yoza olmadi (lid baribir o\'chirildi):', auditErr.message);
+    }
+
     res.json({ success: true, deletedId: id });
   } catch (err) {
     console.error('deleteLead error:', err.message);

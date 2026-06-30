@@ -324,6 +324,28 @@ async function initDb() {
         error_msg  TEXT,
         created_at TIMESTAMP DEFAULT NOW()
       );
+
+      -- V60: Doimiy audit jurnal (lid o'chsa ham yozuv saqlanib qoladi).
+      -- chatlogs JSONB lid bilan birga o'chib ketadi → kim, qachon, qaysi lidni
+      -- o'chirgani aniqlanmas edi. Bu jadval shu kamchilikni yopadi.
+      -- Kelajakda boshqa "doimiy" hodisalar (massa import, massa o'chirish,
+      -- bosqich o'zgarishi snapshot) ham shu yerga yozilishi mumkin (action field
+      -- enum sifatida ishlatiladi).
+      CREATE TABLE IF NOT EXISTS crm_audit_log (
+        id          BIGSERIAL PRIMARY KEY,
+        company_id  INT REFERENCES companies(id) ON DELETE CASCADE,
+        lead_id     INTEGER,                            -- nullable: lid o'chgandan keyin ham yozuv qoladi
+        lead_name   VARCHAR(255),                       -- snapshot — o'chgan lid nomi
+        lead_phone  VARCHAR(50),                        -- snapshot
+        action      VARCHAR(40) NOT NULL,               -- 'delete' | (kelajakda: 'edit', 'bulk_delete', ...)
+        actor_user  VARCHAR(100),                       -- kim bajardi (req.user.username)
+        actor_role  VARCHAR(40),
+        details     JSONB DEFAULT '{}'::jsonb,          -- qo'shimcha (stage_title, owner, chatlogs_count, va h.k.)
+        created_at  TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_log_company_created ON crm_audit_log(company_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_lead             ON crm_audit_log(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_action           ON crm_audit_log(action);
     `);
 
     // ── Migrations for existing tables ───────────────────────────────────────
@@ -898,6 +920,36 @@ app.delete('/api/api-keys/:id', async (req, res) => {
     );
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── V60: Doimiy Audit Jurnal — lid o'chirish va boshqa "lid o'chsa ham qoladigan" hodisalar ──
+// GET /api/audit-log/recent?limit=200&action=delete — joriy kompaniya audit yozuvlari
+//   chatlogs JSONB lid bilan o'chib ketsa ham, bu yerdagi yozuvlar saqlanib qoladi.
+app.get('/api/audit-log/recent', async (req, res) => {
+  if (!req.db) return res.json({ items: [] });
+  const cid = req.user?.companyId;
+  if (!cid) return res.status(401).json({ error: 'Tizimga kiring' });
+  const limit  = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+  const action = (req.query.action || '').trim();   // ixtiyoriy filter: 'delete'
+  try {
+    const params = [cid];
+    let where = 'company_id = $1';
+    if (action) { params.push(action); where += ` AND action = $${params.length}`; }
+    params.push(limit);
+    const r = await req.db.query(
+      `SELECT id, company_id, lead_id, lead_name, lead_phone, action,
+              actor_user, actor_role, details, created_at
+         FROM crm_audit_log
+        WHERE ${where}
+        ORDER BY created_at DESC
+        LIMIT $${params.length}`,
+      params
+    );
+    res.json({ items: r.rows, count: r.rows.length });
+  } catch (e) {
+    console.error('audit-log/recent error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // (company/info is handled by authController above)
