@@ -819,14 +819,14 @@ app.get   ('/api/billing/me',               billingController.myBilling);
 // POST /api/public/leads — mijoz veb-forma orqali lead yuboradi (company_slug bilan)
 app.post('/api/public/leads', async (req, res) => {
   if (!req.db) return res.status(503).json({ error: 'Database not configured' });
-  const {
+  let {
     company_slug,
     name,
     phone  = null,
     email  = null,
     region = 'Veb-Sayt',
     source = 'website',
-    pipelineId = 'p1',
+    pipelineId,                       // V57: hardcoded 'p1' default olib tashlandi — pastda kompaniyaning haqiqiy 1-pipeline'i topiladi
     extra  = '',
     custom_data: bodyCustomData,
   } = req.body || {};
@@ -852,6 +852,25 @@ app.post('/api/public/leads', async (req, res) => {
       [cid]
     );
     const stageId = firstStage.rows[0]?.id || null;
+
+    // V57: Agar pipelineId yuborilmagan bo'lsa — kompaniyaning haqiqiy birinchi pipeline'ini topamiz
+    //   (avval crm_lead jadvalida shu kompaniya uchun mavjud distinct pipelineid lardan eng eski yaratilgani)
+    //   Agar hech qanday lead bo'lmasa — 'p1' default sifatida qoladi
+    if (!pipelineId || !String(pipelineId).trim()) {
+      try {
+        const pipR = await req.db.query(
+          `SELECT pipelineid FROM crm_lead
+             WHERE company_id=$1 AND pipelineid IS NOT NULL AND pipelineid<>''
+             GROUP BY pipelineid
+             ORDER BY MIN(id) ASC
+             LIMIT 1`,
+          [cid]
+        );
+        pipelineId = pipR.rows[0]?.pipelineid || 'p1';
+      } catch { pipelineId = 'p1'; }
+    } else {
+      pipelineId = String(pipelineId).trim();
+    }
 
     // 3. Lead ballini hisoblash
     let score = 30; // website manbaasi
@@ -896,7 +915,7 @@ app.post('/api/public/leads', async (req, res) => {
         stageId,
         region || 'Veb-Sayt',
         'Navbatda',
-        pipelineId || 'p1',
+        pipelineId,                            // V57: yuqorida default/validate qilingan
         JSON.stringify([{ type:'sys', date: new Date().toISOString(), text: sysNote }]),
         cid,
         JSON.stringify(customData),

@@ -886,11 +886,7 @@
 
         { key:'webhook', name:'Custom Webhook', logo:'🔗', color:'#6366f1', bg:'rgba(99,102,241,0.12)',
           desc:'Istalgan sayt yoki tizimdan POST so\'rov orqali lead yuborish imkoniyati',
-          fields:[
-            {k:'name',   label:'Integratsiya nomi', ph:'Mening saytim', t:'text'},
-            {k:'secret', label:'Secret Key (ixtiyoriy)', ph:'Auto-yaratiladi', t:'text'},
-          ],
-          wh:{label:'Lead qabul qilish endpoint (POST so\'rov)', url:`${origin}/api/leads`} },
+          customUI: true },                  // V57: interactive WebhookFlow komponent ishlatiladi
 
         { key:'voip', name:'Moizvonki VoIP', logo:'📞', color:'#01a750', bg:'rgba(1,167,80,0.12)',
           desc:'IP-telefon, avtomatik qo\'ng\'iroq qayd etish va Call Center statistikasi',
@@ -1808,8 +1804,241 @@
               );
             };
 
+            // ── Custom Webhook (V57) ────────────────────────────────
+            // Interactive UI: webhook URL, company_slug, pipeline tanlash, curl/JS misol, maydonlar jadvali
+            const WebhookFlow = () => {
+              const WH = '#6366f1';
+              const webhookUrl = `${origin}/api/public/leads`;
+              const slug = intgCompanySlug || 'sizning_slug';
+              const [selectedPipe, setSelectedPipe] = useState(intgPipelines[0]?.id || 'p1');
+              const [tab, setTab] = useState('curl'); // curl | js | fields
+              const [testStatus, setTestStatus] = useState(null); // null | 'loading' | {ok|err, id|msg}
+
+              const curlExample =
+`curl -X POST ${webhookUrl} \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "company_slug": "${slug}",
+    "name": "Ali Karimov",
+    "phone": "+998901234567",
+    "email": "ali@example.com",
+    "region": "Toshkent",
+    "source": "website",
+    "pipelineId": "${selectedPipe}",
+    "custom_data": {
+      "utm_source": "google",
+      "kasb": "Dasturchi",
+      "byudjet": "500000"
+    }
+  }'`;
+
+              const jsExample =
+`// Sayt formangiz submit eventidan yuborish misoli
+fetch('${webhookUrl}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    company_slug: '${slug}',                  // MAJBURIY — kompaniya kaliti
+    name:    document.querySelector('#name').value,
+    phone:   document.querySelector('#phone').value,
+    email:   document.querySelector('#email').value,
+    region:  document.querySelector('#region').value,
+    source:  'website',                       // yoki: 'landing', 'facebook_ad', 'telegram_bot'
+    pipelineId: '${selectedPipe}',
+    custom_data: {
+      // Standart bo'lmagan har qanday maydon — avtomatik lid kartasiga tushadi
+      utm_source:   new URLSearchParams(location.search).get('utm_source') || '',
+      utm_campaign: new URLSearchParams(location.search).get('utm_campaign') || '',
+      kasb:    document.querySelector('#kasb').value,
+      byudjet: document.querySelector('#byudjet').value,
+    },
+  }),
+})
+.then(r => r.json())
+.then(data => {
+  if (data.success) {
+    console.log('Lead yaratildi:', data.id);
+    window.location.href = '/rahmat.html';
+  } else {
+    alert('Xato: ' + data.error);
+  }
+})
+.catch(err => console.error('Vebhok xatosi:', err));`;
+
+              const sendTestRequest = async () => {
+                setTestStatus('loading');
+                try {
+                  const r = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      company_slug: slug,
+                      name: 'Test Lead (Custom Webhook)',
+                      phone: '+998000000000',
+                      source: 'webhook_test',
+                      pipelineId: selectedPipe,
+                      extra: 'CRM Integratsiya panelidan yuborilgan sinov',
+                      custom_data: { test: 'true', sent_from: 'crm_ui' },
+                    }),
+                  });
+                  const data = await r.json();
+                  if (r.ok && data.success) setTestStatus({ ok: true, id: data.id });
+                  else setTestStatus({ ok: false, msg: data.error || `HTTP ${r.status}` });
+                } catch (e) {
+                  setTestStatus({ ok: false, msg: e.message });
+                }
+              };
+
+              const STANDARD_FIELDS = [
+                ['company_slug','string','MAJBURIY','sizning_slug'],
+                ['name',        'string','MAJBURIY','Ali Karimov'],
+                ['phone',       'string','—',       '+998901234567'],
+                ['email',       'string','—',       'ali@example.com'],
+                ['region',      'string','default: "Veb-Sayt"', 'Toshkent'],
+                ['source',      'string','default: "website"',  'landing, facebook_ad'],
+                ['pipelineId',  'string','default: 1-pipeline', 'p1, p2'],
+                ['extra',       'string','—',                   "qo'shimcha izoh"],
+                ['custom_data', 'object','—',                   '{ kasb:"...", utm_source:"..." }'],
+              ];
+
+              return (
+                <div style={{padding:'20px 22px'}}>
+                  {/* 1. Webhook URL */}
+                  <div style={{background:'rgba(99,102,241,0.08)',border:`1px solid ${WH}30`,borderRadius:'10px',padding:'14px',marginBottom:'14px'}}>
+                    <div style={{fontSize:'10px',fontWeight:700,color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.07em'}}>
+                      🌐 Webhook URL (POST endpoint)
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <code style={{flex:1,fontSize:'12px',color:'var(--text-main)',background:'var(--bg-base)',padding:'8px 12px',borderRadius:'6px',wordBreak:'break-all',border:'1px solid var(--outline-variant)',fontFamily:'ui-monospace, Menlo, Monaco, monospace'}}>{webhookUrl}</code>
+                      <button onClick={()=>copyText(webhookUrl,'wh_url')} style={{padding:'8px 12px',fontSize:'11px',fontWeight:700,background:copiedItem==='wh_url'?'#01a750':WH,color:'white',border:'none',borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap'}}>
+                        {copiedItem==='wh_url'?'✓ Nusxalandi':'📋 Nusxa'}
+                      </button>
+                    </div>
+                    <div style={{fontSize:'11px',color:'var(--text-secondary)',marginTop:'8px',lineHeight:1.5}}>
+                      Bu manzilga sayt formangiz JSON yuboradi. <b>company_slug</b> body parametrida MAJBURIY.
+                    </div>
+                  </div>
+
+                  {/* 2. Company Slug */}
+                  <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'9px',padding:'12px 14px',marginBottom:'14px'}}>
+                    <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>
+                      🔑 Sizning kompaniya kalitingiz (company_slug)
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <code style={{flex:1,fontSize:'13px',color:'var(--primary)',fontWeight:700,background:'var(--surface-variant)',padding:'6px 12px',borderRadius:'5px',fontFamily:'ui-monospace, Menlo, Monaco, monospace'}}>{slug}</code>
+                      <button onClick={()=>copyText(slug,'wh_slug')} style={{padding:'5px 10px',fontSize:'11px',fontWeight:700,background:copiedItem==='wh_slug'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_slug'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer'}}>
+                        {copiedItem==='wh_slug'?'✓':'📋'}
+                      </button>
+                    </div>
+                    <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px'}}>Har bir so'rovga shu kalit qo'shilishi kerak — bu sizning kompaniyangizni aniqlaydi.</div>
+                  </div>
+
+                  {/* 3. Pipeline Selector */}
+                  {intgPipelines.length > 0 && (
+                    <div style={{marginBottom:'14px'}}>
+                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.07em'}}>
+                        📊 Misolda ko'rsatiluvchi pipeline (lidlar qaerga tushishi)
+                      </div>
+                      <select className="input-base" style={{marginBottom:0,height:'36px',padding:'0 12px',lineHeight:'34px',fontSize:'13px'}}
+                        value={selectedPipe} onChange={e=>setSelectedPipe(e.target.value)}>
+                        {intgPipelines.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 4. Tab Switcher */}
+                  <div style={{display:'flex',gap:'6px',marginBottom:'10px',flexWrap:'wrap'}}>
+                    {[{id:'curl',l:'🖥 cURL'},{id:'js',l:'🌐 JavaScript (sayt)'},{id:'fields',l:'📋 Maydonlar ro\'yxati'}].map(t => (
+                      <button key={t.id} onClick={()=>setTab(t.id)}
+                        style={{padding:'7px 13px',fontSize:'11px',fontWeight:600,borderRadius:'7px',
+                          border:`1px solid ${tab===t.id?WH:'var(--outline-variant)'}`,
+                          background:tab===t.id?`${WH}18`:'var(--bg-base)',
+                          color:tab===t.id?WH:'var(--text-secondary)',cursor:'pointer'}}>
+                        {t.l}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 5. Examples / Fields */}
+                  {tab !== 'fields' ? (
+                    <div style={{position:'relative'}}>
+                      <button onClick={()=>copyText(tab==='curl'?curlExample:jsExample,'wh_ex')}
+                        style={{position:'absolute',top:'8px',right:'8px',padding:'5px 10px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_ex'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'5px',cursor:'pointer',zIndex:2}}>
+                        {copiedItem==='wh_ex'?'✓ Nusxalandi':'📋 Nusxa'}
+                      </button>
+                      <pre style={{margin:0,padding:'14px 16px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',fontSize:'11px',color:'var(--text-main)',overflow:'auto',maxHeight:'320px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, Monaco, monospace',whiteSpace:'pre'}}>
+                        {tab==='curl' ? curlExample : jsExample}
+                      </pre>
+                    </div>
+                  ) : (
+                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px',lineHeight:1.65}}>
+                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>STANDART MAYDONLAR (jadval ustunlariga yoziladi)</div>
+                      <div style={{overflow:'auto'}}>
+                        <table style={{width:'100%',fontSize:'11px',marginBottom:'14px',borderCollapse:'collapse'}}>
+                          <tbody>
+                            {STANDARD_FIELDS.map(([k,t,r,ex]) => (
+                              <tr key={k} style={{borderBottom:'1px solid var(--outline-variant)'}}>
+                                <td style={{padding:'6px 8px',fontFamily:'ui-monospace, Menlo, monospace',color:'var(--primary)',fontWeight:700,whiteSpace:'nowrap'}}>{k}</td>
+                                <td style={{padding:'6px 8px',color:'var(--text-muted)'}}>{t}</td>
+                                <td style={{padding:'6px 8px',color:r==='MAJBURIY'?'#ef4444':'var(--text-muted)',fontWeight:r==='MAJBURIY'?700:400,fontSize:'10px',whiteSpace:'nowrap'}}>{r}</td>
+                                <td style={{padding:'6px 8px',color:'var(--text-secondary)',fontStyle:'italic',fontSize:'10px'}}>{ex}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>QO'SHIMCHA MAYDONLAR (avtomatik custom_data ga tushadi)</div>
+                      <div style={{color:'var(--text-secondary)',marginBottom:'8px',fontSize:'11px'}}>Body ga qo'shgan har qanday standart bo'lmagan maydon avtomatik <code style={{background:'var(--surface-variant)',padding:'1px 5px',borderRadius:'3px',fontSize:'10px'}}>custom_data</code> JSONB ga yoziladi va lid kartasida ko'rinadi (V51 dan beri).</div>
+                      <pre style={{margin:'0 0 14px',padding:'10px 12px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace',overflow:'auto'}}>{`{
+  "company_slug": "${slug}",
+  "name": "Ali",
+  "phone": "+998901234567",
+  "kasb": "Dasturchi",        // → custom_data.kasb
+  "byudjet": "500000",        // → custom_data.byudjet
+  "utm_source": "google"      // → custom_data.utm_source
+}`}</pre>
+                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>JAVOB (Response)</div>
+                      <pre style={{margin:0,padding:'10px 12px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace'}}>{`// Muvaffaqiyat (200):
+{ "success": true, "id": 12345 }
+
+// Xatolar:
+{ "error": "company_slug majburiy" }      // 400
+{ "error": "Ism majburiy" }                // 400
+{ "error": "Kompaniya topilmadi yoki faol emas" }   // 404`}</pre>
+                    </div>
+                  )}
+
+                  {/* 6. Test Webhook */}
+                  <div style={{marginTop:'16px',padding:'12px 14px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:'12px',fontWeight:700,marginBottom:'2px'}}>🧪 Test so'rovi yuborish</div>
+                        <div style={{fontSize:'10px',color:'var(--text-muted)'}}>Ish faolligini tekshirish uchun test lead yaratiladi</div>
+                      </div>
+                      <button onClick={sendTestRequest} disabled={testStatus==='loading'}
+                        style={{padding:'8px 16px',fontSize:'12px',fontWeight:700,background:testStatus==='loading'?'var(--surface-variant)':WH,color:'#fff',border:'none',borderRadius:'7px',cursor:testStatus==='loading'?'wait':'pointer',whiteSpace:'nowrap'}}>
+                        {testStatus==='loading'?'⏳ Yuborilmoqda...':'▶ Test yuborish'}
+                      </button>
+                    </div>
+                    {testStatus && testStatus !== 'loading' && (
+                      <div style={{marginTop:'10px',padding:'8px 12px',background:testStatus.ok?'rgba(1,167,80,0.1)':'rgba(239,68,68,0.1)',border:`1px solid ${testStatus.ok?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`,borderRadius:'6px',fontSize:'11px',color:testStatus.ok?'#01a750':'#ef4444'}}>
+                        {testStatus.ok
+                          ? `✅ Muvaffaqiyatli! Test lead ID = ${testStatus.id}. Sotuv Varonkasi bo'limidan ko'ring.`
+                          : `❌ Xato: ${testStatus.msg}`}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 7. Close */}
+                  <div style={{display:'flex',gap:'9px',marginTop:'16px'}}>
+                    <button className="btn-outline" style={{padding:'10px 14px',flex:1}} onClick={()=>setActiveModal(null)}>Yopish</button>
+                  </div>
+                </div>
+              );
+            };
+
             // ── Modal wrapper ───────────────────────────────────────
-            const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets' || activeModal.key === 'meta_capi';
+            const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets' || activeModal.key === 'meta_capi' || activeModal.key === 'webhook';
             const isFbIg = activeModal.key === 'facebook' || activeModal.key === 'instagram';
             return (
               <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
@@ -1839,7 +2068,10 @@
                   {/* Meta CAPI */}
                   {activeModal.key === 'meta_capi' && <CapiFlow />}
 
-                  {/* Standard form modal (telegram, voip, webhook) */}
+                  {/* V57: Custom Webhook (interactive) */}
+                  {activeModal.key === 'webhook' && <WebhookFlow />}
+
+                  {/* Standard form modal (telegram, voip) */}
                   {!isCustomUI && (
                     <div style={{padding:'20px 22px'}}>
                       {activeModal.wh && (
@@ -1898,7 +2130,7 @@
                 <div style={{padding:'20px 22px'}}>
                   <div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'8px',padding:'12px 14px',marginBottom:'16px',fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.65'}}>
                     Kalit header orqali yuboring: <code style={{background:'var(--surface-variant)',padding:'2px 7px',borderRadius:'4px',fontSize:'11px'}}>Authorization: Bearer {'<'}token{'>'}</code><br/>
-                    Endpoint: <code style={{background:'var(--surface-variant)',padding:'2px 7px',borderRadius:'4px',fontSize:'11px'}}>POST {origin}/api/leads</code>
+                    Endpoint: <code style={{background:'var(--surface-variant)',padding:'2px 7px',borderRadius:'4px',fontSize:'11px'}}>POST {origin}/api/public/leads</code>
                   </div>
                   <button className="btn-primary" onClick={genApiKey} style={{width:'100%',padding:'10px',marginBottom:'14px'}}>+ Yangi API Kalit Yaratish</button>
                   {apiKeys.length === 0 && <div style={{textAlign:'center',padding:'28px',color:'var(--text-muted)',fontSize:'13px'}}>Hali kalit yaratilmagan</div>}
