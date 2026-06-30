@@ -7520,12 +7520,15 @@ fetch('${webhookUrl}', {
                             const bgColor    = hasRecord ? 'rgba(1,167,80,0.1)' : isCalling ? 'rgba(90,223,129,0.06)' : 'rgba(255,255,255,0.04)';
                             const bdColor    = hasRecord ? 'rgba(1,167,80,0.3)' : isCalling ? 'rgba(90,223,129,0.3)'  : 'var(--border-light)';
                             const iconEmoji  = hasRecord ? '🎙' : isCalling ? '📞' : log.text.includes('iruvchi') ? '📲' : '📞';
-                            // Eski yozuvlarda buildCallLogText "🎙 Yozuv: https://..." havolasini
-                            // text qatoriga qo'shgan edi. Audio-pleer pastda alohida ko'rsatilgani uchun
-                            // bu xom URL ni regex bilan qirqib tashlaymiz (yangi yozuvlarda u yo'q).
+                            // Eski yozuvlarda buildCallLogText text qatoriga "🎙 Yozuv: https://..."
+                            // havolasini va "👤 Operator" ismini qo'shardi. Hozir bu ma'lumotlar
+                            // alohida UI elementlarda (audio-pleer + status badge) ko'rsatiladi —
+                            // shuning uchun text qatoridan ularni regex bilan qirqib tashlaymiz.
                             const cleanText  = log.text
                               .replace(/^[📞📲🎙]\s*/, '')
-                              .replace(/\s*🎙\s*Yozuv:\s*https?:\/\/\S+/gi, '');
+                              .replace(/\s*🎙\s*Yozuv:\s*https?:\/\/\S+/gi, '')
+                              .replace(/\s*👤\s*\S.*$/u, '')
+                              .trim();
                             return (
                               <div key={idx} style={{display:'flex', justifyContent:'center', margin:'2px 0'}}>
                                 <div className="call-log-bubble" style={{background:bgColor, border:`1px solid ${bdColor}`, width:'100%'}}>

@@ -600,15 +600,14 @@ function normalizePhone(p) {
   return digits;
 }
 
-function buildCallLogText(direction, phone, duration, status, /* recordUrl */ _, manager) {
-  // Yozuv URL'i alohida `record_url` maydonida saqlanadi va lid kartochkasida
-  // audio-pleer + "● Yozuv mavjud" badge sifatida ko'rsatiladi — shuning uchun
-  // text qatoriga URL ni yozmaymiz (xom havola ko'rinmasin va takrorlanmasin).
+function buildCallLogText(direction, phone, duration, status, /* recordUrl */ _r, /* manager */ _m) {
+  // Yozuv URL'i alohida `record_url` maydonida saqlanadi va audio-pleer sifatida
+  // ko'rsatiladi — text'ga URL yozmaymiz. Operator ismi ham text'ga qo'shilmaydi
+  // (kerak bo'lsa frontend `manager` maydonidan alohida ko'rsatadi).
   const dir = direction === 'in' ? 'Kiruvchi' : 'Chiquvchi';
   const dur = duration > 0 ? ` (${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')})` : '';
   const st  = status ? ` [${status}]` : '';
-  const mgr = manager ? ` 👤 ${manager}` : '';
-  return `📞 ${dir} qo'ng'iroq: ${phone}${dur}${st}${mgr}`;
+  return `📞 ${dir} qo'ng'iroq: ${phone}${dur}${st}`;
 }
 
 function _truncate(s, n) { return String(s || '').slice(0, n); }
