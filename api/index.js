@@ -45,6 +45,57 @@ function phoneDigitsOnly(phone) {
   return String(phone || '').replace(/\D/g, '');
 }
 
+// ── V59: Webhook Faollik Jurnal (in-memory ring buffer) ─────────────────────
+// /api/public/leads har bir so'rovi (success, duplicate, error) shu yerga yoziladi.
+// Front-end CRM panel ichidan GET /api/webhook-log/recent va /stats orqali ko'rsatadi.
+// LIMIT: 500 ta yozuv (eskilari avtomatik chiqib ketadi); RAM da, restart bilan tozalanadi.
+// Production uchun keyinchalik (V60+) DB jadvaliga ko'chirish mumkin.
+const WEBHOOK_LOG_MAX = 500;
+const webhookLogs     = [];
+
+function logWebhookRequest(entry) {
+  const safe = {
+    id:          Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+    ts:          new Date().toISOString(),
+    company_id:  entry.company_id    || null,
+    company_slug:entry.company_slug  || null,
+    status:      entry.status        || 'unknown',       // success | duplicate | error
+    http_status: entry.http_status   || 0,
+    lead_id:     entry.lead_id       || null,
+    source_ip:   entry.source_ip     || null,
+    ua:          (entry.ua || '').slice(0, 200),
+    name:        (entry.name || '').slice(0, 100),
+    // Telefonni qisman maskalash: +998xx****yy (privacy uchun)
+    phone_mask:  maskPhone(entry.phone || ''),
+    email_mask:  maskEmail(entry.email || ''),
+    auth_method: entry.auth_method   || 'slug',          // slug | bearer
+    error_msg:   (entry.error_msg || '').slice(0, 250),
+    duration_ms: entry.duration_ms   || 0,
+  };
+  webhookLogs.push(safe);
+  if (webhookLogs.length > WEBHOOK_LOG_MAX) {
+    webhookLogs.splice(0, webhookLogs.length - WEBHOOK_LOG_MAX);
+  }
+}
+
+function maskPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  if (d.length < 5) return p || '';
+  if (d.length <= 7) return d.slice(0, 2) + '*'.repeat(d.length - 4) + d.slice(-2);
+  return d.slice(0, 4) + '*'.repeat(Math.max(d.length - 6, 2)) + d.slice(-2);
+}
+function maskEmail(e) {
+  const s = String(e || '');
+  const at = s.indexOf('@');
+  if (at < 2) return s ? s[0] + '***' : '';
+  return s[0] + '***' + s.slice(at - 1);
+}
+
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || req.connection?.remoteAddress || '')
+    .toString().split(',')[0].trim().slice(0, 64);
+}
+
 // ── Muhim: default kalitlar haqida ogohlantirish ─────────────────────────────
 if (!process.env.JWT_SECRET)
   console.warn('⚠️  JWT_SECRET env o\'zgaruvchisi o\'rnatilmagan — standart kalit ishlatilmoqda! Production uchun XAVFLI!');
@@ -866,7 +917,24 @@ app.get   ('/api/billing/me',               billingController.myBilling);
 // ── Tashqi veb-forma: JWT talab qilinmaydi ────────────────────────────────────
 // POST /api/public/leads — mijoz veb-forma orqali lead yuboradi (company_slug bilan)
 app.post('/api/public/leads', async (req, res) => {
-  if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  // V59: Har bir return nuqtasida webhookLogs ga yozish uchun helper
+  const _startedAt = Date.now();
+  const _ctx = {
+    company_slug: null, company_id: null, name: '', phone: '', email: '',
+    auth_method: 'slug', source_ip: clientIp(req), ua: req.headers['user-agent'] || '',
+  };
+  const _LOG = (status, http_status, extra = {}) => {
+    logWebhookRequest({
+      ..._ctx, status, http_status,
+      duration_ms: Date.now() - _startedAt,
+      ...extra,
+    });
+  };
+
+  if (!req.db) {
+    _LOG('error', 503, { error_msg: 'Database not configured' });
+    return res.status(503).json({ error: 'Database not configured' });
+  }
   let {
     company_slug,
     name,
@@ -888,16 +956,28 @@ app.post('/api/public/leads', async (req, res) => {
   if (email)        email        = String(email).trim().slice(0, 254);
   if (phone)        phone        = String(phone).trim().slice(0, 50);
 
-  if (!company_slug)
+  // V59: kontekstga yozib qo'yamiz — keyingi log entry larida ishlatish uchun
+  _ctx.company_slug = company_slug || null;
+  _ctx.name         = name  || '';
+  _ctx.phone        = phone || '';
+  _ctx.email        = email || '';
+
+  if (!company_slug) {
+    _LOG('error', 400, { error_msg: 'company_slug majburiy' });
     return res.status(400).json({ error: 'company_slug majburiy' });
-  if (!name || !name.trim())
+  }
+  if (!name || !name.trim()) {
+    _LOG('error', 400, { error_msg: 'Ism majburiy' });
     return res.status(400).json({ error: 'Ism majburiy' });
+  }
 
   // V58: VALIDATSIYA — email va telefon format tekshiruvi (agar yuborilgan bo'lsa)
   if (email && !isValidEmail(email)) {
+    _LOG('error', 400, { error_msg: "Email format noto'g'ri: " + email });
     return res.status(400).json({ error: "Email format noto'g'ri", field: 'email', value: email });
   }
   if (phone && !isValidPhone(phone)) {
+    _LOG('error', 400, { error_msg: "Telefon noto'g'ri: " + phone });
     return res.status(400).json({ error: "Telefon raqam noto'g'ri (7-15 raqam bo'lishi kerak)", field: 'phone', value: phone });
   }
 
@@ -910,6 +990,7 @@ app.post('/api/public/leads', async (req, res) => {
     if (authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7).trim();
       if (token) {
+        _ctx.auth_method = 'bearer';
         try {
           const keyRow = await req.db.query(
             'SELECT company_id FROM crm_api_keys WHERE key_value=$1 LIMIT 1',
@@ -917,11 +998,13 @@ app.post('/api/public/leads', async (req, res) => {
           );
           if (!keyRow.rows.length) {
             console.warn(`🔐 Yaroqsiz API kalit urinishi: slug=${company_slug} ip=${req.ip}`);
+            _LOG('error', 401, { error_msg: 'Yaroqsiz API kalit' });
             return res.status(401).json({ error: "Yaroqsiz API kalit" });
           }
           apiKeyCompanyId = keyRow.rows[0].company_id;
         } catch (e) {
           console.error('🔐 API kalit tekshirib bo\'lmadi:', e.message);
+          _LOG('error', 500, { error_msg: 'Auth tekshirib bo\'lmadi: ' + e.message });
           return res.status(500).json({ error: "Auth tekshirib bo'lmadi" });
         }
       }
@@ -932,14 +1015,18 @@ app.post('/api/public/leads', async (req, res) => {
       'SELECT id FROM companies WHERE slug=$1 AND is_active=true LIMIT 1',
       [company_slug]
     );
-    if (!compRow.rows.length)
+    if (!compRow.rows.length) {
+      _LOG('error', 404, { error_msg: 'Kompaniya topilmadi (slug=' + company_slug + ')' });
       return res.status(404).json({ error: 'Kompaniya topilmadi yoki faol emas' });
+    }
     const cid = compRow.rows[0].id;
+    _ctx.company_id = cid;
 
     // V58: Agar API kalit yuborilgan bo'lsa — uning company_id si slugdagi kompaniyaga mos kelishini tekshiramiz
     //   (boshqa kompaniyaning kaliti bilan boshqa kompaniyaga lead yuborishni bloklash)
     if (apiKeyCompanyId !== null && apiKeyCompanyId !== cid) {
       console.warn(`🔐 API kalit boshqa kompaniyaga tegishli: key_company=${apiKeyCompanyId} slug_company=${cid} slug=${company_slug}`);
+      _LOG('error', 403, { error_msg: `API kalit boshqa kompaniyaga (key_cid=${apiKeyCompanyId})` });
       return res.status(403).json({ error: "API kalit boshqa kompaniyaga tegishli" });
     }
 
@@ -955,6 +1042,7 @@ app.post('/api/public/leads', async (req, res) => {
         );
         if (dup.rows.length) {
           console.log(`🌐 Dublikat skip: phone=${phone} → existing_id=${dup.rows[0].id} ("${dup.rows[0].name}") company=${company_slug}`);
+          _LOG('duplicate', 200, { lead_id: dup.rows[0].id });
           return res.json({
             success:   true,
             duplicate: true,
@@ -1068,11 +1156,71 @@ app.post('/api/public/leads', async (req, res) => {
       currency: 'UZS',
     }).catch(e => console.error('[CAPI] Public form Lead event failed:', e.message));
 
+    _LOG('success', 201, { lead_id: newId });
     res.status(201).json({ success: true, id: newId });
   } catch (err) {
     console.error('Public lead error:', err.message);
+    _LOG('error', 500, { error_msg: err.message });
     res.status(500).json({ error: 'Server xatosi' });
   }
+});
+
+// ── V59: Webhook Faollik Jurnal endpointlari (JWT himoyalangan, CRM panel ichidan o'qiladi) ──
+
+// GET /api/webhook-log/recent?limit=50 — eng so'nggi so'rovlar (joriy kompaniya uchun)
+app.get('/api/webhook-log/recent', (req, res) => {
+  const cid = req.user?.companyId;
+  if (!cid) return res.status(401).json({ error: 'Tizimga kiring' });
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+  const filtered = webhookLogs
+    .filter(l => l.company_id === cid || (l.company_id == null && l.company_slug && req.user?.companySlug === l.company_slug))
+    .slice(-limit)
+    .reverse();
+  res.json({
+    total_in_buffer: webhookLogs.length,
+    max_buffer:      WEBHOOK_LOG_MAX,
+    returned:        filtered.length,
+    items:           filtered,
+  });
+});
+
+// GET /api/webhook-log/stats — joriy kompaniya uchun statistika (24 soat, 7 kun, hammasi)
+app.get('/api/webhook-log/stats', (req, res) => {
+  const cid = req.user?.companyId;
+  if (!cid) return res.status(401).json({ error: 'Tizimga kiring' });
+  const now = Date.now();
+  const d1  = now -      24 * 3600 * 1000;
+  const d7  = now -  7 * 24 * 3600 * 1000;
+  const mine = webhookLogs.filter(l =>
+    l.company_id === cid ||
+    (l.company_id == null && l.company_slug && req.user?.companySlug === l.company_slug)
+  );
+  const slot = (since) => {
+    const arr = mine.filter(l => Date.parse(l.ts) >= since);
+    return {
+      total:     arr.length,
+      success:   arr.filter(l => l.status === 'success').length,
+      duplicate: arr.filter(l => l.status === 'duplicate').length,
+      error:     arr.filter(l => l.status === 'error').length,
+    };
+  };
+  // Eng ko'p uchragan xato xabarlari (top 5)
+  const errMap = {};
+  mine.filter(l => l.status === 'error').forEach(l => {
+    const key = (l.error_msg || 'Noma\'lum').slice(0, 80);
+    errMap[key] = (errMap[key] || 0) + 1;
+  });
+  const top_errors = Object.entries(errMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([msg, cnt]) => ({ msg, cnt }));
+  res.json({
+    day:   slot(d1),
+    week:  slot(d7),
+    total: slot(0),
+    top_errors,
+    last_at: mine.length ? mine[mine.length - 1].ts : null,
+  });
 });
 
 // ── Frontend SPA fallback ─────────────────────────────────────────────────────

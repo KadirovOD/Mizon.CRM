@@ -1821,6 +1821,36 @@
               const bearerToken = selectedKey?.token || '';
               const hasAuth = Boolean(bearerToken);
 
+              // V59: Faollik jurnal — state + auto-fetch (tab 'activity' faol bo'lganda har 30s yangilanadi)
+              const [actLogs,  setActLogs]  = useState([]);     // recent log items
+              const [actStats, setActStats] = useState(null);   // {day, week, total, top_errors, last_at}
+              const [actLoad,  setActLoad]  = useState(false);
+              const [actErr,   setActErr]   = useState(null);
+              const loadActivity = async () => {
+                setActLoad(true); setActErr(null);
+                try {
+                  const [r1, r2] = await Promise.all([
+                    fetch('/api/webhook-log/recent?limit=50', { headers: authH() }),
+                    fetch('/api/webhook-log/stats',           { headers: authH() }),
+                  ]);
+                  if (!r1.ok || !r2.ok) throw new Error('HTTP ' + r1.status + '/' + r2.status);
+                  const d1 = await r1.json();
+                  const d2 = await r2.json();
+                  setActLogs(d1.items || []);
+                  setActStats(d2);
+                } catch (e) {
+                  setActErr(e.message);
+                } finally {
+                  setActLoad(false);
+                }
+              };
+              useEffect(() => {
+                if (tab !== 'activity') return;
+                loadActivity();
+                const t = setInterval(loadActivity, 30000);  // 30s auto-refresh
+                return () => clearInterval(t);
+              }, [tab]);
+
               const curlExample = hasAuth
 ? `curl -X POST ${webhookUrl} \\
   -H "Content-Type: application/json" \\
@@ -2064,9 +2094,9 @@ fetch('${webhookUrl}', {
                     )}
                   </div>
 
-                  {/* 4. Tab Switcher */}
+                  {/* 4. Tab Switcher (V59: + Faollik tab) */}
                   <div style={{display:'flex',gap:'6px',marginBottom:'10px',flexWrap:'wrap'}}>
-                    {[{id:'curl',l:'🖥 cURL'},{id:'js',l:'🌐 JavaScript (sayt)'},{id:'fields',l:'📋 Maydonlar'},{id:'security',l:'🔒 Xavfsizlik (V58)'}].map(t => (
+                    {[{id:'curl',l:'🖥 cURL'},{id:'js',l:'🌐 JS'},{id:'fields',l:'📋 Maydonlar'},{id:'security',l:'🔒 Xavfsizlik'},{id:'activity',l:'📊 Faollik (V59)'}].map(t => (
                       <button key={t.id} onClick={()=>setTab(t.id)}
                         style={{padding:'7px 13px',fontSize:'11px',fontWeight:600,borderRadius:'7px',
                           border:`1px solid ${tab===t.id?WH:'var(--outline-variant)'}`,
@@ -2162,6 +2192,125 @@ fetch('${webhookUrl}', {
                         💡 <b style={{color:WH}}>Tavsiya:</b> Ishlab chiqarish saytlari uchun API Key generatsiya qiling (yuqorida)
                         va sayt formangiz JS koddagi <code style={{fontSize:'10px',background:'var(--surface-variant)',padding:'1px 4px',borderRadius:'3px'}}>Authorization</code> header iga qo'shing.
                         Kalitni faqat server tomonda yoki obfuscate qilingan JS da saqlang.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* V59: Activity tab — real-time webhook faollik jurnal */}
+                  {tab === 'activity' && (
+                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px'}}>
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'12px',flexWrap:'wrap'}}>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:'11px',color:WH,textTransform:'uppercase',letterSpacing:'0.05em'}}>V59 — WEBHOOK FAOLLIK JURNAL</div>
+                          <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'3px'}}>Server xotirasidagi so'nggi 500 ta so'rov (har restart da tozalanadi) — har 30 sekundda yangilanadi</div>
+                        </div>
+                        <button onClick={loadActivity} disabled={actLoad}
+                          style={{padding:'5px 11px',fontSize:'10px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'5px',cursor:actLoad?'wait':'pointer'}}>
+                          {actLoad ? '⏳' : '🔄 Yangilash'}
+                        </button>
+                      </div>
+
+                      {actErr && (
+                        <div style={{padding:'8px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'6px',fontSize:'11px',color:'#ef4444',marginBottom:'10px'}}>
+                          ❌ Yuklanmadi: {actErr}
+                        </div>
+                      )}
+
+                      {/* Stats cards: 24h */}
+                      {actStats && (
+                        <div style={{marginBottom:'14px'}}>
+                          <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>SO'NGGI 24 SOAT</div>
+                          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(95px,1fr))',gap:'8px'}}>
+                            {[
+                              {l:'Hammasi',     v:actStats.day.total,     c:'var(--text-main)', bg:'var(--surface-variant)'},
+                              {l:'Muvaffaq.',   v:actStats.day.success,   c:'#01a750',          bg:'rgba(1,167,80,0.10)'},
+                              {l:'Dublikat',    v:actStats.day.duplicate, c:'#d97706',          bg:'rgba(245,158,11,0.10)'},
+                              {l:'Xato',        v:actStats.day.error,     c:'#ef4444',          bg:'rgba(239,68,68,0.10)'},
+                            ].map(s => (
+                              <div key={s.l} style={{padding:'10px',background:s.bg,borderRadius:'7px',border:'1px solid var(--outline-variant)',textAlign:'center'}}>
+                                <div style={{fontSize:'20px',fontWeight:800,color:s.c,lineHeight:1.1}}>{s.v}</div>
+                                <div style={{fontSize:'10px',color:'var(--text-muted)',fontWeight:600,marginTop:'2px'}}>{s.l}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{display:'flex',gap:'14px',marginTop:'8px',fontSize:'10px',color:'var(--text-muted)'}}>
+                            <span>📅 7 kun: <b style={{color:'var(--text-secondary)'}}>{actStats.week.total}</b></span>
+                            <span>♾ Restartdan beri: <b style={{color:'var(--text-secondary)'}}>{actStats.total.total}</b></span>
+                            {actStats.last_at && <span>🕒 Oxirgi: <b style={{color:'var(--text-secondary)'}}>{new Date(actStats.last_at).toLocaleString()}</b></span>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Top errors */}
+                      {actStats && actStats.top_errors && actStats.top_errors.length > 0 && (
+                        <div style={{marginBottom:'14px',padding:'10px 12px',background:'rgba(239,68,68,0.05)',border:'1px solid rgba(239,68,68,0.20)',borderRadius:'7px'}}>
+                          <div style={{fontSize:'10px',fontWeight:700,color:'#ef4444',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>🚨 Eng ko'p uchragan xatolar</div>
+                          {actStats.top_errors.map((e, i) => (
+                            <div key={i} style={{display:'flex',justifyContent:'space-between',gap:'8px',padding:'3px 0',fontSize:'11px',borderBottom:i<actStats.top_errors.length-1?'1px solid rgba(239,68,68,0.10)':'none'}}>
+                              <span style={{color:'var(--text-secondary)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.msg}</span>
+                              <span style={{color:'#ef4444',fontWeight:700,flexShrink:0}}>×{e.cnt}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Recent logs table */}
+                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+                        SO'NGGI SO'ROVLAR ({actLogs.length})
+                      </div>
+                      {actLogs.length === 0 ? (
+                        <div style={{padding:'24px 12px',textAlign:'center',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'12px',color:'var(--text-muted)'}}>
+                          {actLoad ? '⏳ Yuklanmoqda...' : "📭 Hali so'rov yo'q — pastdagi Test tugmasi bilan sinab ko'ring"}
+                        </div>
+                      ) : (
+                        <div style={{maxHeight:'340px',overflow:'auto',border:'1px solid var(--outline-variant)',borderRadius:'7px'}}>
+                          <table style={{width:'100%',fontSize:'11px',borderCollapse:'collapse'}}>
+                            <thead style={{position:'sticky',top:0,background:'var(--bg-surface)',zIndex:1}}>
+                              <tr style={{borderBottom:'1px solid var(--outline-variant)'}}>
+                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Vaqt</th>
+                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Holat</th>
+                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Ism</th>
+                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Telefon</th>
+                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>Auth</th>
+                                <th style={{padding:'7px 8px',textAlign:'left',fontWeight:700,fontSize:'10px',color:'var(--text-muted)'}}>IP</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {actLogs.map(l => {
+                                const sCfg = l.status === 'success'   ? {c:'#01a750', bg:'rgba(1,167,80,0.10)',   ic:'✓', t:'OK'}
+                                           : l.status === 'duplicate' ? {c:'#d97706', bg:'rgba(245,158,11,0.10)', ic:'⚠', t:'Dub'}
+                                           :                            {c:'#ef4444', bg:'rgba(239,68,68,0.10)',  ic:'✗', t:l.http_status||'Err'};
+                                return (
+                                  <tr key={l.id} style={{borderBottom:'1px solid var(--outline-variant)'}}
+                                      title={l.error_msg || (l.lead_id ? `Lead #${l.lead_id}` : '')}>
+                                    <td style={{padding:'6px 8px',color:'var(--text-secondary)',whiteSpace:'nowrap',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'10px'}}>
+                                      {new Date(l.ts).toLocaleTimeString()}
+                                    </td>
+                                    <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
+                                      <span style={{display:'inline-block',padding:'2px 7px',background:sCfg.bg,color:sCfg.c,borderRadius:'4px',fontSize:'10px',fontWeight:700}}>
+                                        {sCfg.ic} {sCfg.t}
+                                      </span>
+                                    </td>
+                                    <td style={{padding:'6px 8px',color:'var(--text-main)',maxWidth:'120px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.name || '—'}</td>
+                                    <td style={{padding:'6px 8px',color:'var(--text-secondary)',whiteSpace:'nowrap',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'10px'}}>{l.phone_mask || '—'}</td>
+                                    <td style={{padding:'6px 8px',whiteSpace:'nowrap'}}>
+                                      {l.auth_method === 'bearer'
+                                        ? <span style={{padding:'1px 5px',background:`${WH}18`,color:WH,borderRadius:'3px',fontSize:'9px',fontWeight:700}}>🔑 BEARER</span>
+                                        : <span style={{padding:'1px 5px',background:'var(--surface-variant)',color:'var(--text-muted)',borderRadius:'3px',fontSize:'9px'}}>slug</span>
+                                      }
+                                    </td>
+                                    <td style={{padding:'6px 8px',color:'var(--text-muted)',whiteSpace:'nowrap',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'10px'}}>{l.source_ip || '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      <div style={{marginTop:'10px',padding:'8px 10px',background:`${WH}08`,border:`1px solid ${WH}20`,borderRadius:'6px',fontSize:'10px',color:'var(--text-muted)',lineHeight:1.5}}>
+                        💡 <b style={{color:WH}}>Maslahat:</b> Telefon va email maskalangan ko'rinishda saqlanadi (privacy). Faqat siz o'z kompaniyangiz so'rovlarini ko'rasiz.
+                        Doimiy jurnal kerak bo'lsa (DB jadval) — V60 da rejalashtirilgan.
                       </div>
                     </div>
                   )}
