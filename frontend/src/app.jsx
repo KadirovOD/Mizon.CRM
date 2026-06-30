@@ -596,6 +596,7 @@
     // │ uzatiladi — shuning uchun eski (stale) qiymat muammosi ham bo'lmaydi.         │
     // └──────────────────────────────────────────────────────────────────────────┘
     let __WebhookFlowImpl = null;
+    let __VoipDiagnosticsImpl = null;
 
     const IntegrationsModule = ({ formSettings, setFormSettings, formFields, setFormFields }) => {
       const [configs,     setConfigs]     = useState(() => { try { return JSON.parse(localStorage.getItem('mizon_integrations')||'{}'); } catch{return {};} });
@@ -916,22 +917,24 @@
             steps:[
               '1️⃣  Xodim smartfoniga Moizvonki ilovasini o\'rnatadi va o\'z hisobiga kiradi.',
               '2️⃣  Mijoz qo\'ng\'iroq qilganda yoki xodim qo\'ng\'iroq qilganda — ilova qo\'ng\'iroqni qayd etib, Moizvonki serveriga yuboradi.',
-              '3️⃣  Moizvonki serveri pastdagi Webhook URL orqali CRM ga xabar yuboradi → CRM lid kartochkasiga avtomatik yozib qo\'yadi.',
+              '3️⃣  Sozlamani saqlaganingizda CRM o\'zi Moizvonki API ga "webhook.subscribe" so\'rovini yuboradi — kabinetda hech narsani qo\'lda kiritish shart emas. Moizvonki shundan keyin har bir hodisani CRM ga uzatadi.',
               '4️⃣  CRM dan "Qo\'ng\'iroq qilish" tugmasi bosilsa — Moizvonki avval xodim telefonini, keyin mijozni jiringlatadi (click-to-call).',
             ],
-            note:'⚠️  Moizvonki — bu SIP/VoIP-trunk emas, balki mobil ilova asosli xizmat. "Chiquvchi raqam" — bu xodim smartfonining raqami (Moizvonki ilovasi o\'rnatilgan), tashqi telefoniya raqami emas.',
+            note:'⚠️  Moizvonki — bu SIP/VoIP-trunk emas, balki mobil ilova asosli xizmat. "Operator telefoni" — bu xodim smartfonining raqami (Moizvonki ilovasi o\'rnatilgan), tashqi telefoniya raqami emas. Kabinetda webhook URL kiritish maydoni umuman yo\'q — webhook\'lar faqat API orqali ro\'yxatdan o\'tkaziladi (CRM buni avtomatik qiladi).',
           },
           fields:[
             {k:'subdomain',  label:'Subdomain — kompaniya prefiksi (https://___.moizvonki.ru)', ph:'mycompany', t:'text',
               hint:'Moizvonki kabinetingiz manzili masalan https://mycompany.moizvonki.ru bo\'lsa — bu yerga faqat "mycompany" yozing (".moizvonki.ru" qismini qo\'shmang).'},
             {k:'user_name',  label:'User Name — Moizvonki kabinetiga kirish email', ph:'admin@example.com', t:'text',
               hint:'Moizvonki kabineti (mycompany.moizvonki.ru) ga qaysi email bilan kirsangiz — shuni kiriting. API so\'rovlarda autentifikatsiya uchun ishlatiladi.'},
-            {k:'api_key',    label:'API Key — Moizvonki kabineti → Настройки → API', ph:'mz_abc123...', t:'password',
-              hint:'Kalit kabinetning "Настройки → API" bo\'limidan olinadi. Har bir akkaunt uchun individual beriladi.'},
+            {k:'api_key',    label:'API Key — Moizvonki kabineti → Настройки → Интеграции → API', ph:'mz_abc123...', t:'password',
+              hint:'Kalit kabinetning "Настройки → Интеграции" bo\'limidan olinadi ("Ваш ключ API" qatori). Har bir akkaunt uchun individual beriladi.'},
             {k:'caller_id',  label:'Operator telefoni — Moizvonki ilovasi o\'rnatilgan smartfon raqami', ph:'+998901234567', t:'text',
               hint:'CRM dan "Qo\'ng\'iroq" tugmasi bosilganda Moizvonki avval shu telefonni jiringlatadi, javob bersangiz — mijozga ulaydi. Bu xodim shaxsiy telefoni, SIP raqami emas.'},
           ],
-          wh:{label:'⬇️  CALLBACK WEBHOOK — Moizvonki kabineti → Настройки → Интеграции → "Webhook URL" ga kiriting',
+          // wh — endi qo'lda kiritish shart emas (webhook.subscribe API orqali avtomatik ro'yxatdan o'tadi).
+          //      Lekin diagnostika uchun URL ni baribir ko'rsatamiz (CRM Moizvonki ga shu URL ni jo'natadi).
+          wh:{label:'ℹ️  CRM Moizvonki ga shu URL ni avtomatik ro\'yxatdan o\'tkazadi (qo\'lda kiritish shart emas)',
               url:`${origin}/api/webhook/moizvonki${(()=>{ try { const s = JSON.parse(localStorage.getItem('mizon_session')||'null'); return s?.companyId ? '?company_id='+s.companyId : ''; } catch { return ''; } })()}`} },
 
         { key:'google_sheets', name:'Google Sheets', logo:'📊', color:'#0f9d58', bg:'rgba(15,157,88,0.12)',
@@ -2291,6 +2294,205 @@ fetch('${webhookUrl}', {
               );
             });
 
+            // ── VoIP DIAGNOSTIKA komponenti (cache pattern — remount muammosini oldini olish) ──
+            //   • Test tugmasi: Moizvonki API ga so'rov yuborib, raw javobni ko'rsatadi
+            //   • Webhook log: Moizvonki bizga so'rov yuboryaptimi yo'qmi — ko'rsatadi
+            //   Ikkalasi ham diagnostika — operator nima bo'layotganini ko'radi.
+            const VoipDiagnostics = __VoipDiagnosticsImpl || (__VoipDiagnosticsImpl = ({ authH, copyText, copiedItem }) => {
+              const [testResult, setTestResult] = useState(null);
+              const [testLoading, setTestLoading] = useState(false);
+              const [testPhone, setTestPhone] = useState('');
+              const [whItems, setWhItems] = useState([]);
+              const [whLoading, setWhLoading] = useState(false);
+              const [subInfo, setSubInfo] = useState(null);
+              const [subLoading, setSubLoading] = useState(false);
+              const [showRaw, setShowRaw] = useState(false);
+
+              const runTest = async (withCall) => {
+                setTestLoading(true); setTestResult(null);
+                try {
+                  const body = withCall && testPhone ? { to_number: testPhone } : {};
+                  const r = await fetch('/api/voip/test', { method:'POST', headers:authH(), body:JSON.stringify(body) });
+                  const d = await r.json();
+                  setTestResult(d);
+                } catch (e) {
+                  setTestResult({ ok:false, error: e.message });
+                }
+                setTestLoading(false);
+              };
+              const loadActivity = async () => {
+                setWhLoading(true);
+                try {
+                  const r = await fetch('/api/voip/webhook-activity', { headers:authH() });
+                  const d = await r.json();
+                  setWhItems(d.items || []);
+                } catch { setWhItems([]); }
+                setWhLoading(false);
+              };
+              const loadSubs = async () => {
+                setSubLoading(true);
+                try {
+                  const r = await fetch('/api/voip/webhook-subscriptions', { headers:authH() });
+                  const d = await r.json();
+                  setSubInfo(d);
+                } catch (e) { setSubInfo({ error: e.message }); }
+                setSubLoading(false);
+              };
+              const resubscribe = async () => {
+                setSubLoading(true);
+                try {
+                  const r = await fetch('/api/voip/subscribe-webhooks', { method:'POST', headers:authH(), body:'{}' });
+                  const d = await r.json();
+                  setSubInfo({ ...d, refreshed_at: Date.now() });
+                  // Auto-refresh list after subscribe
+                  setTimeout(loadSubs, 500);
+                } catch (e) { setSubInfo({ error: e.message }); }
+                setSubLoading(false);
+              };
+
+              // hooks count helpers
+              const subscribed = subInfo?.hooks && typeof subInfo.hooks === 'object' ? Object.keys(subInfo.hooks).length : 0;
+              const expectedUrl = subInfo?.expected || testResult?.webhooks?.expected_url || '';
+              const subscribedUrls = subInfo?.hooks && typeof subInfo.hooks === 'object' ? Object.values(subInfo.hooks) : [];
+              const allMatchExpected = expectedUrl && subscribedUrls.length > 0 && subscribedUrls.every(u => u === expectedUrl);
+
+              return (
+                <div style={{marginTop:'18px',padding:'14px',background:'rgba(1,167,80,0.05)',border:'1px solid rgba(1,167,80,0.25)',borderRadius:'10px'}}>
+                  <div style={{fontSize:'12px',fontWeight:700,color:'#01a750',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
+                    🔍 Diagnostika
+                  </div>
+
+                  {/* 1. Webhook subscription status */}
+                  <div style={{marginBottom:'14px'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px',flexWrap:'wrap',gap:'6px'}}>
+                      <div style={{fontSize:'11px',fontWeight:600,color:'var(--text-secondary)'}}>1. Moizvonki webhook ro'yxati (kabinet o'rniga API)</div>
+                      <div style={{display:'flex',gap:'5px'}}>
+                        <button onClick={loadSubs} disabled={subLoading} style={{padding:'4px 9px',fontSize:'10px',fontWeight:600,background:'var(--surface-variant)',color:'var(--text-secondary)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:subLoading?'wait':'pointer'}}>
+                          {subLoading ? '⏳' : '🔄 Tekshirish'}
+                        </button>
+                        <button onClick={resubscribe} disabled={subLoading} style={{padding:'4px 9px',fontSize:'10px',fontWeight:600,background:'#01a750',color:'#fff',border:'none',borderRadius:'5px',cursor:subLoading?'wait':'pointer'}}>
+                          {subLoading ? '⏳' : '⚙️ Qayta ro\'yxatdan o\'tkazish'}
+                        </button>
+                      </div>
+                    </div>
+                    {subInfo === null ? (
+                      <div style={{padding:'8px 11px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'6px',fontSize:'11px',color:'var(--text-muted)'}}>
+                        "Tekshirish" tugmasini bosing — Moizvonki da ro'yxatdan o'tgan callback URL'lari ko'rsatiladi.
+                      </div>
+                    ) : subInfo.error ? (
+                      <div style={{padding:'9px 11px',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'6px',fontSize:'11px',color:'#ef4444'}}>❌ {subInfo.error}</div>
+                    ) : (
+                      <div style={{padding:'9px 11px',background:allMatchExpected?'rgba(1,167,80,0.08)':'rgba(245,158,11,0.08)',border:`1px solid ${allMatchExpected?'rgba(1,167,80,0.3)':'rgba(245,158,11,0.3)'}`,borderRadius:'6px',fontSize:'11px',lineHeight:'1.55'}}>
+                        <div style={{fontWeight:700,marginBottom:'4px',color:allMatchExpected?'#01a750':'#d97706'}}>
+                          {allMatchExpected ? `✅ ${subscribed} ta webhook to'g'ri ro'yxatdan o'tgan` : (subscribed === 0 ? '⚠️  Birorta webhook ro\'yxatdan o\'tmagan' : `⚠️  ${subscribed} ta ro'yxatda, lekin URL mos kelmaydi`)}
+                        </div>
+                        {Object.entries(subInfo.hooks || {}).length > 0 ? (
+                          <div style={{marginTop:'5px',display:'flex',flexDirection:'column',gap:'3px'}}>
+                            {Object.entries(subInfo.hooks).map(([ev,url]) => (
+                              <div key={ev} style={{fontSize:'10.5px',fontFamily:'monospace',color:'var(--text-secondary)'}}>
+                                <strong style={{color:'#01a750'}}>{ev}</strong> → <span style={{color:url===expectedUrl?'var(--text-secondary)':'#d97706'}}>{url}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{fontSize:'10.5px',color:'var(--text-muted)',marginTop:'4px'}}>"Qayta ro'yxatdan o'tkazish" tugmasini bosing.</div>
+                        )}
+                        {expectedUrl && (
+                          <div style={{marginTop:'7px',paddingTop:'6px',borderTop:'1px dashed var(--outline-variant)',fontSize:'10.5px',color:'var(--text-muted)'}}>
+                            Kutilgan URL: <code style={{fontSize:'10px'}}>{expectedUrl}</code>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Test bloki */}
+                  <div style={{marginBottom:'14px'}}>
+                    <div style={{fontSize:'11px',fontWeight:600,marginBottom:'6px',color:'var(--text-secondary)'}}>2. Moizvonki API bilan ulanishni tekshirish</div>
+                    <div style={{display:'flex',gap:'6px',marginBottom:'8px',flexWrap:'wrap'}}>
+                      <button onClick={()=>runTest(false)} disabled={testLoading} style={{padding:'7px 12px',fontSize:'11px',fontWeight:600,background:'#01a750',color:'#fff',border:'none',borderRadius:'6px',cursor:testLoading?'wait':'pointer'}}>
+                        {testLoading ? '⏳ Tekshirilmoqda...' : '🔌 Ulanishni sinab ko\'rish'}
+                      </button>
+                      <input className="input-base" placeholder="+998901234567 (test qo'ng'iroq)" value={testPhone} onChange={e=>setTestPhone(e.target.value)} style={{flex:1,minWidth:'140px',marginBottom:0,fontSize:'11px',padding:'7px 10px'}} />
+                      <button onClick={()=>runTest(true)} disabled={testLoading || !testPhone} style={{padding:'7px 12px',fontSize:'11px',fontWeight:600,background:!testPhone?'var(--surface-variant)':'#f59e0b',color:!testPhone?'var(--text-muted)':'#fff',border:'none',borderRadius:'6px',cursor:testLoading?'wait':(testPhone?'pointer':'not-allowed')}}>
+                        📞 Test qo'ng'iroq
+                      </button>
+                    </div>
+
+                    {testResult && (
+                      <div style={{padding:'10px 12px',background:testResult.ok?'rgba(1,167,80,0.08)':'rgba(239,68,68,0.08)',border:`1px solid ${testResult.ok?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`,borderRadius:'7px',fontSize:'11px',lineHeight:'1.6'}}>
+                        <div style={{fontWeight:700,marginBottom:'4px',color:testResult.ok?'#01a750':'#ef4444'}}>
+                          {testResult.ok ? '✅ Auth tekshiruvi muvaffaqiyatli' : '❌ Auth xato'}
+                        </div>
+                        {testResult.target_url && <div style={{color:'var(--text-muted)',fontFamily:'monospace',fontSize:'10px',marginBottom:'4px'}}>{testResult.target_url}</div>}
+                        {testResult.config && (
+                          <div style={{marginBottom:'4px'}}>
+                            <span style={{color:'var(--text-muted)'}}>Login:</span> <code style={{fontSize:'10px'}}>{testResult.config.user_name}</code>
+                            {' • '}
+                            <span style={{color:'var(--text-muted)'}}>API Key:</span> <code style={{fontSize:'10px'}}>{testResult.config.api_key_preview}</code>
+                          </div>
+                        )}
+                        {testResult.auth_check && (
+                          <div style={{marginBottom:'4px'}}>
+                            <span style={{color:'var(--text-muted)'}}>Auth check (company.list_employee):</span> HTTP <strong>{testResult.auth_check.status}</strong>
+                            {testResult.auth_check.parsed_employees != null && <> • <strong>{testResult.auth_check.parsed_employees}</strong> ta xodim topildi</>}
+                          </div>
+                        )}
+                        {testResult.webhooks && (
+                          <div style={{marginBottom:'4px'}}>
+                            <span style={{color:'var(--text-muted)'}}>Webhook ro'yxati:</span> <strong>{Object.keys(testResult.webhooks.registered || {}).length}</strong> ta ro'yxatdan o'tgan
+                          </div>
+                        )}
+                        {testResult.call_test && (
+                          <div style={{marginBottom:'4px'}}>
+                            <span style={{color:'var(--text-muted)'}}>Test qo'ng'iroq:</span> HTTP <strong>{testResult.call_test.status}</strong> • <code style={{fontSize:'10px'}}>{testResult.call_test.body || '(bo\'sh)'}</code>
+                          </div>
+                        )}
+                        {testResult.hint && <div style={{marginTop:'6px',color:'var(--text-secondary)'}}>💡 {testResult.hint}</div>}
+                        {testResult.error && <div style={{marginTop:'4px',color:'#ef4444'}}>Xato: {testResult.error}</div>}
+                        {testResult.auth_check?.body && (
+                          <div style={{marginTop:'6px'}}>
+                            <button onClick={()=>setShowRaw(!showRaw)} style={{padding:'2px 8px',fontSize:'10px',background:'none',border:'1px solid var(--outline-variant)',borderRadius:'4px',cursor:'pointer',color:'var(--text-muted)'}}>{showRaw?'▼':'▶'} Moizvonki javob (raw)</button>
+                            {showRaw && (
+                              <pre style={{marginTop:'6px',padding:'8px',background:'var(--surface-variant)',borderRadius:'5px',fontSize:'10px',overflow:'auto',maxHeight:'140px',whiteSpace:'pre-wrap',wordBreak:'break-all'}}>{testResult.auth_check.body || '(bo\'sh)'}</pre>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Webhook log bloki */}
+                  <div>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
+                      <div style={{fontSize:'11px',fontWeight:600,color:'var(--text-secondary)'}}>3. Moizvonki bizga so'rov yuboryaptimi?</div>
+                      <button onClick={loadActivity} disabled={whLoading} style={{padding:'4px 10px',fontSize:'10px',fontWeight:600,background:'var(--surface-variant)',color:'var(--text-secondary)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:whLoading?'wait':'pointer'}}>
+                        {whLoading ? '⏳' : '🔄 Yangilash'}
+                      </button>
+                    </div>
+                    {whItems.length === 0 ? (
+                      <div style={{padding:'10px 12px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:'7px',fontSize:'11px',color:'var(--text-secondary)',lineHeight:'1.55'}}>
+                        ℹ️  Hozircha Moizvonki dan so'rov kelmagan. Avval webhook ro'yxatga olinganligini (1-bo'lim) tekshiring, keyin smartfondagi Moizvonki ilovasidan haqiqiy qo'ng'iroq qiling.
+                      </div>
+                    ) : (
+                      <div style={{maxHeight:'180px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'5px'}}>
+                        {whItems.map((it, i) => (
+                          <div key={i} style={{padding:'7px 10px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'6px',fontSize:'10.5px'}}>
+                            <div style={{display:'flex',justifyContent:'space-between',gap:'8px',marginBottom:'2px'}}>
+                              <strong style={{color:'#01a750'}}>{Array.isArray(it.body_keys) ? it.body_keys.join(', ') : '(no keys)'}</strong>
+                              <span style={{color:'var(--text-muted)',fontSize:'10px'}}>{new Date(it.at).toLocaleTimeString()}</span>
+                            </div>
+                            <div style={{color:'var(--text-secondary)'}}>IP: <code style={{fontSize:'10px'}}>{it.ip || '?'}</code> • UA: <code style={{fontSize:'10px'}}>{(it.headers?.['user-agent']||'').slice(0,40)}</code></div>
+                            {it.raw_body && <div style={{marginTop:'3px',fontFamily:'monospace',fontSize:'10px',color:'var(--text-muted)',wordBreak:'break-all',maxHeight:'60px',overflow:'auto'}}>{it.raw_body}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            });
+
             // ── Modal wrapper ───────────────────────────────────────
             const isCustomUI = activeModal.key === 'facebook' || activeModal.key === 'instagram' || activeModal.key === 'google_sheets' || activeModal.key === 'meta_capi' || activeModal.key === 'webhook';
             const isFbIg = activeModal.key === 'facebook' || activeModal.key === 'instagram';
@@ -2379,6 +2581,10 @@ fetch('${webhookUrl}', {
                           )}
                         </div>
                       ))}
+                      {/* VoIP diagnostika — faqat ulangan bo'lsa ko'rsatamiz */}
+                      {activeModal.key === 'voip' && cfgIsOn('voip') && (
+                        <VoipDiagnostics authH={authH} copyText={copyText} copiedItem={copiedItem} />
+                      )}
                       <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
                         <button className="btn-primary" style={{flex:1,padding:'10px'}} disabled={saving} onClick={()=>saveConfig(activeModal.key, formData)}>
                           {saving ? '⏳ Saqlanmoqda...' : (cfgIsOn(activeModal.key)?'💾 Yangilash':'🔌 Ulash')}

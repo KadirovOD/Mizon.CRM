@@ -734,11 +734,15 @@ app.post('/api/webhook/sheets', async (req, res) => {
 });
 
 // ── VoIP ─────────────────────────────────────────────────────────────────────
-app.get   ('/api/voip/config',  voipController.getConfig);
-app.post  ('/api/voip/config',  voipController.saveConfig);
-app.delete('/api/voip/config',  voipController.deleteConfig);
-app.post('/api/call',           voipController.initiateCall);
-app.get ('/api/calls/recent',   voipController.getRecentEvents); // frontend polling uchun
+app.get   ('/api/voip/config',           voipController.getConfig);
+app.post  ('/api/voip/config',           voipController.saveConfig);
+app.delete('/api/voip/config',           voipController.deleteConfig);
+app.post  ('/api/voip/test',                  voipController.testConnection);          // diagnostika
+app.get   ('/api/voip/webhook-activity',      voipController.getWebhookActivity);      // kelgan POST'lar log'i
+app.get   ('/api/voip/webhook-subscriptions', voipController.getWebhookSubscriptions); // Moizvonki'da ro'yxatdan o'tgan callback URL'lar
+app.post  ('/api/voip/subscribe-webhooks',    voipController.subscribeWebhooks);       // qo'lda webhook re-sync
+app.post  ('/api/call',                       voipController.initiateCall);
+app.get   ('/api/calls/recent',               voipController.getRecentEvents);
 
 // ── Automation ───────────────────────────────────────────────────────────────
 app.get   ('/api/automation/sms-settings',       automationCtrl.getSmsSettings);
