@@ -600,13 +600,15 @@ function normalizePhone(p) {
   return digits;
 }
 
-function buildCallLogText(direction, phone, duration, status, recordUrl, manager) {
+function buildCallLogText(direction, phone, duration, status, /* recordUrl */ _, manager) {
+  // Yozuv URL'i alohida `record_url` maydonida saqlanadi va lid kartochkasida
+  // audio-pleer + "● Yozuv mavjud" badge sifatida ko'rsatiladi — shuning uchun
+  // text qatoriga URL ni yozmaymiz (xom havola ko'rinmasin va takrorlanmasin).
   const dir = direction === 'in' ? 'Kiruvchi' : 'Chiquvchi';
   const dur = duration > 0 ? ` (${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')})` : '';
-  const rec = recordUrl ? ` 🎙 Yozuv: ${recordUrl}` : '';
   const st  = status ? ` [${status}]` : '';
   const mgr = manager ? ` 👤 ${manager}` : '';
-  return `📞 ${dir} qo'ng'iroq: ${phone}${dur}${st}${rec}${mgr}`;
+  return `📞 ${dir} qo'ng'iroq: ${phone}${dur}${st}${mgr}`;
 }
 
 function _truncate(s, n) { return String(s || '').slice(0, n); }
