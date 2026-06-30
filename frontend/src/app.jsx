@@ -1804,19 +1804,45 @@
               );
             };
 
-            // ── Custom Webhook (V57) ────────────────────────────────
-            // Interactive UI: webhook URL, company_slug, pipeline tanlash, curl/JS misol, maydonlar jadvali
+            // ── Custom Webhook (V57 + V58) ──────────────────────────
+            // V57 Interactive UI: webhook URL, company_slug, pipeline tanlash, curl/JS misol, maydonlar jadvali
+            // V58 Xavfsizlik: API Key Bearer auth (ixtiyoriy), dublikat/validatsiya/sanitize haqida info
             const WebhookFlow = () => {
               const WH = '#6366f1';
               const webhookUrl = `${origin}/api/public/leads`;
               const slug = intgCompanySlug || 'sizning_slug';
               const [selectedPipe, setSelectedPipe] = useState(intgPipelines[0]?.id || 'p1');
-              const [tab, setTab] = useState('curl'); // curl | js | fields
+              const [tab, setTab] = useState('curl'); // curl | js | fields | security
               const [testStatus, setTestStatus] = useState(null); // null | 'loading' | {ok|err, id|msg}
+              // V58: API Key tanlangan — agar bor bo'lsa Authorization header bilan yuboriladi
+              //   apiKeys ro'yxati outer scope dan keladi (line 583), localStorage da token saqlanadi
+              const [selectedKeyId, setSelectedKeyId] = useState('');
+              const selectedKey = apiKeys.find(k => String(k.id) === String(selectedKeyId));
+              const bearerToken = selectedKey?.token || '';
+              const hasAuth = Boolean(bearerToken);
 
-              const curlExample =
-`curl -X POST ${webhookUrl} \\
+              const curlExample = hasAuth
+? `curl -X POST ${webhookUrl} \\
   -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${bearerToken}" \\
+  -d '{
+    "company_slug": "${slug}",
+    "name": "Ali Karimov",
+    "phone": "+998901234567",
+    "email": "ali@example.com",
+    "region": "Toshkent",
+    "source": "website",
+    "pipelineId": "${selectedPipe}",
+    "custom_data": {
+      "utm_source": "google",
+      "kasb": "Dasturchi",
+      "byudjet": "500000"
+    }
+  }'`
+: `curl -X POST ${webhookUrl} \\
+  -H "Content-Type: application/json" \\
+  # V58: Ixtiyoriy — qoshimcha himoya uchun API kalit:
+  # -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
     "company_slug": "${slug}",
     "name": "Ali Karimov",
@@ -1832,11 +1858,47 @@
     }
   }'`;
 
-              const jsExample =
-`// Sayt formangiz submit eventidan yuborish misoli
+              const jsExample = hasAuth
+? `// V58: API Kalit bilan (qo'shimcha xavfsizlik)
+fetch('${webhookUrl}', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ${bearerToken}',  // V58 — server kalit moslignini tekshiradi
+  },
+  body: JSON.stringify({
+    company_slug: '${slug}',                  // MAJBURIY — kompaniya kaliti
+    name:    document.querySelector('#name').value,
+    phone:   document.querySelector('#phone').value,
+    email:   document.querySelector('#email').value,
+    region:  document.querySelector('#region').value,
+    source:  'website',
+    pipelineId: '${selectedPipe}',
+    custom_data: {
+      utm_source:   new URLSearchParams(location.search).get('utm_source') || '',
+      utm_campaign: new URLSearchParams(location.search).get('utm_campaign') || '',
+      kasb:    document.querySelector('#kasb').value,
+      byudjet: document.querySelector('#byudjet').value,
+    },
+  }),
+})
+.then(r => r.json())
+.then(data => {
+  if (data.success) {
+    if (data.duplicate) console.log('Dublikat:', data.id);   // V58: telefon takror
+    else console.log('Lead yaratildi:', data.id);
+    window.location.href = '/rahmat.html';
+  } else {
+    alert('Xato: ' + data.error);
+  }
+})
+.catch(err => console.error('Vebhok xatosi:', err));`
+: `// Sayt formangiz submit eventidan yuborish misoli
 fetch('${webhookUrl}', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
+  // V58: Ixtiyoriy — qoshimcha himoya uchun API kalit qo'shing:
+  // headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer YOUR_API_KEY' },
   body: JSON.stringify({
     company_slug: '${slug}',                  // MAJBURIY — kompaniya kaliti
     name:    document.querySelector('#name').value,
@@ -1857,7 +1919,8 @@ fetch('${webhookUrl}', {
 .then(r => r.json())
 .then(data => {
   if (data.success) {
-    console.log('Lead yaratildi:', data.id);
+    if (data.duplicate) console.log('Dublikat (V58):', data.id);  // telefon bo'yicha takror
+    else console.log('Lead yaratildi:', data.id);
     window.location.href = '/rahmat.html';
   } else {
     alert('Xato: ' + data.error);
@@ -1868,22 +1931,33 @@ fetch('${webhookUrl}', {
               const sendTestRequest = async () => {
                 setTestStatus('loading');
                 try {
+                  // V58: Telefon raqamga timestamp qoshamiz — dublikat skip ga tushib qolmasligi uchun
+                  const ts = Date.now().toString().slice(-7);
+                  const headers = { 'Content-Type': 'application/json' };
+                  if (hasAuth) headers['Authorization'] = 'Bearer ' + bearerToken;
                   const r = await fetch(webhookUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify({
                       company_slug: slug,
                       name: 'Test Lead (Custom Webhook)',
-                      phone: '+998000000000',
+                      phone: '+99800' + ts,
                       source: 'webhook_test',
                       pipelineId: selectedPipe,
                       extra: 'CRM Integratsiya panelidan yuborilgan sinov',
-                      custom_data: { test: 'true', sent_from: 'crm_ui' },
+                      custom_data: { test: 'true', sent_from: 'crm_ui', auth: hasAuth ? 'bearer' : 'slug_only' },
                     }),
                   });
                   const data = await r.json();
-                  if (r.ok && data.success) setTestStatus({ ok: true, id: data.id });
-                  else setTestStatus({ ok: false, msg: data.error || `HTTP ${r.status}` });
+                  if (r.ok && data.success) {
+                    setTestStatus({
+                      ok: true,
+                      id: data.id,
+                      duplicate: !!data.duplicate,
+                    });
+                  } else {
+                    setTestStatus({ ok: false, msg: data.error || `HTTP ${r.status}` });
+                  }
                 } catch (e) {
                   setTestStatus({ ok: false, msg: e.message });
                 }
@@ -1946,9 +2020,53 @@ fetch('${webhookUrl}', {
                     </div>
                   )}
 
+                  {/* 3b. V58: API Key Picker (ixtiyoriy — qo'shimcha xavfsizlik) */}
+                  <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'9px',padding:'12px 14px',marginBottom:'14px'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'8px',marginBottom:'8px',flexWrap:'wrap'}}>
+                      <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.07em'}}>
+                        🔒 API Kalit (V58 — ixtiyoriy)
+                      </div>
+                      <button onClick={genApiKey}
+                        style={{padding:'4px 10px',fontSize:'10px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'5px',cursor:'pointer'}}>
+                        + Yangi yaratish
+                      </button>
+                    </div>
+                    {apiKeys.length === 0 ? (
+                      <div style={{fontSize:'11px',color:'var(--text-muted)',padding:'6px 0',lineHeight:1.5}}>
+                        Hali kalit yo'q. <b>Slug-faqat</b> rejimida ishlaydi (boshlang'ich xavfsizlik darajasi).
+                        Spam yoki begona saytlardan himoya qilish uchun <b>+ Yangi yaratish</b> bosing.
+                      </div>
+                    ) : (
+                      <div>
+                        <select className="input-base" style={{marginBottom:'8px',height:'34px',padding:'0 12px',lineHeight:'32px',fontSize:'12px'}}
+                          value={selectedKeyId} onChange={e=>setSelectedKeyId(e.target.value)}>
+                          <option value="">— Kalitsiz (slug-faqat) —</option>
+                          {apiKeys.map(k => (
+                            <option key={k.id} value={k.id}>
+                              {k.token ? `${String(k.token).slice(0,18)}…` : `Kalit #${k.id}`}
+                              {k.created_at ? `  (${new Date(k.created_at).toLocaleDateString()})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedKey && selectedKey.token && (
+                          <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'4px'}}>
+                            <code style={{flex:1,fontSize:'10px',padding:'5px 9px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'5px',fontFamily:'ui-monospace, Menlo, monospace',wordBreak:'break-all',color:'var(--text-secondary)'}}>{selectedKey.token}</code>
+                            <button onClick={()=>copyText(selectedKey.token,'wh_key')}
+                              style={{padding:'5px 9px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_key'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_key'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer'}}>
+                              {copiedItem==='wh_key'?'✓':'📋'}
+                            </button>
+                          </div>
+                        )}
+                        <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'6px',lineHeight:1.5}}>
+                          Tanlangan kalit pastdagi cURL/JS misollarga avtomatik qo'shiladi va Test so'rovida ham yuboriladi.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* 4. Tab Switcher */}
                   <div style={{display:'flex',gap:'6px',marginBottom:'10px',flexWrap:'wrap'}}>
-                    {[{id:'curl',l:'🖥 cURL'},{id:'js',l:'🌐 JavaScript (sayt)'},{id:'fields',l:'📋 Maydonlar ro\'yxati'}].map(t => (
+                    {[{id:'curl',l:'🖥 cURL'},{id:'js',l:'🌐 JavaScript (sayt)'},{id:'fields',l:'📋 Maydonlar'},{id:'security',l:'🔒 Xavfsizlik (V58)'}].map(t => (
                       <button key={t.id} onClick={()=>setTab(t.id)}
                         style={{padding:'7px 13px',fontSize:'11px',fontWeight:600,borderRadius:'7px',
                           border:`1px solid ${tab===t.id?WH:'var(--outline-variant)'}`,
@@ -1959,18 +2077,20 @@ fetch('${webhookUrl}', {
                     ))}
                   </div>
 
-                  {/* 5. Examples / Fields */}
-                  {tab !== 'fields' ? (
+                  {/* 5. Examples / Fields / Security */}
+                  {(tab === 'curl' || tab === 'js') && (
                     <div style={{position:'relative'}}>
                       <button onClick={()=>copyText(tab==='curl'?curlExample:jsExample,'wh_ex')}
                         style={{position:'absolute',top:'8px',right:'8px',padding:'5px 10px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_ex'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'5px',cursor:'pointer',zIndex:2}}>
                         {copiedItem==='wh_ex'?'✓ Nusxalandi':'📋 Nusxa'}
                       </button>
-                      <pre style={{margin:0,padding:'14px 16px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',fontSize:'11px',color:'var(--text-main)',overflow:'auto',maxHeight:'320px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, Monaco, monospace',whiteSpace:'pre'}}>
+                      <pre style={{margin:0,padding:'14px 16px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',fontSize:'11px',color:'var(--text-main)',overflow:'auto',maxHeight:'340px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, Monaco, monospace',whiteSpace:'pre'}}>
                         {tab==='curl' ? curlExample : jsExample}
                       </pre>
                     </div>
-                  ) : (
+                  )}
+
+                  {tab === 'fields' && (
                     <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px',lineHeight:1.65}}>
                       <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>STANDART MAYDONLAR (jadval ustunlariga yoziladi)</div>
                       <div style={{overflow:'auto'}}>
@@ -1998,13 +2118,51 @@ fetch('${webhookUrl}', {
   "utm_source": "google"      // → custom_data.utm_source
 }`}</pre>
                       <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'8px',textTransform:'uppercase',letterSpacing:'0.05em'}}>JAVOB (Response)</div>
-                      <pre style={{margin:0,padding:'10px 12px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace'}}>{`// Muvaffaqiyat (200):
+                      <pre style={{margin:0,padding:'10px 12px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace'}}>{`// Muvaffaqiyat (201):
 { "success": true, "id": 12345 }
 
+// V58 Dublikat (telefon takror — 200):
+{ "success": true, "duplicate": true, "id": 12344, "message": "..." }
+
 // Xatolar:
-{ "error": "company_slug majburiy" }      // 400
-{ "error": "Ism majburiy" }                // 400
-{ "error": "Kompaniya topilmadi yoki faol emas" }   // 404`}</pre>
+{ "error": "company_slug majburiy" }                  // 400
+{ "error": "Ism majburiy" }                           // 400
+{ "error": "Email format noto'g'ri" }                 // 400  (V58)
+{ "error": "Telefon raqam noto'g'ri ..." }            // 400  (V58)
+{ "error": "Yaroqsiz API kalit" }                     // 401  (V58)
+{ "error": "API kalit boshqa kompaniyaga tegishli" }  // 403  (V58)
+{ "error": "Kompaniya topilmadi yoki faol emas" }     // 404`}</pre>
+                    </div>
+                  )}
+
+                  {/* V58: Security tab */}
+                  {tab === 'security' && (
+                    <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'14px',fontSize:'12px',lineHeight:1.65}}>
+                      <div style={{fontWeight:700,fontSize:'11px',color:WH,marginBottom:'10px',textTransform:'uppercase',letterSpacing:'0.05em'}}>V58 XAVFSIZLIK QATLAMLARI</div>
+
+                      {[
+                        {ico:'🚫', t:'Dublikat bloklash (telefon)', d:"Bir xil telefon raqam ikkinchi marta yuborilsa — server yangi lead yaratmaydi, mavjudini qaytaradi. Spam botlar bir formaga 100 marta yuborganda 100 ta dublikat to'planmaydi. Javob: success:true + duplicate:true."},
+                        {ico:'🔑', t:'API Key Bearer (ixtiyoriy)', d:"Sayt formangizdan Authorization: Bearer <kalit> yuborsangiz — server kalitni crm_api_keys jadvalidan tekshiradi va u kompaniya slug ga mosligini verify qiladi. Slug-faqat rejimi ham ishlaydi (backward compat)."},
+                        {ico:'📧', t:"Email validatsiya", d:"RFC 5322 (soddalashtirilgan) regex bo'yicha tekshirish. Format buzilgan email lar 400 bilan rad etiladi (field nomi javobda qaytariladi)."},
+                        {ico:'📱', t:'Telefon validatsiya', d:"E.164: 7-15 ta raqam bo'lishi shart (oraliqdagi probel, qavs, defis qabul). Format buzilgan telefonlar 400 bilan rad etiladi."},
+                        {ico:'🧼', t:'HTML/JS sanitizatsiya (XSS)', d:"name, extra, region, source maydonlari va custom_data dagi barcha key/value — <script>, <iframe>, javascript: URI, on* eventlar olib tashlanadi. Lid kartasida zararsiz matn ko'rinadi."},
+                        {ico:'🌍', t:'CORS — har qanday saytdan', d:"/api/public/* uchun permissive CORS yoqilgan. Sayt formangiz boshqa domenda bo'lsa ham, JS dan fetch qila olasiz (CORS preflight 200 qaytaradi)."},
+                        {ico:'🏢', t:'Multi-tenancy izolyatsiyasi', d:"Har bir lead faqat company_slug → companies.id orqali topilgan kompaniyaga yoziladi. Boshqa kompaniyaning kaliti bilan boshqa kompaniyaga lead yuborib bo'lmaydi (403)."},
+                      ].map((row,i) => (
+                        <div key={i} style={{display:'flex',gap:'10px',padding:'10px 8px',borderBottom:i<6?'1px solid var(--outline-variant)':'none'}}>
+                          <div style={{fontSize:'18px',lineHeight:1.2,flexShrink:0}}>{row.ico}</div>
+                          <div>
+                            <div style={{fontWeight:700,color:'var(--text-main)',fontSize:'12px',marginBottom:'2px'}}>{row.t}</div>
+                            <div style={{fontSize:'11px',color:'var(--text-secondary)',lineHeight:1.5}}>{row.d}</div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div style={{marginTop:'12px',padding:'10px 12px',background:'rgba(99,102,241,0.07)',border:`1px solid ${WH}30`,borderRadius:'6px',fontSize:'11px',color:'var(--text-secondary)',lineHeight:1.55}}>
+                        💡 <b style={{color:WH}}>Tavsiya:</b> Ishlab chiqarish saytlari uchun API Key generatsiya qiling (yuqorida)
+                        va sayt formangiz JS koddagi <code style={{fontSize:'10px',background:'var(--surface-variant)',padding:'1px 4px',borderRadius:'3px'}}>Authorization</code> header iga qo'shing.
+                        Kalitni faqat server tomonda yoki obfuscate qilingan JS da saqlang.
+                      </div>
                     </div>
                   )}
 
@@ -2012,8 +2170,13 @@ fetch('${webhookUrl}', {
                   <div style={{marginTop:'16px',padding:'12px 14px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:'12px',fontWeight:700,marginBottom:'2px'}}>🧪 Test so'rovi yuborish</div>
-                        <div style={{fontSize:'10px',color:'var(--text-muted)'}}>Ish faolligini tekshirish uchun test lead yaratiladi</div>
+                        <div style={{fontSize:'12px',fontWeight:700,marginBottom:'2px'}}>
+                          🧪 Test so'rovi yuborish
+                          {hasAuth && <span style={{marginLeft:'6px',fontSize:'9px',padding:'2px 6px',background:`${WH}20`,color:WH,borderRadius:'4px',fontWeight:700}}>🔑 BEARER</span>}
+                        </div>
+                        <div style={{fontSize:'10px',color:'var(--text-muted)'}}>
+                          {hasAuth ? "API kalit bilan test lead yaratiladi" : "Slug-faqat rejimda test lead yaratiladi"}
+                        </div>
                       </div>
                       <button onClick={sendTestRequest} disabled={testStatus==='loading'}
                         style={{padding:'8px 16px',fontSize:'12px',fontWeight:700,background:testStatus==='loading'?'var(--surface-variant)':WH,color:'#fff',border:'none',borderRadius:'7px',cursor:testStatus==='loading'?'wait':'pointer',whiteSpace:'nowrap'}}>
@@ -2021,9 +2184,11 @@ fetch('${webhookUrl}', {
                       </button>
                     </div>
                     {testStatus && testStatus !== 'loading' && (
-                      <div style={{marginTop:'10px',padding:'8px 12px',background:testStatus.ok?'rgba(1,167,80,0.1)':'rgba(239,68,68,0.1)',border:`1px solid ${testStatus.ok?'rgba(1,167,80,0.3)':'rgba(239,68,68,0.3)'}`,borderRadius:'6px',fontSize:'11px',color:testStatus.ok?'#01a750':'#ef4444'}}>
+                      <div style={{marginTop:'10px',padding:'8px 12px',background:testStatus.ok?(testStatus.duplicate?'rgba(245,158,11,0.1)':'rgba(1,167,80,0.1)'):'rgba(239,68,68,0.1)',border:`1px solid ${testStatus.ok?(testStatus.duplicate?'rgba(245,158,11,0.3)':'rgba(1,167,80,0.3)'):'rgba(239,68,68,0.3)'}`,borderRadius:'6px',fontSize:'11px',color:testStatus.ok?(testStatus.duplicate?'#d97706':'#01a750'):'#ef4444',lineHeight:1.5}}>
                         {testStatus.ok
-                          ? `✅ Muvaffaqiyatli! Test lead ID = ${testStatus.id}. Sotuv Varonkasi bo'limidan ko'ring.`
+                          ? (testStatus.duplicate
+                              ? `⚠️ V58 Dublikat: Telefon raqam allaqachon bazada bor (mavjud lead #${testStatus.id}). Spam himoyasi ishlayapti.`
+                              : `✅ Muvaffaqiyatli! Test lead ID = ${testStatus.id}. Sotuv Varonkasi bo'limidan ko'ring.`)
                           : `❌ Xato: ${testStatus.msg}`}
                       </div>
                     )}

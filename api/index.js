@@ -10,6 +10,41 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mizon-dev-secret-2024-change-in-prod';
 
+// ── V58: Sanitize/Validate yordamchi funksiyalari (Custom Webhook xavfsizligi uchun) ─
+// HTML/script teglarni va boshqaruv belgilarini olib tashlash, max uzunlikni cheklash.
+// Tashqi formaning name/extra/region kabi matn maydonlari uchun XSS himoyasi.
+function sanitizeText(s, maxLen = 500) {
+  if (s == null) return s;
+  return String(s)
+    .replace(/<\s*(script|iframe|style|object|embed|link|meta|svg)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|iframe|style|object|embed|link|meta|svg)[^>]*\/?>/gi, '')
+    .replace(/<[^>]+>/g, '')                                          // qolgan barcha HTML teglar
+    .replace(/javascript\s*:/gi, '')                                  // javascript: URI scheme
+    .replace(/on\w+\s*=/gi, '')                                       // onclick=, onerror= va h.k.
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')                 // control belgilar
+    .trim()
+    .slice(0, maxLen);
+}
+
+// RFC 5322 ga yaqinroq email tekshiruvi (oddiy, lekin yetarli)
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  if (email.length > 254) return false;
+  return /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/.test(email.trim());
+}
+
+// Telefon raqam validatsiyasi — faqat raqamlar 7-15 oralig'ida bo'lishi kerak (E.164)
+function isValidPhone(phone) {
+  if (!phone) return false;
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15;
+}
+
+// Telefonni faqat raqamga tushirish (deduplication uchun)
+function phoneDigitsOnly(phone) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
 // ── Muhim: default kalitlar haqida ogohlantirish ─────────────────────────────
 if (!process.env.JWT_SECRET)
   console.warn('⚠️  JWT_SECRET env o\'zgaruvchisi o\'rnatilmagan — standart kalit ishlatilmoqda! Production uchun XAVFLI!');
@@ -37,6 +72,19 @@ app.use((req, res, next) => { req.db = pool; next(); });
 // Gzip kompressiya — JSON response hajmini 60-70% kamaytiradi
 app.use(compression());
 
+// V58: Permissive CORS for /api/public/* — mijoz saytlari (har qanday origin) uchun
+//   Bu ROUTE-SPECIFIC middleware app.use(cors(...)) dan OLDIN turishi shart, chunki:
+//   strict cors() OPTIONS requestlarni darhol yopadi (preflightContinue:false default)
+//   shuning uchun /api/public/* uchun avval permissive cors ishlaydi va OPTIONS ni handle qiladi
+app.use('/api/public/', cors({
+  origin: true,                                       // har qanday origin'ga ruxsat
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,                                 // cookie/auth header'larsiz public endpoint
+  maxAge: 86400,                                      // 24 soat preflight cache
+}));
+
+// Asosiy (strict) CORS — boshqa barcha endpointlar uchun
 app.use(cors({
   origin: (origin, cb) => {
     // Allow: no origin (curl, mobile), localhost, mizon-crm.uz + all subdomains
@@ -831,20 +879,91 @@ app.post('/api/public/leads', async (req, res) => {
     custom_data: bodyCustomData,
   } = req.body || {};
 
-  if (!company_slug || !company_slug.trim())
+  // V58: SANITIZATSIYA — XSS himoyasi (HTML/script teglar, javascript: URI, on* eventlar)
+  if (name)         name         = sanitizeText(name,         200);
+  if (extra)        extra        = sanitizeText(extra,        1000);
+  if (region)       region       = sanitizeText(region,       100);
+  if (source)       source       = sanitizeText(source,       50);
+  if (company_slug) company_slug = String(company_slug).trim().slice(0, 100);
+  if (email)        email        = String(email).trim().slice(0, 254);
+  if (phone)        phone        = String(phone).trim().slice(0, 50);
+
+  if (!company_slug)
     return res.status(400).json({ error: 'company_slug majburiy' });
   if (!name || !name.trim())
     return res.status(400).json({ error: 'Ism majburiy' });
 
+  // V58: VALIDATSIYA — email va telefon format tekshiruvi (agar yuborilgan bo'lsa)
+  if (email && !isValidEmail(email)) {
+    return res.status(400).json({ error: "Email format noto'g'ri", field: 'email', value: email });
+  }
+  if (phone && !isValidPhone(phone)) {
+    return res.status(400).json({ error: "Telefon raqam noto'g'ri (7-15 raqam bo'lishi kerak)", field: 'phone', value: phone });
+  }
+
   try {
+    // V58: API KEY BEARER AUTH (ixtiyoriy) — agar Authorization header yuborilsa, tekshiriladi
+    //   crm_api_keys jadvalidan key_value bo'yicha topiladi va company_id mosligini tekshiramiz
+    //   Header yuborilmasa — slug-based auth (backward compatible)
+    let apiKeyCompanyId = null;
+    const authHeader = req.headers.authorization || req.headers.Authorization || '';
+    if (authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7).trim();
+      if (token) {
+        try {
+          const keyRow = await req.db.query(
+            'SELECT company_id FROM crm_api_keys WHERE key_value=$1 LIMIT 1',
+            [token]
+          );
+          if (!keyRow.rows.length) {
+            console.warn(`🔐 Yaroqsiz API kalit urinishi: slug=${company_slug} ip=${req.ip}`);
+            return res.status(401).json({ error: "Yaroqsiz API kalit" });
+          }
+          apiKeyCompanyId = keyRow.rows[0].company_id;
+        } catch (e) {
+          console.error('🔐 API kalit tekshirib bo\'lmadi:', e.message);
+          return res.status(500).json({ error: "Auth tekshirib bo'lmadi" });
+        }
+      }
+    }
+
     // 1. Kompaniyani slug bo'yicha topish
     const compRow = await req.db.query(
       'SELECT id FROM companies WHERE slug=$1 AND is_active=true LIMIT 1',
-      [company_slug.trim()]
+      [company_slug]
     );
     if (!compRow.rows.length)
       return res.status(404).json({ error: 'Kompaniya topilmadi yoki faol emas' });
     const cid = compRow.rows[0].id;
+
+    // V58: Agar API kalit yuborilgan bo'lsa — uning company_id si slugdagi kompaniyaga mos kelishini tekshiramiz
+    //   (boshqa kompaniyaning kaliti bilan boshqa kompaniyaga lead yuborishni bloklash)
+    if (apiKeyCompanyId !== null && apiKeyCompanyId !== cid) {
+      console.warn(`🔐 API kalit boshqa kompaniyaga tegishli: key_company=${apiKeyCompanyId} slug_company=${cid} slug=${company_slug}`);
+      return res.status(403).json({ error: "API kalit boshqa kompaniyaga tegishli" });
+    }
+
+    // V58: DEDUPLICATION — telefon raqam bo'yicha takrorlangan lidlarni bloklash
+    //   Spam botlar bir xil formaga 100 marta yuborganda 100 ta dublikat bo'lib qolmaydi
+    //   (Sheets endpointida allaqachon bor edi — endi /api/public/leads ham qoshildi)
+    if (phone) {
+      const digits = phoneDigitsOnly(phone);
+      if (digits.length >= 7) {
+        const dup = await req.db.query(
+          "SELECT id, name FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 AND company_id=$2 LIMIT 1",
+          [digits, cid]
+        );
+        if (dup.rows.length) {
+          console.log(`🌐 Dublikat skip: phone=${phone} → existing_id=${dup.rows[0].id} ("${dup.rows[0].name}") company=${company_slug}`);
+          return res.json({
+            success:   true,
+            duplicate: true,
+            id:        dup.rows[0].id,
+            message:   `Bu telefon raqam allaqachon bazada bor (#${dup.rows[0].id})`,
+          });
+        }
+      }
+    }
 
     // 2. Kompaniyaning birinchi bosqichini olish
     const firstStage = await req.db.query(
@@ -887,10 +1006,19 @@ app.post('/api/public/leads', async (req, res) => {
       'company_slug','name','phone','email','region','source','pipelineid','pipeline_id','extra','custom_data',
     ]);
     const customData = {};
+    // V58: kalitlarni ham sanitize qilamiz (XSS himoyasi), qiymat ham max 500 belgi
+    const cleanKey = (k) => sanitizeText(String(k || ''), 60).replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const cleanVal = (v) => typeof v === 'object'
+      ? JSON.stringify(v).slice(0, 2000)
+      : sanitizeText(String(v), 500);
+
     // Avval bevosita yuborilgan custom_data ni qabul qilamiz
     if (bodyCustomData && typeof bodyCustomData === 'object') {
       for (const [k, v] of Object.entries(bodyCustomData)) {
-        if (v != null && v !== '') customData[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        if (v == null || v === '') continue;
+        const ck = cleanKey(k);
+        if (!ck) continue;
+        customData[ck] = cleanVal(v);
       }
     }
     // So'ngra body ning qolgan qismidagi qo'shimcha maydonlarni qo'shamiz
@@ -898,7 +1026,9 @@ app.post('/api/public/leads', async (req, res) => {
       const lk = String(k || '').toLowerCase();
       if (PUBLIC_STANDARD.has(lk)) continue;
       if (v == null || v === '') continue;
-      if (!customData[k]) customData[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      const ck = cleanKey(k);
+      if (!ck || customData[ck] !== undefined) continue;
+      customData[ck] = cleanVal(v);
     }
 
     // 4. Leadni yaratish
