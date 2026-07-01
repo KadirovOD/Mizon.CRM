@@ -7817,23 +7817,23 @@ fetch('${webhookUrl}', {
                   </div>
 
                   {/* ── Filter bar ── */}
-                  <div style={{display:'flex', gap:'8px', alignItems:'center', padding:'8px 16px', background:'var(--bg-base)', borderBottom:'1px solid var(--border-light)', flexWrap:'wrap'}}>
-                    <div style={{display:'flex', alignItems:'center', gap:'6px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'7px', padding:'4px 10px', minWidth:'200px', flex:'1', maxWidth:'280px'}}>
-                      <span className="material-symbols-outlined" style={{fontSize:'15px', color:'var(--text-muted)', flexShrink:0}}>search</span>
-                      <input style={{background:'none', border:'none', outline:'none', fontSize:'12px', color:'var(--text-main)', width:'100%'}}
+                  <div style={{display:'flex', gap:'10px', alignItems:'center', padding:'10px 16px', background:'var(--bg-base)', borderBottom:'1px solid var(--border-light)', flexWrap:'wrap'}}>
+                    <label className="filter-glass search-glass">
+                      <span className="material-symbols-outlined glass-icon">search</span>
+                      <input
                         placeholder="Ism yoki telefon raqam..."
                         value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
-                      {searchQuery && <span style={{cursor:'pointer', color:'var(--text-muted)', fontSize:'14px', flexShrink:0}} onClick={()=>setSearchQuery('')}>✕</span>}
-                    </div>
-                    <select className="pipeline-selector" style={{fontSize:'12px', minWidth:'130px'}} value={filterSource} onChange={e=>setFilterSource(e.target.value)}>
+                      {searchQuery && <span className="glass-clear" onClick={()=>setSearchQuery('')}>✕</span>}
+                    </label>
+                    <select className="filter-glass" value={filterSource} onChange={e=>setFilterSource(e.target.value)}>
                       <option value="all">🌐 Barcha manba</option>
                       {uniqueSources.map(s=><option key={s} value={s}>{s.replace('meta_','').replace('_',' ')}</option>)}
                     </select>
-                    <select className="pipeline-selector" style={{fontSize:'12px', minWidth:'130px'}} value={filterOwner} onChange={e=>setFilterOwner(e.target.value)}>
+                    <select className="filter-glass" value={filterOwner} onChange={e=>setFilterOwner(e.target.value)}>
                       <option value="all">👤 Barcha mas'ul</option>
                       {uniqueOwners.map(o=><option key={o} value={o}>{o}</option>)}
                     </select>
-                    <select className="pipeline-selector" style={{fontSize:'12px', minWidth:'140px'}} value={filterSla} onChange={e=>setFilterSla(e.target.value)}>
+                    <select className="filter-glass" value={filterSla} onChange={e=>setFilterSla(e.target.value)}>
                       <option value="all">📋 Barcha holat</option>
                       <option value="danger">🔴 Kechikkan</option>
                       <option value="warning">🟡 Tez orada</option>
