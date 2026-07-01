@@ -2088,8 +2088,8 @@
       const [pipeFilter, setPipeFilter] = useState('all');
 
       // ---- helpers ----
-      const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", voip_incoming:'VoIP Kiruvchi', instagram:'Instagram DM' };
-      const SOURCE_COLORS = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280', voip_incoming:'#f59e0b', instagram:'#E1306C' };
+      const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", moizvonki:'Moizvonki', voip_incoming:'Moizvonki', instagram:'Instagram DM' };
+      const SOURCE_COLORS = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280', moizvonki:'#01a750', voip_incoming:'#01a750', instagram:'#E1306C' };
 
       const filterByPeriod = (arr) => {
         if (period === 'all') return arr;

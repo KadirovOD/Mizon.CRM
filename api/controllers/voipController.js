@@ -509,7 +509,7 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
         const stageId = stageRes.rows[0]?.id || null;
         const ins = await db.query(
           `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
-           VALUES ($1,$2,'voip_incoming',25,$3,0,$4,$5) RETURNING id, name`,
+           VALUES ($1,$2,'moizvonki',25,$3,0,$4,$5) RETURNING id, name`,
           [`Noma'lum (+${cleanPhone})`, `+${cleanPhone}`, stageId, JSON.stringify([]), companyId]
         );
         leadId   = ins.rows[0]?.id || null;
@@ -573,7 +573,7 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
         const stageId = stageRes.rows[0]?.id || null;
         const ins = await db.query(
           `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
-           VALUES ($1,$2,'voip_incoming',25,$3,1,$4,$5) RETURNING id`,
+           VALUES ($1,$2,'moizvonki',25,$3,1,$4,$5) RETURNING id`,
           [
             `Noma'lum (+${cleanPhone})`, `+${cleanPhone}`, stageId,
             JSON.stringify([{

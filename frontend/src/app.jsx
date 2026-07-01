@@ -3424,7 +3424,7 @@ fetch('${webhookUrl}', {
         { id:'task',    label:'Vazifalar',     icon:'task_alt',       color:'#f59e0b' },
         { id:'edit',    label:'Tahrirlash',    icon:'edit_note',      color:'#3b82f6' },
         { id:'call',    label:"Qo'ng'iroqlar", icon:'call',           color:'#8b5cf6' },
-        { id:'delete',  label:"O'chirilganlar (V60)", icon:'delete',  color:'#ef4444' },
+        { id:'delete',  label:"O'chirilganlar", icon:'delete',  color:'#ef4444' },
         { id:'other',   label:'Boshqalar',     icon:'more_horiz',     color:'var(--text-muted)' },
       ];
 
@@ -3659,8 +3659,8 @@ fetch('${webhookUrl}', {
       }, []);
 
       // ---- helpers ----
-      const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", voip_incoming:'VoIP Kiruvchi', instagram:'Instagram DM' };
-      const SOURCE_COLORS = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280', voip_incoming:'#f59e0b', instagram:'#E1306C' };
+      const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", moizvonki:'Moizvonki', voip_incoming:'Moizvonki', instagram:'Instagram DM' };
+      const SOURCE_COLORS = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280', moizvonki:'#01a750', voip_incoming:'#01a750', instagram:'#E1306C' };
 
       const filterByPeriod = (arr) => {
         if (period === 'all') return arr;
