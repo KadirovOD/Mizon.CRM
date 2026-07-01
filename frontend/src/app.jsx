@@ -6334,6 +6334,19 @@ fetch('${webhookUrl}', {
       const [filterOwner,  setFilterOwner]  = useState('all');
       const [filterSla,    setFilterSla]    = useState('all');
       const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
+      const [phoneMenuOpen, setPhoneMenuOpen] = useState(false); // Lead paneli: telefon ustidagi manba tanlash menyusi
+      const phoneMenuRef = useRef(null);
+      useEffect(() => {
+        if (!phoneMenuOpen) return;
+        const onDoc = (e) => { if (phoneMenuRef.current && !phoneMenuRef.current.contains(e.target)) setPhoneMenuOpen(false); };
+        const onEsc = (e) => { if (e.key === 'Escape') setPhoneMenuOpen(false); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onEsc);
+        return () => {
+          document.removeEventListener('mousedown', onDoc);
+          document.removeEventListener('keydown',   onEsc);
+        };
+      }, [phoneMenuOpen]);
 
       // Note: isFormMode endi PublicLeadFormView komponentida — yuqorida early return qilingan.
 
@@ -7493,8 +7506,79 @@ fetch('${webhookUrl}', {
                         </div>
                       ) : (
                         <div style={{marginBottom:'18px'}}>
+                          {/* Telefon — bosilganda qaysi manbadan qo'ng'iroq qilishni tanlash menyusi ochiladi */}
+                          <div className="info-row" style={{position:'relative'}} ref={phoneMenuRef}>
+                            <div className="info-row-icon"><span className="material-symbols-outlined" style={{fontSize:'15px'}}>call</span></div>
+                            <span className="info-label">Telefon</span>
+                            {role === 'WATCHER' || !selectedLeadData.phone ? (
+                              <span className="info-value">{selectedLeadData.phone || '—'}</span>
+                            ) : (
+                              <>
+                                <button
+                                  className="info-phone-btn"
+                                  onClick={()=>setPhoneMenuOpen(o=>!o)}
+                                  disabled={callingLeadId === String(selectedLeadData.id)}
+                                  title="Qo'ng'iroq qilish uchun bosing"
+                                >
+                                  <span className="info-phone-num">{selectedLeadData.phone}</span>
+                                  <span className="info-phone-count">{selectedLeadData.actualCallAttempts}/{globalCallLimit}</span>
+                                  {callingLeadId === String(selectedLeadData.id)
+                                    ? <span className="material-symbols-outlined info-phone-caret spin" style={{fontSize:'16px'}}>autorenew</span>
+                                    : <span className="material-symbols-outlined info-phone-caret" style={{fontSize:'16px'}}>expand_more</span>}
+                                </button>
+                                {phoneMenuOpen && (
+                                  <div className="phone-menu" role="menu">
+                                    <div className="phone-menu-title">Qaysi manbadan qo'ng'iroq qilamiz?</div>
+                                    <div
+                                      className={`phone-menu-item ${!voipConfigured ? 'disabled' : ''}`}
+                                      onClick={()=>{
+                                        if (!voipConfigured) return;
+                                        setPhoneMenuOpen(false);
+                                        handleLogCall(selectedLeadData.id);
+                                      }}
+                                      role="menuitem"
+                                    >
+                                      <span className="material-symbols-outlined" style={{fontSize:'20px', color: voipConfigured ? '#01a750' : 'var(--text-muted)'}}>call</span>
+                                      <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'13px', fontWeight:600, color:'var(--text-main)'}}>Moizvonki</div>
+                                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>
+                                          {voipConfigured ? 'VoIP orqali avtomatik qo\'ng\'iroq' : 'Sozlanmagan — Integratsiyalar bo\'limi'}
+                                        </div>
+                                      </div>
+                                      {voipConfigured && <span className="material-symbols-outlined" style={{fontSize:'14px', color:'#01a750'}}>bolt</span>}
+                                    </div>
+                                    <div
+                                      className="phone-menu-item"
+                                      onClick={()=>{
+                                        setPhoneMenuOpen(false);
+                                        handleLogCall(selectedLeadData.id);
+                                      }}
+                                      role="menuitem"
+                                    >
+                                      <span className="material-symbols-outlined" style={{fontSize:'20px', color:'var(--text-secondary)'}}>edit_note</span>
+                                      <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'13px', fontWeight:600, color:'var(--text-main)'}}>Qo'lda qayd etish</div>
+                                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Faqat urinishlar sonini oshirish</div>
+                                      </div>
+                                    </div>
+                                    <a
+                                      className="phone-menu-item"
+                                      href={`tel:${selectedLeadData.phone}`}
+                                      onClick={()=>setPhoneMenuOpen(false)}
+                                      role="menuitem"
+                                    >
+                                      <span className="material-symbols-outlined" style={{fontSize:'20px', color:'#3b82f6'}}>smartphone</span>
+                                      <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'13px', fontWeight:600, color:'var(--text-main)'}}>Telefon ilovasida ochish</div>
+                                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Qurilma teruvi orqali</div>
+                                      </div>
+                                    </a>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                           {[
-                            {icon:'call', label:'Telefon', value:selectedLeadData.phone},
                             {icon:'location_on', label:'Manzil', value:selectedLeadData.region},
                             {icon:'person', label:'Mas\'ul', value:selectedLeadData.owner},
                           ].map(row => (
@@ -7550,20 +7634,7 @@ fetch('${webhookUrl}', {
                         </React.Fragment>
                       )}
 
-                      <span className="label-sm">Qo'ng'iroq</span>
-                      {role === 'WATCHER' ? (
-                        <div style={{padding:'8px 12px', marginBottom:'14px', fontSize:'12px', color:'var(--text-muted)', background:'var(--bg-hover)', borderRadius:'8px', border:'1px solid var(--border-light)'}}>
-                          <Ico n="phone" s={13}/> {selectedLeadData.actualCallAttempts} ta qo'ng'iroq qayd etilgan
-                        </div>
-                      ) : callingLeadId === String(selectedLeadData.id) ? (
-                        <button className="btn-primary" style={{width:'100%', marginBottom:'14px', opacity:0.85, cursor:'not-allowed'}} disabled>
-                          <span className="calling-ring">📞</span> Qo'ng'iroq amalga oshirilmoqda...
-                        </button>
-                      ) : (
-                        <button className="btn-outline" style={{width:'100%', marginBottom:'14px'}} onClick={()=>handleLogCall(selectedLeadData.id)}>
-                          <Ico n="phone" s={14}/> Qo'ng'iroq ({selectedLeadData.actualCallAttempts} / {globalCallLimit})
-                        </button>
-                      )}
+                      {/* Qo'ng'iroq: alohida sektsiya olib tashlandi — endi Telefon qatorini bosgan holda qo'ng'iroq qilinadi */}
 
                     </div>
 
@@ -8015,10 +8086,27 @@ fetch('${webhookUrl}', {
                                     <input type="checkbox" checked={isSelected} readOnly
                                       style={{position:'absolute', top:'8px', right:'8px', width:'16px', height:'16px', cursor:'pointer', zIndex:2}} />
                                   )}
-                                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px'}}>
+                                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginBottom:'8px'}}>
                                     <span className={`source-badge badge-${lead.source}`}>{lead.source.replace('meta_','')}</span>
-                                    {sla==='danger' && <span style={{fontSize:'10px', background:'rgba(255,180,171,0.15)', color:'var(--danger)', padding:'2px 6px', borderRadius:'4px', fontWeight:700, display:'flex', alignItems:'center', gap:'3px'}}><Ico n="alarm" s={10}/> KECHIKDI</span>}
-                                    {sla==='warning' && <span style={{fontSize:'10px', background:'rgba(245,158,11,0.15)', color:'var(--warning)', padding:'2px 6px', borderRadius:'4px', fontWeight:700, display:'flex', alignItems:'center', gap:'3px'}}><Ico n="clock" s={10}/> TEZ ORADA</span>}
+                                    <div style={{display:'flex', alignItems:'center', gap:'6px', flexShrink:0}}>
+                                      {sla==='danger' && <span style={{fontSize:'10px', background:'rgba(255,180,171,0.15)', color:'var(--danger)', padding:'2px 6px', borderRadius:'4px', fontWeight:700, display:'inline-flex', alignItems:'center', gap:'3px'}}><Ico n="alarm" s={10}/> KECHIKDI</span>}
+                                      {sla==='warning' && <span style={{fontSize:'10px', background:'rgba(245,158,11,0.15)', color:'var(--warning)', padding:'2px 6px', borderRadius:'4px', fontWeight:700, display:'inline-flex', alignItems:'center', gap:'3px'}}><Ico n="clock" s={10}/> TEZ ORADA</span>}
+                                      {lead.createdAt && (
+                                        <span style={{fontSize:'10px', color:'var(--text-muted)', display:'inline-flex', alignItems:'center', gap:'3px', opacity:0.75, whiteSpace:'nowrap'}}>
+                                          <Ico n="clock" s={10}/>
+                                          {(() => {
+                                            const d = new Date(lead.createdAt);
+                                            const now = new Date();
+                                            const diff = Math.floor((now - d) / 60000);
+                                            if (diff < 1)   return 'Hozir';
+                                            if (diff < 60)  return `${diff}d oldin`;
+                                            if (diff < 1440) return `${Math.floor(diff/60)}s oldin`;
+                                            if (diff < 10080) return `${Math.floor(diff/1440)}k oldin`;
+                                            return d.toLocaleDateString('uz-UZ', {day:'2-digit', month:'2-digit'});
+                                          })()}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <div style={{fontWeight:600, fontSize:'14px', color:'var(--text-main)', marginBottom:'4px', lineHeight:1.3}}>{lead.name}</div>
                                   <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
@@ -8026,20 +8114,6 @@ fetch('${webhookUrl}', {
                                     <span style={{width:'3px', height:'3px', borderRadius:'50%', background:'var(--text-muted)', display:'inline-block'}}></span>
                                     <Ico n="user" s={11}/> {lead.owner}
                                   </div>
-                                  {lead.createdAt && (
-                                    <div style={{fontSize:'10px', color:'var(--text-muted)', marginBottom:'6px', display:'flex', alignItems:'center', gap:'4px', opacity:0.7}}>
-                                      <Ico n="clock" s={10}/>
-                                      {(() => {
-                                        const d = new Date(lead.createdAt);
-                                        const now = new Date();
-                                        const diff = Math.floor((now - d) / 60000);
-                                        if (diff < 1)   return 'Hozirgina';
-                                        if (diff < 60)  return `${diff} daqiqa oldin`;
-                                        if (diff < 1440) return `${Math.floor(diff/60)} soat oldin`;
-                                        return d.toLocaleDateString('uz-UZ', {day:'2-digit', month:'2-digit', year:'numeric'}) + ' ' + d.toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'});
-                                      })()}
-                                    </div>
-                                  )}
                                   {(lead.taskDescription||lead.deadline) ? (
                                     <div style={{fontSize:'11px', background:'rgba(255,255,255,0.04)', padding:'5px 8px', borderRadius:'5px', border:'1px solid rgba(255,255,255,0.08)', color:'var(--text-secondary)'}}>
                                       {lead.taskDescription ? <span><Ico n="message" s={10}/> {lead.taskDescription.substring(0,32)}...</span> : <span style={{color:'var(--text-muted)'}}><Ico n="clock" s={10}/> Muddat belgilangan</span>}
