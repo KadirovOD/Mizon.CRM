@@ -7700,9 +7700,11 @@ fetch('${webhookUrl}', {
                             // alohida UI elementlarda (audio-pleer + status badge) ko'rsatiladi —
                             // shuning uchun text qatoridan ularni regex bilan qirqib tashlaymiz.
                             const cleanText  = log.text
-                              .replace(/^[📞📲🎙]\s*/, '')
-                              .replace(/\s*🎙\s*Yozuv:\s*https?:\/\/\S+/gi, '')
+                              .replace(/^[📞📲🎙⛔]\s*/u, '')
+                              .replace(/\s*🎙\s*Yozuv:\s*https?:\/\/\S+/giu, '')
                               .replace(/\s*👤\s*\S.*$/u, '')
+                              // Xavfsizlik: yolg'iz qolgan surrogate yarmlarini olib tashlash
+                              .replace(/[\uD800-\uDFFF]/g, '')
                               .trim();
                             return (
                               <div key={idx} style={{display:'flex', justifyContent:'center', margin:'2px 0'}}>
