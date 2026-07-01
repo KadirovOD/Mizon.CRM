@@ -5859,6 +5859,12 @@ fetch('${webhookUrl}', {
       const [activeTab, setActiveTab] = useState(() => localStorage.getItem('mizon_activeTab') || 'dashboard');
       const [settingsActiveTab, setSettingsActiveTab] = useState(() => localStorage.getItem('mizon_settingsTab') || 'users');
       const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+      const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        try { return localStorage.getItem('mizon_sidebarCollapsed') === '1'; } catch { return false; }
+      });
+      useEffect(() => {
+        try { localStorage.setItem('mizon_sidebarCollapsed', sidebarCollapsed ? '1' : '0'); } catch {}
+      }, [sidebarCollapsed]);
 
       // ── Bildirishnomalar state ────────────────────────────────────────────────
       const [notifications,  setNotifications]  = useState([]);
@@ -7084,73 +7090,83 @@ fetch('${webhookUrl}', {
             <div className="mobile-backdrop" onClick={()=>setMobileSidebarOpen(false)} />
           )}
           {/* SIDEBAR */}
-          <aside className={`sidebar ${mobileSidebarOpen ? 'mobile-open' : ''}`}>
+          <aside className={`sidebar ${mobileSidebarOpen ? 'mobile-open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}>
             <div className="sidebar-brand">
               <div className="brand-icon">M</div>
               <span className="brand-name">MIZON</span>
               <span className="brand-role" style={role==='WATCHER'?{background:'rgba(139,92,246,0.15)',color:'#8b5cf6',borderColor:'rgba(139,92,246,0.3)'}:undefined}>{role==='WATCHER'?'KUZATUVCHI':role}</span>
+              <button
+                className="sidebar-toggle"
+                onClick={()=>setSidebarCollapsed(v=>!v)}
+                title={sidebarCollapsed ? 'Panelni ochish' : 'Panelni yig\'ish'}
+                aria-label={sidebarCollapsed ? 'Panelni ochish' : 'Panelni yig\'ish'}
+              >
+                <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1}}>
+                  {sidebarCollapsed ? 'chevron_right' : 'chevron_left'}
+                </span>
+              </button>
             </div>
 
             <nav className="sidebar-nav" onClick={(e)=>{ if (e.target.closest('.nav-item')) setMobileSidebarOpen(false); }}>
               <span className="nav-section-label">Asosiy</span>
-              <div className={`nav-item ${activeTab==='dashboard'?'active':''}`} onClick={()=>{setActiveTab('dashboard');setSelectedLeadId(null);}}>
-                <Ico n="chart" s={17}/> Boshqaruv paneli
+              <div className={`nav-item ${activeTab==='dashboard'?'active':''}`} onClick={()=>{setActiveTab('dashboard');setSelectedLeadId(null);}} title="Boshqaruv paneli">
+                <Ico n="chart" s={17}/> <span className="nav-item-label">Boshqaruv paneli</span>
               </div>
-              <div className={`nav-item ${activeTab==='leads'?'active':''}`} onClick={()=>{setActiveTab('leads');setSelectedLeadId(null);}}>
-                <Ico n="funnel" s={17}/> Sotuv Varonkasi
+              <div className={`nav-item ${activeTab==='leads'?'active':''}`} onClick={()=>{setActiveTab('leads');setSelectedLeadId(null);}} title="Sotuv Varonkasi">
+                <Ico n="funnel" s={17}/> <span className="nav-item-label">Sotuv Varonkasi</span>
               </div>
-              <div className={`nav-item ${activeTab==='callcenter'?'active':''}`} onClick={()=>{setActiveTab('callcenter');setSelectedLeadId(null);}}>
-                <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>call</span> Call Center
+              <div className={`nav-item ${activeTab==='callcenter'?'active':''}`} onClick={()=>{setActiveTab('callcenter');setSelectedLeadId(null);}} title="Call Center">
+                <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>call</span> <span className="nav-item-label">Call Center</span>
               </div>
 
               {/* CEO va WATCHER uchun Hisobotlar */}
               {(role === 'CEO' || role === 'WATCHER') && (
                 <>
                   <span className="nav-section-label" style={{marginTop:'8px'}}>Analitika</span>
-                  <div className={`nav-item ${activeTab==='reports'?'active':''}`} onClick={()=>{setActiveTab('reports');setSelectedLeadId(null);}}>
-                    <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>bar_chart_4_bars</span> Hisobotlar
+                  <div className={`nav-item ${activeTab==='reports'?'active':''}`} onClick={()=>{setActiveTab('reports');setSelectedLeadId(null);}} title="Hisobotlar">
+                    <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>bar_chart_4_bars</span> <span className="nav-item-label">Hisobotlar</span>
                   </div>
                 </>
               )}
 
               {role === 'CEO' && (
                 <>
-                  <div className={`nav-item ${activeTab==='marketing'?'active':''}`} onClick={()=>{setActiveTab('marketing');setSelectedLeadId(null);}}>
-                    <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>campaign</span> Marketing
+                  <div className={`nav-item ${activeTab==='marketing'?'active':''}`} onClick={()=>{setActiveTab('marketing');setSelectedLeadId(null);}} title="Marketing">
+                    <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>campaign</span> <span className="nav-item-label">Marketing</span>
                   </div>
                   <span className="nav-section-label" style={{marginTop:'8px'}}>Boshqaruv</span>
-                  <div className={`nav-item ${activeTab==='automation'?'active':''}`} onClick={()=>{setActiveTab('automation');setSelectedLeadId(null);}}>
-                    <span className="material-symbols-outlined" style={{fontSize:'18px',lineHeight:1,flexShrink:0}}>smart_toy</span> Avtomatizatsiya
+                  <div className={`nav-item ${activeTab==='automation'?'active':''}`} onClick={()=>{setActiveTab('automation');setSelectedLeadId(null);}} title="Avtomatizatsiya">
+                    <span className="material-symbols-outlined" style={{fontSize:'18px',lineHeight:1,flexShrink:0}}>smart_toy</span> <span className="nav-item-label">Avtomatizatsiya</span>
                   </div>
-                  <div className={`nav-item ${activeTab==='integrations'?'active':''}`} onClick={()=>{setActiveTab('integrations');setSelectedLeadId(null);}}>
-                    <Ico n="plug" s={17}/> Integratsiyalar
+                  <div className={`nav-item ${activeTab==='integrations'?'active':''}`} onClick={()=>{setActiveTab('integrations');setSelectedLeadId(null);}} title="Integratsiyalar">
+                    <Ico n="plug" s={17}/> <span className="nav-item-label">Integratsiyalar</span>
                   </div>
-                  <div className={`nav-item ${activeTab==='billing'?'active':''}`} onClick={()=>{setActiveTab('billing');setSelectedLeadId(null);}}>
-                    <span className="material-symbols-outlined" style={{fontSize:'18px',lineHeight:1,flexShrink:0}}>credit_card</span> Obuna va to'lov
+                  <div className={`nav-item ${activeTab==='billing'?'active':''}`} onClick={()=>{setActiveTab('billing');setSelectedLeadId(null);}} title="Obuna va to'lov">
+                    <span className="material-symbols-outlined" style={{fontSize:'18px',lineHeight:1,flexShrink:0}}>credit_card</span> <span className="nav-item-label">Obuna va to'lov</span>
                   </div>
-                  <div className={`nav-item ${activeTab==='settings'?'active':''}`} onClick={()=>{setActiveTab('settings');setSelectedLeadId(null);}}>
-                    <Ico n="settings" s={17}/> Sozlamalar
+                  <div className={`nav-item ${activeTab==='settings'?'active':''}`} onClick={()=>{setActiveTab('settings');setSelectedLeadId(null);}} title="Sozlamalar">
+                    <Ico n="settings" s={17}/> <span className="nav-item-label">Sozlamalar</span>
                   </div>
                 </>
               )}
             </nav>
 
             <div className="sidebar-footer">
-              <div className="sidebar-user">
+              <div className="sidebar-user" title={`${authUser.username} (${authUser.role})`}>
                 <div className="avatar" style={{width:'34px', height:'34px', fontSize:'13px'}}>{authUser.username[0].toUpperCase()}</div>
                 <div className="sidebar-user-info">
                   <div className="sidebar-user-name">{authUser.username}</div>
                   <div className="sidebar-user-role">{authUser.role}</div>
                 </div>
               </div>
-              <div className="nav-item" onClick={()=>{
+              <div className="nav-item" title="Tizimdan chiqish" onClick={()=>{
                 clearCompanyCache();
                 setAuthUser(null);
                 localStorage.removeItem('mizon_session');
                 localStorage.removeItem('mizon_token');
                 localStorage.removeItem('mizon_callLimit');
               }}>
-                <Ico n="logout" s={16}/> Tizimdan chiqish
+                <Ico n="logout" s={16}/> <span className="nav-item-label">Tizimdan chiqish</span>
               </div>
             </div>
           </aside>
