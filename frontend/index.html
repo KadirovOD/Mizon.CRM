@@ -383,6 +383,17 @@ tr:hover td{background:var(--surface-variant);}
 .input-base{width:100%;background:var(--bg-base);border:1px solid var(--outline-variant);padding:9px 12px;border-radius:var(--radius-md);color:var(--text-main);font-size:13px;outline:none;margin-bottom:10px;font-family:var(--font-body);transition:border-color 0.2s,box-shadow 0.2s;}
 .input-base:focus{border-color:var(--primary);box-shadow:0 0 0 2px rgba(90,223,129,0.14);}
 .input-base::placeholder{color:var(--text-muted);}
+/* Native <select class="input-base"> — brauzerning "glass" chromini yo'q qilamiz */
+select.input-base{
+  appearance:none;-webkit-appearance:none;-moz-appearance:none;
+  cursor:pointer;
+  padding-right:34px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa3ad' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+}
+select.input-base:hover{border-color:var(--border-hover);}
+select.input-base option{background:var(--bg-surface);color:var(--text-main);}
 .label-sm{font-size:11px;color:var(--text-muted);margin-bottom:5px;display:block;text-transform:uppercase;font-weight:600;letter-spacing:0.08em;font-family:var(--font-label);}
 
 /* ===== SETTINGS ===== */
