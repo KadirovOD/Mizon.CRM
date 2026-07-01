@@ -396,11 +396,35 @@ exports.handleWebhook = async (req, res) => {
 
     const webhookMeta = body.webhook || {};
 
+    // Parsed summary — foydalanuvchi diagnostika panelida ko'rishi uchun
+    const parsedSummary = events.map((ev) => {
+      const rawType = ev.event_type !== undefined ? ev.event_type : (ev.event || ev.type || ev.call_type);
+      return {
+        event_type: normalizeEventType(rawType),
+        raw_type:   rawType,
+        direction:  parseDirection(ev),
+        phone:      ev.client_number || ev.phone || ev.caller_number || ev.from || ev.to || '',
+        call_id:    String(ev.db_call_id || ev.call_id || ev.id || ''),
+        answered:   ev.answered,
+        duration:   ev.duration,
+      };
+    });
+    _logWebhookActivity(companyId || wcid, {
+      kind:    'parsed',
+      count:   events.length,
+      summary: parsedSummary,
+    });
+
     for (const ev of events) {
       try {
         await _processSingleEvent(req.db, companyId, ev, webhookMeta);
       } catch (e) {
         console.error('[moizvonki] event processing error:', e.message, ev);
+        _logWebhookActivity(companyId || wcid, {
+          kind:  'error',
+          error: e.message,
+          event: JSON.stringify(ev).slice(0, 400),
+        });
       }
     }
     res.sendStatus(200);
@@ -424,6 +448,8 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
 
   const phoneRaw  = ev.client_number || ev.phone || ev.caller_number || ev.from || ev.to || '';
   const callId    = String(ev.db_call_id || ev.call_id || ev.id || '');
+
+  console.log(`[moizvonki] processing: type=${eventType} dir=${direction} phone="${phoneRaw}" call=${callId} company=${companyId}`);
 
   // duration — soniyada
   let duration = Number(ev.duration || 0);
@@ -473,22 +499,26 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
     let isNew    = false;
 
     if (!leadId) {
-      const stageRes = await db.query(
-        companyId
-          ? 'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence LIMIT 1'
-          : 'SELECT id FROM crm_stage ORDER BY sequence LIMIT 1',
-        companyId ? [companyId] : []
-      );
-      const stageId = stageRes.rows.length > 0 ? stageRes.rows[0].id : 1;
-      const ins = await db.query(
-        `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
-         VALUES ($1,$2,'voip_incoming',25,$3,0,$4,$5) RETURNING id, name`,
-        [`Noma'lum (+${cleanPhone})`, `+${cleanPhone}`, stageId, JSON.stringify([]), companyId]
-      );
-      leadId   = ins.rows[0]?.id || null;
-      leadName = ins.rows[0]?.name || null;
-      isNew    = true;
-      console.log(`📌 New lead from incoming call: +${cleanPhone}`);
+      try {
+        const stageRes = await db.query(
+          companyId
+            ? 'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence LIMIT 1'
+            : 'SELECT id FROM crm_stage ORDER BY sequence LIMIT 1',
+          companyId ? [companyId] : []
+        );
+        const stageId = stageRes.rows[0]?.id || null;
+        const ins = await db.query(
+          `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
+           VALUES ($1,$2,'voip_incoming',25,$3,0,$4,$5) RETURNING id, name`,
+          [`Noma'lum (+${cleanPhone})`, `+${cleanPhone}`, stageId, JSON.stringify([]), companyId]
+        );
+        leadId   = ins.rows[0]?.id || null;
+        leadName = ins.rows[0]?.name || null;
+        isNew    = true;
+        console.log(`📌 New lead from incoming call: +${cleanPhone} (id=${leadId}, stage=${stageId})`);
+      } catch (e) {
+        console.error(`[moizvonki] LEAD INSERT FAILED for +${cleanPhone}:`, e.message, e.stack?.split('\n')[1]);
+      }
     }
 
     _pushEvent(companyId, {
@@ -533,27 +563,31 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
       );
       console.log(`📞 Call.finish logged → lead #${lead.id}: ${logText}`);
     } else {
-      const stageRes = await db.query(
-        companyId
-          ? 'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence LIMIT 1'
-          : 'SELECT id FROM crm_stage ORDER BY sequence LIMIT 1',
-        companyId ? [companyId] : []
-      );
-      const stageId = stageRes.rows.length > 0 ? stageRes.rows[0].id : 1;
-      await db.query(
-        `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
-         VALUES ($1,$2,'voip_incoming',25,$3,1,$4,$5)`,
-        [
-          `Noma'lum (+${cleanPhone})`, `+${cleanPhone}`, stageId,
-          JSON.stringify([{
-            type: 'call', date: new Date().toISOString(),
-            text: logText, call_id: callId, duration, record_url: recordUrl,
-            direction, manager: managerEmail, status, answered: answered || undefined,
-          }]),
+      try {
+        const stageRes = await db.query(
           companyId
-        ]
-      );
-      console.log(`📌 New lead + call.finish: +${cleanPhone}`);
+            ? 'SELECT id FROM crm_stage WHERE company_id=$1 ORDER BY sequence LIMIT 1'
+            : 'SELECT id FROM crm_stage ORDER BY sequence LIMIT 1',
+          companyId ? [companyId] : []
+        );
+        const stageId = stageRes.rows[0]?.id || null;
+        const ins = await db.query(
+          `INSERT INTO crm_lead (name, phone, mizon_source, lead_score, stage_id, actualcallattempts, chatlogs, company_id)
+           VALUES ($1,$2,'voip_incoming',25,$3,1,$4,$5) RETURNING id`,
+          [
+            `Noma'lum (+${cleanPhone})`, `+${cleanPhone}`, stageId,
+            JSON.stringify([{
+              type: 'call', date: new Date().toISOString(),
+              text: logText, call_id: callId, duration, record_url: recordUrl,
+              direction, manager: managerEmail, status, answered: answered || undefined,
+            }]),
+            companyId
+          ]
+        );
+        console.log(`📌 New lead + call.finish: +${cleanPhone} (id=${ins.rows[0]?.id}, stage=${stageId})`);
+      } catch (e) {
+        console.error(`[moizvonki] LEAD INSERT FAILED (finish) for +${cleanPhone}:`, e.message, e.stack?.split('\n')[1]);
+      }
     }
     return;
   }
