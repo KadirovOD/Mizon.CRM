@@ -3015,17 +3015,17 @@ fetch('${webhookUrl}', {
           <div className="card" style={{padding:0, overflow:'hidden'}}>
             <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap'}}>
               <span style={{fontWeight:600, fontSize:'14px'}}>Qo'ng'iroqlar jurnali ({filtered.length})</span>
-              <div style={{display:'flex', gap:'8px'}}>
-                <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterOp} onChange={e=>setFilterOp(e.target.value)}>
+              <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                <select className="filter-glass" value={filterOp} onChange={e=>setFilterOp(e.target.value)}>
                   <option value="all">Barcha operator</option>
                   {operatorNames.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
-                <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterDir} onChange={e=>setFilterDir(e.target.value)}>
+                <select className="filter-glass" value={filterDir} onChange={e=>setFilterDir(e.target.value)}>
                   <option value="all">Barcha yo'nalish</option>
                   <option value="in">Kiruvchi</option>
                   <option value="out">Chiquvchi</option>
                 </select>
-                <select className="pipeline-selector" style={{fontSize:'12px'}} value={filterSt} onChange={e=>setFilterSt(e.target.value)}>
+                <select className="filter-glass" value={filterSt} onChange={e=>setFilterSt(e.target.value)}>
                   <option value="all">Barcha holat</option>
                   <option value="answered">Javob berildi</option>
                   <option value="missed">O'tkazildi</option>
@@ -3656,11 +3656,11 @@ fetch('${webhookUrl}', {
               <div className="mod-sub">Tahlil, grafik va ma'lumotlarni eksport qilish</div>
             </div>
             <div style={{display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap'}}>
-              <select className="pipeline-selector" value={pipeFilter} onChange={e=>setPipeFilter(e.target.value)}>
+              <select className="filter-glass" value={pipeFilter} onChange={e=>setPipeFilter(e.target.value)}>
                 <option value="all">Barcha quvur</option>
                 {(pipelines||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              <select className="pipeline-selector" value={period} onChange={e=>setPeriod(e.target.value)}>
+              <select className="filter-glass" value={period} onChange={e=>setPeriod(e.target.value)}>
                 <option value="all">Barcha vaqt</option>
                 <option value="today">Bugun</option>
                 <option value="week">So'nggi 7 kun</option>
@@ -7793,7 +7793,7 @@ fetch('${webhookUrl}', {
                   <div className="pipeline-header">
                     <h2 style={{fontSize:'18px', fontWeight:700, letterSpacing:'-0.4px'}}>Sotuv Varonkasi</h2>
                     <div style={{display:'flex', gap:'12px', alignItems:'center'}}>
-                      <select className="pipeline-selector" value={activePipe} onChange={e=>setActivePipe(e.target.value)}>
+                      <select className="filter-glass" value={activePipe} onChange={e=>setActivePipe(e.target.value)}>
                         {pipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                       {role === 'CEO' && (
@@ -7840,9 +7840,10 @@ fetch('${webhookUrl}', {
                       <option value="notask">⚠️ Vazifa yo'q</option>
                     </select>
                     {hasActiveFilter && (
-                      <button className="btn-outline" style={{fontSize:'11px', padding:'5px 10px', color:'var(--danger)', borderColor:'var(--danger)'}}
+                      <button className="btn-outline" style={{fontSize:'12px', padding:'6px 12px', color:'var(--danger)', borderColor:'var(--danger)', display:'inline-flex', alignItems:'center', gap:'6px'}}
                         onClick={()=>{setFilterSource('all');setFilterOwner('all');setFilterSla('all');setSearchQuery('');}}>
-                        ✕ Tozalash
+                        <span className="material-symbols-outlined" style={{fontSize:'16px', lineHeight:1}}>filter_alt_off</span>
+                        Tozalash
                       </button>
                     )}
                     {hasActiveFilter && (
@@ -7851,9 +7852,12 @@ fetch('${webhookUrl}', {
                       </span>
                     )}
                     {role === 'CEO' && (
-                      <button className="btn-outline" style={{fontSize:'11px', padding:'5px 10px', marginLeft:'auto', background: selectMode ? 'var(--primary-soft)' : undefined}}
+                      <button className="btn-outline" style={{fontSize:'12px', padding:'6px 12px', marginLeft:'auto', background: selectMode ? 'var(--primary-soft)' : undefined, display:'inline-flex', alignItems:'center', gap:'6px'}}
                         onClick={()=>{ if(selectMode) exitSelectMode(); else setSelectMode(true); }}>
-                        {selectMode ? '✕ Tanlashni bekor qilish' : '☑ Tanlash rejimi'}
+                        <span className="material-symbols-outlined" style={{fontSize:'16px', lineHeight:1}}>
+                          {selectMode ? 'close' : 'check_box'}
+                        </span>
+                        {selectMode ? 'Bekor qilish' : 'Tanlash rejimi'}
                       </button>
                     )}
                   </div>
