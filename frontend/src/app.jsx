@@ -6,6 +6,69 @@
       return <span className="material-symbols-outlined" style={{ fontSize: s + 2, lineHeight: 1, verticalAlign: 'middle', flexShrink: 0, display: 'inline-block', ...c }}>{m[n] || n}</span>;
     };
 
+    // ===== GLASS DROPDOWN (Material Symbols icon'lar bilan) =====
+    // options: [{ value, label, icon?, color? }]
+    const GlassDropdown = ({ value, onChange, options, placeholder = '', minWidth = 150, style = {} }) => {
+      const [open, setOpen] = useState(false);
+      const wrapRef = useRef(null);
+      useEffect(() => {
+        if (!open) return;
+        const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+        const onEsc = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onDoc);
+        document.addEventListener('keydown',   onEsc);
+        return () => {
+          document.removeEventListener('mousedown', onDoc);
+          document.removeEventListener('keydown',   onEsc);
+        };
+      }, [open]);
+      const current = options.find(o => o.value === value) || options[0];
+      return (
+        <div ref={wrapRef} className={`glass-dd ${open ? 'open' : ''}`} style={{ minWidth, ...style }}>
+          <button
+            type="button"
+            className="filter-glass glass-dd-trigger"
+            onClick={() => setOpen(o => !o)}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+          >
+            {current?.icon && (
+              <span className="material-symbols-outlined glass-icon" style={current.color ? { color: current.color } : undefined}>
+                {current.icon}
+              </span>
+            )}
+            <span className="glass-dd-label">{current?.label || placeholder}</span>
+            <span className="material-symbols-outlined glass-dd-caret">
+              {open ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+          {open && (
+            <div className="glass-dd-menu" role="listbox">
+              {options.map(opt => (
+                <div
+                  key={opt.value}
+                  role="option"
+                  aria-selected={opt.value === value}
+                  className={`glass-dd-item ${opt.value === value ? 'active' : ''}`}
+                  onClick={() => { onChange(opt.value); setOpen(false); }}
+                >
+                  {opt.icon && (
+                    <span className="material-symbols-outlined" style={{ fontSize: '17px', lineHeight: 1, flexShrink: 0, color: opt.color || undefined }}>
+                      {opt.icon}
+                    </span>
+                  )}
+                  <span className="glass-dd-item-label">{opt.label}</span>
+                  {opt.value === value && (
+                    <span className="material-symbols-outlined glass-dd-check">check</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    };
+
     // ===== SLA HELPERS =====
     const calculateSLAHours = (deadlineStr) => {
       if(!deadlineStr) return null;
@@ -3016,20 +3079,35 @@ fetch('${webhookUrl}', {
             <div style={{padding:'14px 20px', borderBottom:'1px solid var(--outline-variant)', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap'}}>
               <span style={{fontWeight:600, fontSize:'14px'}}>Qo'ng'iroqlar jurnali ({filtered.length})</span>
               <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
-                <select className="filter-glass" value={filterOp} onChange={e=>setFilterOp(e.target.value)}>
-                  <option value="all">Barcha operator</option>
-                  {operatorNames.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <select className="filter-glass" value={filterDir} onChange={e=>setFilterDir(e.target.value)}>
-                  <option value="all">Barcha yo'nalish</option>
-                  <option value="in">Kiruvchi</option>
-                  <option value="out">Chiquvchi</option>
-                </select>
-                <select className="filter-glass" value={filterSt} onChange={e=>setFilterSt(e.target.value)}>
-                  <option value="all">Barcha holat</option>
-                  <option value="answered">Javob berildi</option>
-                  <option value="missed">O'tkazildi</option>
-                </select>
+                <GlassDropdown
+                  value={filterOp}
+                  onChange={setFilterOp}
+                  minWidth={170}
+                  options={[
+                    { value:'all', icon:'headset_mic', label:'Barcha operator' },
+                    ...operatorNames.map(o=>({ value:o, icon:'person', label:o }))
+                  ]}
+                />
+                <GlassDropdown
+                  value={filterDir}
+                  onChange={setFilterDir}
+                  minWidth={160}
+                  options={[
+                    { value:'all', icon:'sync_alt',    label:"Barcha yo'nalish" },
+                    { value:'in',  icon:'call_received', label:'Kiruvchi',  color:'#3b82f6' },
+                    { value:'out', icon:'call_made',     label:'Chiquvchi', color:'#22c55e' },
+                  ]}
+                />
+                <GlassDropdown
+                  value={filterSt}
+                  onChange={setFilterSt}
+                  minWidth={160}
+                  options={[
+                    { value:'all',       icon:'inbox',        label:'Barcha holat' },
+                    { value:'answered',  icon:'call_end',     label:'Javob berildi', color:'#22c55e' },
+                    { value:'missed',    icon:'call_missed',  label:"O'tkazildi",    color:'#ef4444' },
+                  ]}
+                />
               </div>
             </div>
             <table>
@@ -3656,16 +3734,26 @@ fetch('${webhookUrl}', {
               <div className="mod-sub">Tahlil, grafik va ma'lumotlarni eksport qilish</div>
             </div>
             <div style={{display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap'}}>
-              <select className="filter-glass" value={pipeFilter} onChange={e=>setPipeFilter(e.target.value)}>
-                <option value="all">Barcha quvur</option>
-                {(pipelines||[]).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <select className="filter-glass" value={period} onChange={e=>setPeriod(e.target.value)}>
-                <option value="all">Barcha vaqt</option>
-                <option value="today">Bugun</option>
-                <option value="week">So'nggi 7 kun</option>
-                <option value="month">So'nggi 30 kun</option>
-              </select>
+              <GlassDropdown
+                value={pipeFilter}
+                onChange={setPipeFilter}
+                minWidth={170}
+                options={[
+                  { value:'all', icon:'view_column', label:'Barcha quvur' },
+                  ...(pipelines||[]).map(p=>({ value:p.id, icon:'filter_alt', label:p.name }))
+                ]}
+              />
+              <GlassDropdown
+                value={period}
+                onChange={setPeriod}
+                minWidth={160}
+                options={[
+                  { value:'all',   icon:'calendar_month', label:'Barcha vaqt' },
+                  { value:'today', icon:'today',          label:'Bugun' },
+                  { value:'week',  icon:'date_range',     label:"So'nggi 7 kun" },
+                  { value:'month', icon:'calendar_view_month', label:"So'nggi 30 kun" },
+                ]}
+              />
               <button className="btn-primary" onClick={exportCSV}><Ico n="download" s={14}/> CSV Eksport</button>
             </div>
           </div>
@@ -7793,9 +7881,12 @@ fetch('${webhookUrl}', {
                   <div className="pipeline-header">
                     <h2 style={{fontSize:'18px', fontWeight:700, letterSpacing:'-0.4px'}}>Sotuv Varonkasi</h2>
                     <div style={{display:'flex', gap:'12px', alignItems:'center'}}>
-                      <select className="filter-glass" value={activePipe} onChange={e=>setActivePipe(e.target.value)}>
-                        {pipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                      <GlassDropdown
+                        value={activePipe}
+                        onChange={setActivePipe}
+                        minWidth={200}
+                        options={pipelines.map(p=>({ value:p.id, icon:'filter_alt', label:p.name }))}
+                      />
                       {role === 'CEO' && (
                         <>
                           <input type="file" ref={csvFileInputRef} accept=".csv,text/csv" style={{display:'none'}}
@@ -7823,22 +7914,37 @@ fetch('${webhookUrl}', {
                       <input
                         placeholder="Ism yoki telefon raqam..."
                         value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} />
-                      {searchQuery && <span className="glass-clear" onClick={()=>setSearchQuery('')}>✕</span>}
+                      {searchQuery && <span className="glass-clear" onClick={()=>setSearchQuery('')}><span className="material-symbols-outlined" style={{fontSize:'14px',lineHeight:1}}>close</span></span>}
                     </label>
-                    <select className="filter-glass" value={filterSource} onChange={e=>setFilterSource(e.target.value)}>
-                      <option value="all">🌐 Barcha manba</option>
-                      {uniqueSources.map(s=><option key={s} value={s}>{s.replace('meta_','').replace('_',' ')}</option>)}
-                    </select>
-                    <select className="filter-glass" value={filterOwner} onChange={e=>setFilterOwner(e.target.value)}>
-                      <option value="all">👤 Barcha mas'ul</option>
-                      {uniqueOwners.map(o=><option key={o} value={o}>{o}</option>)}
-                    </select>
-                    <select className="filter-glass" value={filterSla} onChange={e=>setFilterSla(e.target.value)}>
-                      <option value="all">📋 Barcha holat</option>
-                      <option value="danger">🔴 Kechikkan</option>
-                      <option value="warning">🟡 Tez orada</option>
-                      <option value="notask">⚠️ Vazifa yo'q</option>
-                    </select>
+                    <GlassDropdown
+                      value={filterSource}
+                      onChange={setFilterSource}
+                      minWidth={160}
+                      options={[
+                        { value:'all', icon:'language', label:'Barcha manba' },
+                        ...uniqueSources.map(s=>({ value:s, icon:'label', label:s.replace('meta_','').replace('_',' ') }))
+                      ]}
+                    />
+                    <GlassDropdown
+                      value={filterOwner}
+                      onChange={setFilterOwner}
+                      minWidth={160}
+                      options={[
+                        { value:'all', icon:'group', label:"Barcha mas'ul" },
+                        ...uniqueOwners.map(o=>({ value:o, icon:'person', label:o }))
+                      ]}
+                    />
+                    <GlassDropdown
+                      value={filterSla}
+                      onChange={setFilterSla}
+                      minWidth={170}
+                      options={[
+                        { value:'all',     icon:'assignment',        label:'Barcha holat' },
+                        { value:'danger',  icon:'error',             label:'Kechikkan',   color:'#ef4444' },
+                        { value:'warning', icon:'schedule',          label:'Tez orada',   color:'#f59e0b' },
+                        { value:'notask',  icon:'assignment_late',   label:"Vazifa yo'q", color:'#94a3b8' },
+                      ]}
+                    />
                     {hasActiveFilter && (
                       <button className="btn-outline" style={{fontSize:'12px', padding:'6px 12px', color:'var(--danger)', borderColor:'var(--danger)', display:'inline-flex', alignItems:'center', gap:'6px'}}
                         onClick={()=>{setFilterSource('all');setFilterOwner('all');setFilterSla('all');setSearchQuery('');}}>
