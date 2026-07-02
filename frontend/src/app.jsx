@@ -6093,7 +6093,7 @@ fetch('${webhookUrl}', {
             }
             prevLeadIdsRef.current = newIdSet;
             // 0 lead bo'lsa ham DOIM yangilash (localStorage'dagi eski ma'lumotni tozalash uchun)
-            setLeads(incoming.map(l => ({
+            const mappedIncoming = incoming.map(l => ({
               id: l.id,
               pipelineId: l.pipelineid || 'p1',
               name: l.name,
@@ -6117,7 +6117,25 @@ fetch('${webhookUrl}', {
                 const last = logs.reduce((f, lg) => (lg.type === 'sys' && lg.isTask) ? lg : f, null);
                 return last?.assignee || null;
               })()
-            })));
+            }));
+            // ⚠️ BUGFIX: Foydalanuvchi lid kartasini tahrirlayotgan bo'lsa (yoki saqlanmagan
+            // o'zgarishlar mavjud bo'lsa) — auto-refresh joriy lidning local nusxasini
+            // yo'q qilib yubormasin. Shu lidni prevLeads dan olib qoldiramiz, qolganlarni
+            // yangi server ma'lumotlari bilan almashtiramiz.
+            setLeads(prevLeads => {
+              const s = stateRefs.current || {};
+              const editingActive = !!(s.editingLead || s.hasUnsavedChanges);
+              const editingId = s.selectedLeadId;
+              if (editingActive && editingId != null) {
+                const localLead = (prevLeads || []).find(l => String(l.id) === String(editingId));
+                if (localLead) {
+                  return mappedIncoming.map(l =>
+                    String(l.id) === String(editingId) ? localLead : l
+                  );
+                }
+              }
+              return mappedIncoming;
+            });
           }
         }).catch(err => console.log('Offline/Demo rejim faol.', err.message));
       }, []);
@@ -6355,10 +6373,10 @@ fetch('${webhookUrl}', {
       const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
       // ── Refs: event handler'lar uchun joriy state ni saqlash (stale closure oldini olish) ──
-      const stateRefs = useRef({ selectedLeadId: null, showAddLead: false, showCompleteModal: false, activeTab: 'dashboard', editLeadSnapshot: null, editingLead: false, leads: [], authUser: null });
+      const stateRefs = useRef({ selectedLeadId: null, showAddLead: false, showCompleteModal: false, activeTab: 'dashboard', editLeadSnapshot: null, editingLead: false, hasUnsavedChanges: false, leads: [], authUser: null });
       useEffect(() => {
-        stateRefs.current = { selectedLeadId, showAddLead, showCompleteModal, activeTab, editLeadSnapshot, editingLead, leads, authUser };
-      }, [selectedLeadId, showAddLead, showCompleteModal, activeTab, editLeadSnapshot, editingLead, leads, authUser]);
+        stateRefs.current = { selectedLeadId, showAddLead, showCompleteModal, activeTab, editLeadSnapshot, editingLead, hasUnsavedChanges, leads, authUser };
+      }, [selectedLeadId, showAddLead, showCompleteModal, activeTab, editLeadSnapshot, editingLead, hasUnsavedChanges, leads, authUser]);
 
       // ── Orqaga tugmasi (touchpad swipe / browser back) ──────────
       useEffect(() => {
