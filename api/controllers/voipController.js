@@ -296,13 +296,16 @@ exports.initiateCall = async (req, res) => {
         const logs = lead.rows[0].chatlogs || [];
         const attempts = (lead.rows[0].actualcallattempts || 0) + 1;
         if (isApiOk) {
+          // Bitta yozuv patterni: bu yerda "calling" holatda yaratamiz, keyin
+          // webhook call.finish keladi va shu yozuvni update qiladi (yangi qatordan qo'shmaydi).
+          // Matn ham buildCallLogText bilan bir xil formatda — polling almashtirsa ham UI o'zgarmasin.
           logs.push({
             type: 'call',
             date: new Date().toISOString(),
-            text: `📞 Moi Zvonki orqali chiquvchi qo'ng'iroq: ${from || user_name} → ${phone}`,
+            text: `📞 Chiquvchi qo'ng'iroq: ${phone}`,
             call_id: callId,
             direction: 'out',
-            status: 'requested',
+            status: 'calling',
           });
         } else {
           const reason = apiError || `HTTP ${raw.statusCode}` || 'noma\'lum xato';
@@ -540,19 +543,62 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
     if (leadQ.rows.length > 0) {
       const lead = leadQ.rows[0];
       const logs = lead.chatlogs || [];
-      const attempts = (lead.actualcallattempts || 0) + 1;
-      logs.push({
+
+      // Bir xil qo'ng'iroq uchun ikki qatorli yozuv oldini olish:
+      //   1) Aynan shu call_id bilan 'calling' / 'requested' yozuvi mavjud bo'lsa — uni update
+      //   2) call_id topilmasa: oxirgi 10 daqiqa ichida shu yo'nalishdagi (out/in)
+      //      'calling' / 'requested' yozuvni update (click-to-call ↔ webhook call_id
+      //      har doim ham bir xil kelmaydi)
+      const nowMs = Date.now();
+      const TEN_MIN_MS = 10 * 60 * 1000;
+      let existingIdx = -1;
+      if (callId) {
+        existingIdx = logs.findIndex(lg =>
+          lg && lg.type === 'call' && lg.call_id != null &&
+          String(lg.call_id) === String(callId) &&
+          (lg.status === 'calling' || lg.status === 'requested')
+        );
+      }
+      if (existingIdx < 0) {
+        // Fallback: yaqindagi 'calling'/'requested' entry (bir xil yo'nalish) — teskaridan qidiramiz
+        for (let i = logs.length - 1; i >= 0; i--) {
+          const lg = logs[i];
+          if (!lg || lg.type !== 'call') continue;
+          if (lg.status !== 'calling' && lg.status !== 'requested') continue;
+          if (lg.direction && direction && lg.direction !== direction) continue;
+          const t = lg.date ? Date.parse(lg.date) : 0;
+          if (nowMs - t > TEN_MIN_MS) break; // eski — to'xtat
+          existingIdx = i;
+          break;
+        }
+      }
+
+      // Update-in-place yoki yangi push
+      const attempts = existingIdx >= 0
+        ? (lead.actualcallattempts || 0)                 // urinishlar allaqachon hisoblangan
+        : (lead.actualcallattempts || 0) + 1;
+
+      const finalEntry = {
         type:        'call',
         date:        new Date().toISOString(),
         text:        logText,
-        call_id:     callId,
+        call_id:     callId || (existingIdx >= 0 ? logs[existingIdx].call_id : null),
         duration,
         record_url:  recordUrl,
         direction,
         manager:     managerEmail,
         status,
         answered:    answered || undefined,
-      });
+      };
+
+      if (existingIdx >= 0) {
+        logs[existingIdx] = { ...logs[existingIdx], ...finalEntry };
+        console.log(`📞 Call.finish MERGED → lead #${lead.id} (idx=${existingIdx}): ${logText}`);
+      } else {
+        logs.push(finalEntry);
+        console.log(`📞 Call.finish logged → lead #${lead.id}: ${logText}`);
+      }
+
       await db.query(
         companyId
           ? 'UPDATE crm_lead SET chatlogs=$1, actualcallattempts=$2 WHERE id=$3 AND company_id=$4'
@@ -561,7 +607,6 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
           ? [JSON.stringify(logs), attempts, lead.id, companyId]
           : [JSON.stringify(logs), attempts, lead.id]
       );
-      console.log(`📞 Call.finish logged → lead #${lead.id}: ${logText}`);
     } else {
       try {
         const stageRes = await db.query(
