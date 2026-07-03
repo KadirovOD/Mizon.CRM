@@ -3659,8 +3659,8 @@ fetch('${webhookUrl}', {
       }, []);
 
       // ---- helpers ----
-      const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", moizvonki:'Moizvonki', voip_incoming:'Moizvonki', instagram:'Instagram DM' };
-      const SOURCE_COLORS = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280', moizvonki:'#01a750', voip_incoming:'#01a750', instagram:'#E1306C' };
+      const SOURCE_LABELS = { meta_fb_ads:'Facebook Ads', telegram_bot:'Telegram Bot', phone_call:'Telefon', referral:'Tavsiya', website:'Veb-sayt', manual:"Qo'lda kiritilgan", moizvonki:'Moizvonki', voip_incoming:'Moizvonki', instagram:'Instagram DM', smsmaster:'SMS Master' };
+      const SOURCE_COLORS = { meta_fb_ads:'#1877F2', telegram_bot:'#0088cc', phone_call:'#01a750', referral:'#9333EA', website:'#ea580c', manual:'#6b7280', moizvonki:'#01a750', voip_incoming:'#01a750', instagram:'#E1306C', smsmaster:'#f59e0b' };
 
       const filterByPeriod = (arr) => {
         if (period === 'all') return arr;
@@ -4048,13 +4048,19 @@ fetch('${webhookUrl}', {
         { value: 'ig_dm',         label: 'Instagram DM kelganda' },
       ];
       const ACTION_TYPES = [
-        { value: 'sms',      label: '📱 SMS yuborish (Eskiz.uz)' },
+        { value: 'sms',      label: '📱 SMS yuborish (Eskiz / SMS Master)' },
         { value: 'ig_reply', label: '📸 Instagram javob yuborish' },
       ];
 
       const [tab,          setTab]          = useState('settings'); // settings | templates | rules | logs
-      const [smsSettings,  setSmsSettings]  = useState({ eskiz_email: '' });
-      const [smsForm,      setSmsForm]      = useState({ eskiz_email: '', eskiz_password: '' });
+      const [smsSettings,  setSmsSettings]  = useState({ provider:'eskiz', eskiz_email: '', has_password: false, smsmaster_configured: false, smsmaster_devices:'', smsmaster_use_random: true });
+      const [smsForm,      setSmsForm]      = useState({
+        provider:'eskiz',
+        eskiz_email: '', eskiz_password: '',
+        smsmaster_api_key: '', smsmaster_devices: '', smsmaster_use_random: true
+      });
+      const [smBalance,    setSmBalance]    = useState(null);
+      const [smDevices,    setSmDevices]    = useState([]);
       const [smsTesting,   setSmsTesting]   = useState(false);
       const [smsSaving,    setSmsSaving]    = useState(false);
       const [templates,    setTemplates]    = useState([]);
@@ -4074,12 +4080,28 @@ fetch('${webhookUrl}', {
 
       useEffect(() => {
         fetch('/api/automation/sms-settings', { headers: H() }).then(r=>r.json()).then(d => {
-          setSmsSettings(d); setSmsForm({ eskiz_email: d.eskiz_email||'', eskiz_password: '' });
+          setSmsSettings(d);
+          setSmsForm({
+            provider: d.provider || 'eskiz',
+            eskiz_email: d.eskiz_email || '',
+            eskiz_password: '',
+            smsmaster_api_key: '',
+            smsmaster_devices: d.smsmaster_devices || '',
+            smsmaster_use_random: d.smsmaster_use_random !== false,
+          });
         });
         fetch('/api/automation/templates', { headers: H() }).then(r=>r.json()).then(setTemplates);
         fetch('/api/automation/rules',     { headers: H() }).then(r=>r.json()).then(setRules);
         fetch('/api/stages',               { headers: H() }).then(r=>r.json()).then(d => setStages(d.stages||[]));
       }, []);
+
+      // SMS Master balans va qurilmalar — provider tanlanganda va API kalit mavjud bo'lsa
+      useEffect(() => {
+        if (smsForm.provider !== 'smsmaster') { setSmBalance(null); setSmDevices([]); return; }
+        if (!smsSettings.smsmaster_configured) return;
+        fetch('/api/sms-master/balance', { headers: H() }).then(r=>r.json()).then(d => setSmBalance(d.balance ?? null)).catch(()=>{});
+        fetch('/api/sms-master/devices', { headers: H() }).then(r=>r.json()).then(d => setSmDevices(Array.isArray(d.devices) ? d.devices : [])).catch(()=>{});
+      }, [smsForm.provider, smsSettings.smsmaster_configured]);
 
       useEffect(() => {
         if (tab === 'logs') fetch('/api/automation/logs', { headers: H() }).then(r=>r.json()).then(setLogs);
@@ -4177,31 +4199,155 @@ fetch('${webhookUrl}', {
           {/* ── SMS Settings ── */}
           {tab === 'settings' && (
             <div>
+              {/* Provider picker */}
               <div style={cardStyle}>
-                <div style={{fontWeight:600, marginBottom:'16px', fontSize:'15px'}}>📱 Eskiz.uz SMS Hisob</div>
-                <form onSubmit={saveSms}>
-                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'14px'}}>
-                    <div>
-                      <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Email</div>
-                      <input style={inputStyle} type="email" placeholder="eskiz@example.com"
-                        value={smsForm.eskiz_email} onChange={e=>setSmsForm({...smsForm,eskiz_email:e.target.value})} required />
-                    </div>
-                    <div>
-                      <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Parol</div>
-                      <input style={inputStyle} type="password" placeholder={smsSettings.eskiz_email ? '••••• (o\'zgartirish uchun kiriting)' : 'Parol'}
-                        value={smsForm.eskiz_password} onChange={e=>setSmsForm({...smsForm,eskiz_password:e.target.value})} />
-                    </div>
-                  </div>
-                  <div style={{display:'flex', gap:'10px'}}>
-                    <button type="submit" className="btn-primary" style={{padding:'9px 20px'}} disabled={smsSaving}>
-                      {smsSaving ? 'Saqlanmoqda...' : '💾 Saqlash'}
-                    </button>
-                    <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={testSms} disabled={smsTesting}>
-                      {smsTesting ? 'Tekshirilmoqda...' : '🔌 Ulanishni tekshirish'}
-                    </button>
-                  </div>
-                </form>
+                <div style={{fontWeight:600, marginBottom:'12px', fontSize:'15px'}}>
+                  <span className="material-symbols-outlined" style={{fontSize:'18px',verticalAlign:'middle',marginRight:'6px'}}>hub</span>
+                  SMS Provider
+                </div>
+                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+                  {[
+                    { id:'eskiz',     title:'Eskiz.uz',   sub:'Bulut xizmati, sender 4546', ic:'cloud' },
+                    { id:'smsmaster', title:'SMS Master', sub:'O\'z Android SIM orqali',   ic:'smartphone' },
+                  ].map(opt => {
+                    const active = smsForm.provider === opt.id;
+                    return (
+                      <div key={opt.id}
+                        onClick={()=>setSmsForm({...smsForm, provider: opt.id})}
+                        style={{
+                          padding:'14px', borderRadius:'10px', cursor:'pointer',
+                          background: active ? 'rgba(90,223,129,0.08)' : 'var(--bg-base)',
+                          border:`1px solid ${active ? 'var(--success)' : 'var(--outline-variant)'}`,
+                          display:'flex', alignItems:'center', gap:'12px', transition:'0.15s',
+                        }}>
+                        <span className="material-symbols-outlined" style={{fontSize:'24px', color: active ? 'var(--success)' : 'var(--text-muted)'}}>{opt.ic}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:600, fontSize:'14px'}}>{opt.title}</div>
+                          <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px'}}>{opt.sub}</div>
+                        </div>
+                        {active && <span className="material-symbols-outlined" style={{fontSize:'20px', color:'var(--success)'}}>check_circle</span>}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* Eskiz sozlamalari */}
+              {smsForm.provider === 'eskiz' && (
+                <div style={cardStyle}>
+                  <div style={{fontWeight:600, marginBottom:'16px', fontSize:'15px'}}>📱 Eskiz.uz Hisob</div>
+                  <form onSubmit={saveSms}>
+                    <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'14px'}}>
+                      <div>
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Email</div>
+                        <input style={inputStyle} type="email" placeholder="eskiz@example.com"
+                          value={smsForm.eskiz_email} onChange={e=>setSmsForm({...smsForm,eskiz_email:e.target.value})} required />
+                      </div>
+                      <div>
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Parol</div>
+                        <input style={inputStyle} type="password" placeholder={smsSettings.has_password ? '••••• (o\'zgartirish uchun kiriting)' : 'Parol'}
+                          value={smsForm.eskiz_password} onChange={e=>setSmsForm({...smsForm,eskiz_password:e.target.value})} />
+                      </div>
+                    </div>
+                    <div style={{display:'flex', gap:'10px'}}>
+                      <button type="submit" className="btn-primary" style={{padding:'9px 20px'}} disabled={smsSaving}>
+                        {smsSaving ? 'Saqlanmoqda...' : '💾 Saqlash'}
+                      </button>
+                      <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={testSms} disabled={smsTesting}>
+                        {smsTesting ? 'Tekshirilmoqda...' : '🔌 Ulanishni tekshirish'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* SMS Master sozlamalari */}
+              {smsForm.provider === 'smsmaster' && (
+                <>
+                  <div style={cardStyle}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
+                      <div style={{fontWeight:600, fontSize:'15px'}}>📲 SMS Master (smsmaster.uz)</div>
+                      {smBalance !== null && (
+                        <div style={{fontSize:'12px', padding:'4px 10px', borderRadius:'12px', background:'rgba(90,223,129,0.15)', color:'var(--success)', fontWeight:600}}>
+                          Balans: {smBalance}
+                        </div>
+                      )}
+                    </div>
+                    <form onSubmit={saveSms}>
+                      <div style={{marginBottom:'12px'}}>
+                        <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>API Kalit</div>
+                        <input style={inputStyle} type="password"
+                          placeholder={smsSettings.smsmaster_configured ? '••••• (o\'zgartirish uchun yangi kalit kiriting)' : 'smsmaster.uz → API sahifasidan oling'}
+                          value={smsForm.smsmaster_api_key}
+                          onChange={e=>setSmsForm({...smsForm, smsmaster_api_key: e.target.value})} />
+                        <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'4px'}}>
+                          <a href="https://smsmaster.uz/api.php" target="_blank" rel="noreferrer" style={{color:'var(--primary)'}}>smsmaster.uz/api.php</a> — "API Key" bo'limidan nusxa oling
+                        </div>
+                      </div>
+
+                      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'12px'}}>
+                        <div>
+                          <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Qurilma (Device) — ixt.</div>
+                          <select style={inputStyle}
+                            value={smsForm.smsmaster_devices || ''}
+                            onChange={e=>setSmsForm({...smsForm, smsmaster_devices: e.target.value})}>
+                            <option value="">— Barchasidan avtomatik —</option>
+                            {smDevices.map(d => (
+                              <option key={d.ID || d.id} value={String(d.ID || d.id)}>
+                                {(d.name || d.model || d.brand || 'Device') + (d.online === false ? ' (offline)' : '')}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={{display:'flex', alignItems:'flex-end'}}>
+                          <label style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'13px', cursor:'pointer'}}>
+                            <input type="checkbox"
+                              checked={smsForm.smsmaster_use_random !== false}
+                              onChange={e=>setSmsForm({...smsForm, smsmaster_use_random: e.target.checked})} />
+                            <span>Tasodifiy qurilma tanlash</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div style={{display:'flex', gap:'10px'}}>
+                        <button type="submit" className="btn-primary" style={{padding:'9px 20px'}} disabled={smsSaving}>
+                          {smsSaving ? 'Saqlanmoqda...' : '💾 Saqlash'}
+                        </button>
+                        <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={testSms} disabled={smsTesting}>
+                          {smsTesting ? 'Tekshirilmoqda...' : '🔌 Ulanishni tekshirish'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Webhook URL — foydalanuvchi smsmaster.uz'ga yopishtirishi uchun */}
+                  <div style={{...cardStyle, background:'rgba(59,130,246,0.06)', border:'1px solid rgba(59,130,246,0.25)'}}>
+                    <div style={{fontWeight:600, marginBottom:'10px', fontSize:'13px', display:'flex', alignItems:'center', gap:'6px'}}>
+                      <span className="material-symbols-outlined" style={{fontSize:'16px'}}>webhook</span>
+                      Kiruvchi SMS webhook URL
+                    </div>
+                    <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'8px'}}>
+                      Bu URL ni <a href="https://smsmaster.uz/api.php" target="_blank" rel="noreferrer" style={{color:'var(--primary)'}}>smsmaster.uz/api.php</a> → "Add WebHook for received messages" bo'limiga kiritib saqlang. Kirgan har SMS avtomatik mos lead chatga tushadi.
+                    </div>
+                    <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+                      <code style={{flex:1, padding:'8px 12px', background:'var(--bg-base)', borderRadius:'8px', fontSize:'11px', color:'var(--text-main)', border:'1px solid var(--outline-variant)', wordBreak:'break-all'}}>
+                        {(typeof window !== 'undefined' ? window.location.origin : 'https://mizon-crm.uz')}/api/webhook/smsmaster?company_id={authUser?.companyId ?? '<company_id>'}
+                      </code>
+                      <button type="button" className="btn-outline" style={{padding:'8px 12px', fontSize:'12px', flexShrink:0}}
+                        onClick={()=>{
+                          const url = `${window.location.origin}/api/webhook/smsmaster?company_id=${authUser?.companyId ?? ''}`;
+                          navigator.clipboard?.writeText(url).then(()=>flash('✅ Nusxalandi'));
+                        }}>
+                        <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle'}}>content_copy</span>
+                      </button>
+                    </div>
+                    <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'8px'}}>
+                      HMAC-SHA256 imzo <code style={{color:'var(--primary)'}}>X-SG-Signature</code> header'i orqali tasdiqlanadi — noto'g'ri imzoli so'rovlar rad etiladi.
+                    </div>
+                  </div>
+                </>
+              )}
+
               <div style={{...cardStyle, background:'rgba(90,223,129,0.05)', border:'1px solid rgba(90,223,129,0.2)'}}>
                 <div style={{fontWeight:600, marginBottom:'10px', fontSize:'13px'}}>📝 Shablon o'zgaruvchilari</div>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'8px'}}>

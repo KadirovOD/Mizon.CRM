@@ -1,7 +1,12 @@
 // ========== AUTOMATION CONTROLLER ==========
-// Eskiz.uz SMS + qoidalar + shablonlar + loglar
+// Eskiz.uz + SMS Master (smsmaster.uz) SMS + qoidalar + shablonlar + loglar
+//
+// Provider tanlash: automation_sms_settings.provider = 'eskiz' | 'smsmaster'
+//   - eskiz    → notify.eskiz.uz orqali (bulut, sender=4546)
+//   - smsmaster → smsmaster.uz orqali (o'z SIM'ingiz, ravonlik uchun)
 
 const https = require('https');
+const smsMaster = require('./smsMasterController');
 
 // ── Eskiz.uz token cache ──────────────────────────────────────────────────────
 const _eskizCache = new Map(); // companyId → { token, expiresAt }
@@ -64,8 +69,30 @@ function fillTemplate(text, lead, stageName = '') {
     .replace(/\{sana\}/gi,     new Date().toLocaleDateString('uz-UZ'));
 }
 
-// ── SMS yuborish ──────────────────────────────────────────────────────────────
+// ── SMS yuborish (provider tanlash) ───────────────────────────────────────────
 async function sendSms(db, companyId, phone, message) {
+  // Kompaniyaning tanlangan provider'ini olamiz
+  const cfgR = await db.query(
+    `SELECT provider, smsmaster_api_key, smsmaster_devices, smsmaster_use_random
+     FROM automation_sms_settings WHERE company_id=$1`,
+    [companyId]
+  );
+  const cfg = cfgR.rows[0] || {};
+  const provider = cfg.provider || 'eskiz';
+
+  // ── SMS Master (smsmaster.uz) ────────────────────────────────────────────
+  if (provider === 'smsmaster') {
+    if (!cfg.smsmaster_api_key) {
+      return { ok: false, error: 'SMS Master API kaliti sozlanmagan' };
+    }
+    return smsMaster.sendSms(cfg, phone, message);
+  }
+
+  // ── Eskiz.uz (default) ───────────────────────────────────────────────────
+  return _sendEskizSms(db, companyId, phone, message);
+}
+
+async function _sendEskizSms(db, companyId, phone, message) {
   const token = await getEskizToken(db, companyId);
   if (!token) return { ok: false, error: 'Eskiz token olishda xato (login/parol tekshiring)' };
 
@@ -182,29 +209,80 @@ exports.runTrigger = async (db, triggerType, lead, extra = {}) => {
 
 // GET /api/automation/sms-settings
 exports.getSmsSettings = async (req, res) => {
-  if (!req.db) return res.json({ eskiz_email: '', hasPassword: false });
+  if (!req.db) return res.json({ provider:'eskiz', eskiz_email: '', hasPassword: false, smsmaster_configured: false });
   const cid = req.user?.companyId;
   try {
     const r = await req.db.query(
-      "SELECT eskiz_email, (eskiz_password IS NOT NULL AND eskiz_password <> '') AS has_password FROM automation_sms_settings WHERE company_id=$1",
+      `SELECT
+         COALESCE(provider,'eskiz') AS provider,
+         eskiz_email,
+         (eskiz_password IS NOT NULL AND eskiz_password <> '') AS has_password,
+         (smsmaster_api_key IS NOT NULL AND smsmaster_api_key <> '') AS smsmaster_configured,
+         smsmaster_devices,
+         COALESCE(smsmaster_use_random, true) AS smsmaster_use_random
+       FROM automation_sms_settings WHERE company_id=$1`,
       [cid]
     );
-    res.json(r.rows[0] || { eskiz_email: '', has_password: false });
+    res.json(r.rows[0] || {
+      provider:'eskiz', eskiz_email: '', has_password: false,
+      smsmaster_configured: false, smsmaster_devices: '', smsmaster_use_random: true
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 };
 
 // POST /api/automation/sms-settings
+// Body: { provider, eskiz_email, eskiz_password, smsmaster_api_key, smsmaster_devices, smsmaster_use_random }
 exports.saveSmsSettings = async (req, res) => {
   if (!req.db) return res.status(503).json({ error: 'DB not configured' });
   const cid = req.user?.companyId;
-  const { eskiz_email, eskiz_password } = req.body;
-  if (!eskiz_email || !eskiz_password) return res.status(400).json({ error: 'Email va parol majburiy' });
+  const {
+    provider,
+    eskiz_email, eskiz_password,
+    smsmaster_api_key, smsmaster_devices, smsmaster_use_random,
+  } = req.body || {};
+
+  const chosen = (provider === 'smsmaster') ? 'smsmaster' : 'eskiz';
+
+  // Validatsiya — tanlangan provider uchun minimal maydonlar
+  if (chosen === 'eskiz') {
+    if (!eskiz_email) return res.status(400).json({ error: 'Eskiz email majburiy' });
+    // parol yangi kelmasa — eski qoladi
+  } else {
+    // smsmaster
+    if (!smsmaster_api_key) {
+      // Mavjud kalit borligini tekshiramiz — bo'sh yubormasin
+      const cur = await req.db.query('SELECT smsmaster_api_key FROM automation_sms_settings WHERE company_id=$1', [cid]);
+      if (!cur.rows[0]?.smsmaster_api_key) {
+        return res.status(400).json({ error: 'SMS Master API kaliti majburiy' });
+      }
+    }
+  }
+
   try {
+    // Upsert — faqat berilgan maydonlarni yangilaymiz
+    // COALESCE bilan: bo'sh kelgan maydonlar eski qiymatni saqlaydi
     await req.db.query(
-      `INSERT INTO automation_sms_settings (company_id, eskiz_email, eskiz_password)
-       VALUES ($1,$2,$3)
-       ON CONFLICT (company_id) DO UPDATE SET eskiz_email=$2, eskiz_password=$3`,
-      [cid, eskiz_email, eskiz_password]
+      `INSERT INTO automation_sms_settings (
+         company_id, provider,
+         eskiz_email, eskiz_password,
+         smsmaster_api_key, smsmaster_devices, smsmaster_use_random
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (company_id) DO UPDATE SET
+         provider              = EXCLUDED.provider,
+         eskiz_email           = COALESCE(NULLIF(EXCLUDED.eskiz_email,''), automation_sms_settings.eskiz_email),
+         eskiz_password        = COALESCE(NULLIF(EXCLUDED.eskiz_password,''), automation_sms_settings.eskiz_password),
+         smsmaster_api_key     = COALESCE(NULLIF(EXCLUDED.smsmaster_api_key,''), automation_sms_settings.smsmaster_api_key),
+         smsmaster_devices     = EXCLUDED.smsmaster_devices,
+         smsmaster_use_random  = EXCLUDED.smsmaster_use_random,
+         updated_at            = NOW()`,
+      [
+        cid, chosen,
+        eskiz_email || '', eskiz_password || '',
+        smsmaster_api_key || '',
+        smsmaster_devices || null,
+        smsmaster_use_random !== false,
+      ]
     );
     _eskizCache.delete(cid); // token cache ni tozalash
     res.json({ success: true });
@@ -212,10 +290,29 @@ exports.saveSmsSettings = async (req, res) => {
 };
 
 // POST /api/automation/sms-settings/test
+// Tanlangan provider uchun ulanishni tekshiradi
 exports.testSmsSettings = async (req, res) => {
   if (!req.db) return res.status(503).json({ error: 'DB not configured' });
   const cid = req.user?.companyId;
   try {
+    const r = await req.db.query(
+      'SELECT provider, smsmaster_api_key FROM automation_sms_settings WHERE company_id=$1',
+      [cid]
+    );
+    const cfg = r.rows[0] || {};
+    const provider = cfg.provider || 'eskiz';
+
+    if (provider === 'smsmaster') {
+      if (!cfg.smsmaster_api_key) return res.status(400).json({ success: false, error: 'SMS Master API kalit sozlanmagan' });
+      try {
+        const balance = await smsMaster.getBalance(cfg.smsmaster_api_key);
+        return res.json({ success: true, message: `SMS Master ulanish OK. Balans: ${balance}` });
+      } catch (e) {
+        return res.status(400).json({ success: false, error: 'SMS Master: ' + e.message });
+      }
+    }
+
+    // Eskiz
     _eskizCache.delete(cid);
     const token = await getEskizToken(req.db, cid);
     if (token) res.json({ success: true, message: 'Eskiz.uz ga muvaffaqiyatli ulandi!' });

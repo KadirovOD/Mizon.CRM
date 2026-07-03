@@ -391,6 +391,17 @@ async function initDb() {
         END IF;
       END $do$;
       ALTER TABLE automation_rules       ADD COLUMN IF NOT EXISTS action_type VARCHAR(20) DEFAULT 'sms';
+      -- SMS Master (smsmaster.uz / RBSoft Gateway) provider — Eskiz bilan yonma-yon
+      ALTER TABLE automation_sms_settings ADD COLUMN IF NOT EXISTS provider           VARCHAR(20) DEFAULT 'eskiz';
+      ALTER TABLE automation_sms_settings ADD COLUMN IF NOT EXISTS smsmaster_api_key  TEXT;
+      ALTER TABLE automation_sms_settings ADD COLUMN IF NOT EXISTS smsmaster_devices  TEXT;
+      ALTER TABLE automation_sms_settings ADD COLUMN IF NOT EXISTS smsmaster_use_random BOOLEAN DEFAULT true;
+      -- Kiruvchi SMS Master xabarlari uchun idempotency (webhook qayta-qayta kelishi mumkin)
+      CREATE TABLE IF NOT EXISTS sms_master_events (
+        sms_id     VARCHAR(120) PRIMARY KEY,
+        company_id INT,
+        received_at TIMESTAMP DEFAULT NOW()
+      );
       ALTER TABLE crm_users              ADD COLUMN IF NOT EXISTS email       VARCHAR(255);
       ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_won       BOOLEAN DEFAULT false;
       ALTER TABLE crm_stage              ADD COLUMN IF NOT EXISTS is_lost      BOOLEAN DEFAULT false;
@@ -559,6 +570,7 @@ const superAdminController = require('./controllers/superAdminController');
 const companyController    = require('./controllers/companyController');
 const oauthController      = require('./controllers/oauthController');
 const automationCtrl       = require('./controllers/automationController');
+const smsMasterCtrl        = require('./controllers/smsMasterController');
 const billingController    = require('./controllers/billingController');
 const metaCapiController   = require('./controllers/metaCapiController');
 
@@ -748,6 +760,17 @@ app.get   ('/api/calls/recent',               voipController.getRecentEvents);
 app.get   ('/api/automation/sms-settings',       automationCtrl.getSmsSettings);
 app.post  ('/api/automation/sms-settings',       automationCtrl.saveSmsSettings);
 app.post  ('/api/automation/sms-settings/test',  automationCtrl.testSmsSettings);
+
+// ── SMS Master (smsmaster.uz) ────────────────────────────────────────────────
+app.get ('/api/sms-master/balance',  smsMasterCtrl.getBalance);
+app.get ('/api/sms-master/devices',  smsMasterCtrl.getDevices);
+app.post('/api/sms-master/test',     smsMasterCtrl.testSend);
+// Kiruvchi SMS webhook — SMS Master form-urlencoded jo'natadi (JSON emas).
+// Auth: HMAC-SHA256 X-SG-Signature header ichida verify qilinadi.
+app.post('/api/webhook/smsmaster',
+  express.urlencoded({ extended: true, limit: '2mb' }),
+  smsMasterCtrl.handleWebhook
+);
 app.get   ('/api/automation/templates',          automationCtrl.getTemplates);
 app.post  ('/api/automation/templates',          automationCtrl.createTemplate);
 app.put   ('/api/automation/templates/:id',      automationCtrl.updateTemplate);
