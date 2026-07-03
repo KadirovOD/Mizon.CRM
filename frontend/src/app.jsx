@@ -4072,6 +4072,12 @@ fetch('${webhookUrl}', {
       const [ruleModal,    setRuleModal]    = useState(null);
       const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
 
+      // companyId — sessiyadan (bu komponentda authUser prop yo'q)
+      const _companyId = (() => {
+        try { return JSON.parse(localStorage.getItem('mizon_session')||'null')?.companyId ?? ''; }
+        catch { return ''; }
+      })();
+
       const H = () => ({ ...getAuthHeaders(), 'Content-Type': 'application/json' });
       const api = async (method, path, body) => {
         const r = await fetch(path, { method, headers: H(), body: body ? JSON.stringify(body) : undefined });
@@ -4331,11 +4337,11 @@ fetch('${webhookUrl}', {
                     </div>
                     <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
                       <code style={{flex:1, padding:'8px 12px', background:'var(--bg-base)', borderRadius:'8px', fontSize:'11px', color:'var(--text-main)', border:'1px solid var(--outline-variant)', wordBreak:'break-all'}}>
-                        {(typeof window !== 'undefined' ? window.location.origin : 'https://mizon-crm.uz')}/api/webhook/smsmaster?company_id={authUser?.companyId ?? '<company_id>'}
+                        {(typeof window !== 'undefined' ? window.location.origin : 'https://mizon-crm.uz')}/api/webhook/smsmaster?company_id={_companyId || '<company_id>'}
                       </code>
                       <button type="button" className="btn-outline" style={{padding:'8px 12px', fontSize:'12px', flexShrink:0}}
                         onClick={()=>{
-                          const url = `${window.location.origin}/api/webhook/smsmaster?company_id=${authUser?.companyId ?? ''}`;
+                          const url = `${window.location.origin}/api/webhook/smsmaster?company_id=${_companyId || ''}`;
                           navigator.clipboard?.writeText(url).then(()=>flash('✅ Nusxalandi'));
                         }}>
                         <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle'}}>content_copy</span>
