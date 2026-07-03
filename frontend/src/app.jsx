@@ -4048,8 +4048,8 @@ fetch('${webhookUrl}', {
         { value: 'ig_dm',         label: 'Instagram DM kelganda' },
       ];
       const ACTION_TYPES = [
-        { value: 'sms',      label: '📱 SMS yuborish (Eskiz / SMS Master)' },
-        { value: 'ig_reply', label: '📸 Instagram javob yuborish' },
+        { value: 'sms',      label: 'SMS yuborish (Eskiz / SMS Master)' },
+        { value: 'ig_reply', label: 'Instagram javob yuborish' },
       ];
 
       const [tab,          setTab]          = useState('settings'); // settings | templates | rules | logs
@@ -4179,6 +4179,18 @@ fetch('${webhookUrl}', {
         border: 'none'
       });
       const inputStyle = { width:'100%', padding:'9px 12px', borderRadius:'8px', border:'1px solid var(--outline-variant)', background:'var(--bg-base)', color:'var(--text-main)', fontSize:'13px', boxSizing:'border-box' };
+      // Flat select — brauzerning yaltiroq chrome'isiz (appearance:none + o'z chevron)
+      const selectStyle = {
+        ...inputStyle,
+        appearance:'none', WebkitAppearance:'none', MozAppearance:'none',
+        paddingRight:'34px', cursor:'pointer',
+        backgroundImage:'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'8\' viewBox=\'0 0 12 8\' fill=\'none\'%3E%3Cpath d=\'M1 1l5 5 5-5\' stroke=\'%238a8f98\' stroke-width=\'1.6\' stroke-linecap=\'round\' stroke-linejoin=\'round\'/%3E%3C/svg%3E")',
+        backgroundRepeat:'no-repeat', backgroundPosition:'right 12px center',
+      };
+      // Sarlavha ichida ishlatiladigan Material Symbols ikonka
+      const HIcon = ({ name, size=18 }) => (
+        <span className="material-symbols-outlined" style={{fontSize:size+'px', verticalAlign:'middle', marginRight:'6px'}}>{name}</span>
+      );
 
       return (
         <div style={{padding:'24px', maxWidth:'900px'}}>
@@ -4241,7 +4253,7 @@ fetch('${webhookUrl}', {
               {/* Eskiz sozlamalari */}
               {smsForm.provider === 'eskiz' && (
                 <div style={cardStyle}>
-                  <div style={{fontWeight:600, marginBottom:'16px', fontSize:'15px'}}>📱 Eskiz.uz Hisob</div>
+                  <div style={{fontWeight:600, marginBottom:'16px', fontSize:'15px'}}><HIcon name="cloud" />Eskiz.uz Hisob</div>
                   <form onSubmit={saveSms}>
                     <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'14px'}}>
                       <div>
@@ -4257,10 +4269,10 @@ fetch('${webhookUrl}', {
                     </div>
                     <div style={{display:'flex', gap:'10px'}}>
                       <button type="submit" className="btn-primary" style={{padding:'9px 20px'}} disabled={smsSaving}>
-                        {smsSaving ? 'Saqlanmoqda...' : '💾 Saqlash'}
+                        {smsSaving ? 'Saqlanmoqda...' : (<><span className="material-symbols-outlined" style={{fontSize:'16px',verticalAlign:'middle',marginRight:'5px'}}>save</span>Saqlash</>)}
                       </button>
                       <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={testSms} disabled={smsTesting}>
-                        {smsTesting ? 'Tekshirilmoqda...' : '🔌 Ulanishni tekshirish'}
+                        {smsTesting ? 'Tekshirilmoqda...' : (<><span className="material-symbols-outlined" style={{fontSize:'16px',verticalAlign:'middle',marginRight:'5px'}}>power</span>Ulanishni tekshirish</>)}
                       </button>
                     </div>
                   </form>
@@ -4272,7 +4284,7 @@ fetch('${webhookUrl}', {
                 <>
                   <div style={cardStyle}>
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
-                      <div style={{fontWeight:600, fontSize:'15px'}}>📲 SMS Master (smsmaster.uz)</div>
+                      <div style={{fontWeight:600, fontSize:'15px'}}><HIcon name="smartphone" />SMS Master (smsmaster.uz)</div>
                       {smBalance !== null && (
                         <div style={{fontSize:'12px', padding:'4px 10px', borderRadius:'12px', background:'rgba(90,223,129,0.15)', color:'var(--success)', fontWeight:600}}>
                           Balans: {smBalance}
@@ -4294,7 +4306,7 @@ fetch('${webhookUrl}', {
                       <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'12px'}}>
                         <div>
                           <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'5px'}}>Qurilma (Device) — ixt.</div>
-                          <select style={inputStyle}
+                          <select style={selectStyle}
                             value={smsForm.smsmaster_devices || ''}
                             onChange={e=>setSmsForm({...smsForm, smsmaster_devices: e.target.value})}>
                             <option value="">— Barchasidan avtomatik —</option>
@@ -4317,10 +4329,10 @@ fetch('${webhookUrl}', {
 
                       <div style={{display:'flex', gap:'10px'}}>
                         <button type="submit" className="btn-primary" style={{padding:'9px 20px'}} disabled={smsSaving}>
-                          {smsSaving ? 'Saqlanmoqda...' : '💾 Saqlash'}
+                          {smsSaving ? 'Saqlanmoqda...' : (<><span className="material-symbols-outlined" style={{fontSize:'16px',verticalAlign:'middle',marginRight:'5px'}}>save</span>Saqlash</>)}
                         </button>
                         <button type="button" className="btn-outline" style={{padding:'9px 20px'}} onClick={testSms} disabled={smsTesting}>
-                          {smsTesting ? 'Tekshirilmoqda...' : '🔌 Ulanishni tekshirish'}
+                          {smsTesting ? 'Tekshirilmoqda...' : (<><span className="material-symbols-outlined" style={{fontSize:'16px',verticalAlign:'middle',marginRight:'5px'}}>power</span>Ulanishni tekshirish</>)}
                         </button>
                       </div>
                     </form>
@@ -4355,7 +4367,7 @@ fetch('${webhookUrl}', {
               )}
 
               <div style={{...cardStyle, background:'rgba(90,223,129,0.05)', border:'1px solid rgba(90,223,129,0.2)'}}>
-                <div style={{fontWeight:600, marginBottom:'10px', fontSize:'13px'}}>📝 Shablon o'zgaruvchilari</div>
+                <div style={{fontWeight:600, marginBottom:'10px', fontSize:'13px'}}><HIcon name="data_object" size={15} />Shablon o'zgaruvchilari</div>
                 <div style={{display:'flex', flexWrap:'wrap', gap:'8px'}}>
                   {VARS.map(v => (
                     <code key={v} style={{background:'var(--surface-variant)', padding:'4px 10px', borderRadius:'6px', fontSize:'12px', color:'var(--primary)'}}>{v}</code>
@@ -4531,20 +4543,20 @@ fetch('${webhookUrl}', {
                   </div>
                   <div style={{marginBottom:'12px'}}>
                     <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Trigger (qachon ishlaydi)</div>
-                    <select style={inputStyle} value={ruleModal.trigger_type} onChange={e=>setRuleModal({...ruleModal,trigger_type:e.target.value})}>
+                    <select style={selectStyle} value={ruleModal.trigger_type} onChange={e=>setRuleModal({...ruleModal,trigger_type:e.target.value})}>
                       {TRIGGERS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
                   <div style={{marginBottom:'12px'}}>
                     <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Amal (nima qiladi)</div>
-                    <select style={inputStyle} value={ruleModal.action_type||'sms'} onChange={e=>setRuleModal({...ruleModal,action_type:e.target.value})}>
+                    <select style={selectStyle} value={ruleModal.action_type||'sms'} onChange={e=>setRuleModal({...ruleModal,action_type:e.target.value})}>
                       {ACTION_TYPES.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
                     </select>
                   </div>
                   {ruleModal.trigger_type === 'stage_changed' && (
                     <div style={{marginBottom:'12px'}}>
                       <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>Bosqich filtri (ixtiyoriy)</div>
-                      <select style={inputStyle} value={ruleModal.stage_filter||''} onChange={e=>setRuleModal({...ruleModal,stage_filter:e.target.value})}>
+                      <select style={selectStyle} value={ruleModal.stage_filter||''} onChange={e=>setRuleModal({...ruleModal,stage_filter:e.target.value})}>
                         <option value="">Barcha bosqichlar</option>
                         {stages.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
@@ -4552,7 +4564,7 @@ fetch('${webhookUrl}', {
                   )}
                   <div style={{marginBottom:'16px'}}>
                     <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'5px'}}>SMS Shablon</div>
-                    <select style={inputStyle} value={ruleModal.template_id} onChange={e=>setRuleModal({...ruleModal,template_id:e.target.value})} required>
+                    <select style={selectStyle} value={ruleModal.template_id} onChange={e=>setRuleModal({...ruleModal,template_id:e.target.value})} required>
                       <option value="">— Shablon tanlang —</option>
                       {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
