@@ -940,7 +940,7 @@
       const DEFAULT_FM = {full_name:'name', email:'email', phone_number:'phone', city:'region', company_name:'company', comments:'note'};
 
       const ALL_INTG = [
-        { key:'telegram',  name:'Telegram Bot', logo:'✈️', color:'#0088cc', bg:'rgba(0,136,204,0.12)',
+        { key:'telegram',  name:'Telegram Bot', logo:'send', color:'#0088cc', bg:'rgba(0,136,204,0.12)',
           desc:'Bot orqali leadlarni avtomatik qabul qiling va mijozlarga xabar yuboring',
           fields:[
             {k:'bot_token', label:'Bot Token — @BotFather dan /newbot buyrug\'i orqali oling', ph:'7123456789:AAFxyz...', t:'text'},
@@ -948,7 +948,7 @@
           ],
           wh:{label:'Webhook — saqlash tugmasini bossangiz avtomatik ro\'yxatdan o\'tkaziladi', url:`${origin}/api/webhook/telegram`} },
 
-        { key:'instagram', name:'Instagram', logo:'📸', color:'#E4405F', bg:'rgba(228,64,95,0.12)',
+        { key:'instagram', name:'Instagram', logo:'photo_camera', color:'#E4405F', bg:'rgba(228,64,95,0.12)',
           desc:'Instagram Direct xabarlardan avtomatik lead yaratish — maydon moslash shart emas',
           igNote:true,
           fields:[
@@ -958,7 +958,7 @@
           wh:{label:'Webhook URL — Meta Developer Dashboard → Webhooks ga kiriting', url:`${origin}/api/webhook/meta`},
           verifyToken:'mizon_meta_webhook_v1' },
 
-        { key:'facebook', name:'Facebook Ads', logo:'👥', color:'#1877F2', bg:'rgba(24,119,242,0.12)',
+        { key:'facebook', name:'Facebook Ads', logo:'groups', color:'#1877F2', bg:'rgba(24,119,242,0.12)',
           desc:'Lead Ads formalarini real-time CRM ga yuklash — maydon moslash bilan',
           showMapping:true,
           fields:[
@@ -969,21 +969,21 @@
           wh:{label:'Webhook URL — Meta Developer Dashboard → Webhooks → leadgen ga kiriting', url:`${origin}/api/webhook/meta`},
           verifyToken:'mizon_meta_webhook_v1' },
 
-        { key:'webhook', name:'Custom Webhook', logo:'🔗', color:'#6366f1', bg:'rgba(99,102,241,0.12)',
+        { key:'webhook', name:'Custom Webhook', logo:'webhook', color:'#6366f1', bg:'rgba(99,102,241,0.12)',
           desc:'Istalgan sayt yoki tizimdan POST so\'rov orqali lead yuborish imkoniyati',
           customUI: true },                  // V57: interactive WebhookFlow komponent ishlatiladi
 
-        { key:'voip', name:'Moizvonki VoIP', logo:'📞', color:'#01a750', bg:'rgba(1,167,80,0.12)',
+        { key:'voip', name:'Moizvonki VoIP', logo:'call', color:'#01a750', bg:'rgba(1,167,80,0.12)',
           desc:'Mobil ilova orqali qo\'ng\'iroqlar avtomatik CRM ga yoziladi (kiruvchi + chiquvchi + yozuv)',
           intro:{
             title:'Moizvonki qanday ishlaydi?',
             steps:[
-              '1️⃣  Xodim smartfoniga Moizvonki ilovasini o\'rnatadi va o\'z hisobiga kiradi.',
-              '2️⃣  Mijoz qo\'ng\'iroq qilganda yoki xodim qo\'ng\'iroq qilganda — ilova qo\'ng\'iroqni qayd etib, Moizvonki serveriga yuboradi.',
-              '3️⃣  Sozlamani saqlaganingizda CRM o\'zi Moizvonki API ga "webhook.subscribe" so\'rovini yuboradi — kabinetda hech narsani qo\'lda kiritish shart emas. Moizvonki shundan keyin har bir hodisani CRM ga uzatadi.',
-              '4️⃣  CRM dan "Qo\'ng\'iroq qilish" tugmasi bosilsa — Moizvonki avval xodim telefonini, keyin mijozni jiringlatadi (click-to-call).',
+              'Xodim smartfoniga Moizvonki ilovasini o\'rnatadi va o\'z hisobiga kiradi.',
+              'Mijoz qo\'ng\'iroq qilganda yoki xodim qo\'ng\'iroq qilganda — ilova qo\'ng\'iroqni qayd etib, Moizvonki serveriga yuboradi.',
+              'Sozlamani saqlaganingizda CRM o\'zi Moizvonki API ga "webhook.subscribe" so\'rovini yuboradi — kabinetda hech narsani qo\'lda kiritish shart emas. Moizvonki shundan keyin har bir hodisani CRM ga uzatadi.',
+              'CRM dan "Qo\'ng\'iroq qilish" tugmasi bosilsa — Moizvonki avval xodim telefonini, keyin mijozni jiringlatadi (click-to-call).',
             ],
-            note:'⚠️  Moizvonki — bu SIP/VoIP-trunk emas, balki mobil ilova asosli xizmat. "Operator telefoni" — bu xodim smartfonining raqami (Moizvonki ilovasi o\'rnatilgan), tashqi telefoniya raqami emas. Kabinetda webhook URL kiritish maydoni umuman yo\'q — webhook\'lar faqat API orqali ro\'yxatdan o\'tkaziladi (CRM buni avtomatik qiladi).',
+            note:'Moizvonki — bu SIP/VoIP-trunk emas, balki mobil ilova asosli xizmat. "Operator telefoni" — bu xodim smartfonining raqami (Moizvonki ilovasi o\'rnatilgan), tashqi telefoniya raqami emas. Kabinetda webhook URL kiritish maydoni umuman yo\'q — webhook\'lar faqat API orqali ro\'yxatdan o\'tkaziladi (CRM buni avtomatik qiladi).',
           },
           fields:[
             {k:'subdomain',  label:'Subdomain — kompaniya prefiksi (https://___.moizvonki.ru)', ph:'mycompany', t:'text',
@@ -1000,11 +1000,11 @@
           wh:{label:'ℹ️  CRM Moizvonki ga shu URL ni avtomatik ro\'yxatdan o\'tkazadi (qo\'lda kiritish shart emas)',
               url:`${origin}/api/webhook/moizvonki${(()=>{ try { const s = JSON.parse(localStorage.getItem('mizon_session')||'null'); return s?.companyId ? '?company_id='+s.companyId : ''; } catch { return ''; } })()}`} },
 
-        { key:'google_sheets', name:'Google Sheets', logo:'📊', color:'#0f9d58', bg:'rgba(15,157,88,0.12)',
+        { key:'google_sheets', name:'Google Sheets', logo:'table_chart', color:'#0f9d58', bg:'rgba(15,157,88,0.12)',
           desc:'Facebook Lead Ads → Google Sheets → CRM: Apps Script orqali avtomatik sinxronizatsiya',
           customUI: true },
 
-        { key:'meta_capi', name:'Meta Conversions API', logo:'📈', color:'#1877F2', bg:'rgba(24,119,242,0.12)',
+        { key:'meta_capi', name:'Meta Conversions API', logo:'trending_up', color:'#1877F2', bg:'rgba(24,119,242,0.12)',
           desc:'Server-tomondan Meta\'ga konversiya eventlari (Lead/Purchase) yuborish — App Review kerak emas',
           customUI: true },
       ];
@@ -1022,7 +1022,7 @@
             onMouseEnter={e=>{e.currentTarget.style.borderColor=intg.color+'90'; e.currentTarget.style.boxShadow=`0 4px 18px ${intg.color}25`;}}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=isOn?intg.color+'50':'var(--outline-variant)'; e.currentTarget.style.boxShadow='none';}}>
             {isOn && <div style={{position:'absolute',top:'12px',right:'12px',width:'8px',height:'8px',borderRadius:'50%',background:'#01a750',boxShadow:'0 0 0 3px rgba(1,167,80,0.2)'}}></div>}
-            <div style={{width:'46px',height:'46px',background:intg.bg,borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',marginBottom:'12px'}}>{intg.logo}</div>
+            <div style={{width:'46px',height:'46px',background:intg.bg,borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'12px'}}><span className="material-symbols-outlined" style={{fontSize:'24px',color:intg.color}}>{intg.logo}</span></div>
             <div style={{fontWeight:700,fontSize:'14px',marginBottom:'5px'}}>{intg.name}</div>
             <div style={{fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.55',marginBottom:'14px',minHeight:'36px'}}>{intg.desc}</div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -1068,7 +1068,7 @@
                   const cfg = configs[intg.key];
                   return (
                     <div key={intg.key} style={{background:'var(--bg-surface)',border:`1px solid ${intg.color}40`,borderLeft:`3px solid ${intg.color}`,borderRadius:'10px',padding:'13px 18px',display:'flex',alignItems:'center',gap:'14px',flexWrap:'wrap'}}>
-                      <div style={{width:'38px',height:'38px',background:intg.bg,borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'19px',flexShrink:0}}>{intg.logo}</div>
+                      <div style={{width:'38px',height:'38px',background:intg.bg,borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span className="material-symbols-outlined" style={{fontSize:'20px',color:intg.color}}>{intg.logo}</span></div>
                       <div style={{flex:1,minWidth:'140px'}}>
                         <div style={{fontWeight:700,fontSize:'13px',display:'flex',alignItems:'center',gap:'7px'}}>
                           {intg.name}
@@ -1082,13 +1082,13 @@
                       {intg.wh && (
                         <div style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'6px',padding:'4px 10px',flexShrink:0}}>
                           <code style={{fontSize:'10px',color:'var(--text-muted)',maxWidth:'180px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{intg.wh.url}</code>
-                          <button onClick={e=>{e.stopPropagation();copyText(intg.wh.url,intg.key+'_wh');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:'11px',padding:'0 2px',color:copiedItem===intg.key+'_wh'?'#01a750':'var(--text-muted)',fontWeight:700}}>
-                            {copiedItem===intg.key+'_wh'?'✓':'📋'}
+                          <button onClick={e=>{e.stopPropagation();copyText(intg.wh.url,intg.key+'_wh');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:'11px',padding:'0 2px',color:copiedItem===intg.key+'_wh'?'#01a750':'var(--text-muted)',fontWeight:700,display:'inline-flex',alignItems:'center'}}>
+                            {copiedItem===intg.key+'_wh'?'✓':<span className="material-symbols-outlined" style={{fontSize:'16px'}}>content_copy</span>}
                           </button>
                         </div>
                       )}
                       <div style={{display:'flex',gap:'7px'}}>
-                        <button className="btn-outline" style={{padding:'5px 13px',fontSize:'12px'}} onClick={()=>openModal(intg)}>✏️ Tahrirlash</button>
+                        <button className="btn-outline" style={{padding:'5px 13px',fontSize:'12px',display:'inline-flex',alignItems:'center',gap:'4px'}} onClick={()=>openModal(intg)}><span className="material-symbols-outlined" style={{fontSize:'15px'}}>edit</span>Tahrirlash</button>
                         <button style={{padding:'5px 11px',fontSize:'12px',background:'none',border:'1px solid rgba(239,68,68,0.3)',color:'#ef4444',borderRadius:'7px',cursor:'pointer'}} onClick={()=>disconnectIntg(intg.key)}>Uzish</button>
                       </div>
                     </div>
@@ -1107,7 +1107,7 @@
             <div onClick={()=>setActiveModal('apikeys')} style={{background:'var(--bg-surface)',border:'1px solid var(--outline-variant)',borderRadius:'13px',padding:'18px',cursor:'pointer',transition:'border-color 0.18s,box-shadow 0.18s'}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(245,158,11,0.6)';e.currentTarget.style.boxShadow='0 4px 18px rgba(245,158,11,0.15)';}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.boxShadow='none';}}>
-              <div style={{width:'46px',height:'46px',background:'rgba(245,158,11,0.12)',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',marginBottom:'12px'}}>🔑</div>
+              <div style={{width:'46px',height:'46px',background:'rgba(245,158,11,0.12)',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'12px'}}><span className="material-symbols-outlined" style={{fontSize:'24px',color:'#f59e0b'}}>key</span></div>
               <div style={{fontWeight:700,fontSize:'14px',marginBottom:'5px'}}>API Kalitlar</div>
               <div style={{fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.55',marginBottom:'14px',minHeight:'36px'}}>Sayt, 1C va tashqi dasturlar uchun xavfsiz kirish kalitlari</div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -1122,7 +1122,7 @@
             <div onClick={()=>setActiveModal('webformlink')} style={{background:'var(--bg-surface)',border:'1px solid var(--outline-variant)',borderRadius:'13px',padding:'18px',cursor:'pointer',transition:'border-color 0.18s,box-shadow 0.18s'}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(139,92,246,0.6)';e.currentTarget.style.boxShadow='0 4px 18px rgba(139,92,246,0.15)';}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.boxShadow='none';}}>
-              <div style={{width:'46px',height:'46px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',marginBottom:'12px'}}>🔗</div>
+              <div style={{width:'46px',height:'46px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'12px'}}><span className="material-symbols-outlined" style={{fontSize:'24px',color:'#8b5cf6'}}>link</span></div>
               <div style={{fontWeight:700,fontSize:'14px',marginBottom:'5px'}}>Tashqi Havola</div>
               <div style={{fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.55',marginBottom:'14px',minHeight:'36px'}}>Mijozlar to'ldirishi uchun tashqi ro'yxatdan o'tish havolasini yarating</div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -1215,7 +1215,7 @@
                           <div key={p.id||i} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 13px',background:'rgba(24,119,242,0.07)',border:'1px solid rgba(24,119,242,0.25)',borderRadius:'8px',marginBottom:'6px'}}>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:600,fontSize:'13px'}}>{p.page_name||p.page_id}</div>
-                              {p.form_name&&<div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}>📋 {p.form_name}</div>}
+                              {p.form_name&&<div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>description</span>{p.form_name}</div>}
                               {p._connected_at&&<div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{new Date(p._connected_at).toLocaleDateString()}</div>}
                             </div>
                             <span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:'rgba(1,167,80,0.12)',color:'#01a750',border:'1px solid rgba(1,167,80,0.3)'}}>● Faol</span>
@@ -1229,18 +1229,18 @@
                       <div style={{fontSize:'10px',fontWeight:700,color:'#1877F2',marginBottom:'5px',textTransform:'uppercase'}}>Webhook URL — Meta Developer → Webhooks → leadgen</div>
                       <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                         <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{origin}/api/webhook/meta</code>
-                        <button onClick={()=>copyText(origin+'/api/webhook/meta','fb_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='fb_wh'?'#01a750':'#1877F2',color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                          {copiedItem==='fb_wh'?'✓':'📋 Nusxa'}
+                        <button onClick={()=>copyText(origin+'/api/webhook/meta','fb_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='fb_wh'?'#01a750':'#1877F2',color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,display:'inline-flex',alignItems:'center'}}>
+                          {copiedItem==='fb_wh'?'✓':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Nusxa</>}
                         </button>
                       </div>
                     </div>
                     <div style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'9px 13px',marginBottom:'14px',display:'flex',alignItems:'center',gap:'10px'}}>
                       <span style={{fontSize:'10px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase'}}>Verify Token:</span>
                       <code style={{flex:1,fontSize:'12px',color:'var(--primary)',fontWeight:600}}>mizon_meta_webhook_v1</code>
-                      <button onClick={()=>copyText('mizon_meta_webhook_v1','fbvt')} style={{padding:'2px 8px',fontSize:'10px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'4px',cursor:'pointer',color:copiedItem==='fbvt'?'#01a750':'var(--text-muted)',fontWeight:700}}>{copiedItem==='fbvt'?'✓':'📋'}</button>
+                      <button onClick={()=>copyText('mizon_meta_webhook_v1','fbvt')} style={{padding:'2px 8px',fontSize:'10px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'4px',cursor:'pointer',color:copiedItem==='fbvt'?'#01a750':'var(--text-muted)',fontWeight:700,display:'inline-flex',alignItems:'center'}}>{copiedItem==='fbvt'?'✓':<span className="material-symbols-outlined" style={{fontSize:'14px'}}>content_copy</span>}</button>
                     </div>
                     <button onClick={startFbOAuth} style={{width:'100%',padding:'14px',background:'#1877F2',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',marginBottom:'8px'}}>
-                      <span style={{fontSize:'18px'}}>👥</span> Facebook bilan kirish
+                      <span className="material-symbols-outlined" style={{fontSize:'18px'}}>groups</span> Facebook bilan kirish
                     </button>
                     <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',lineHeight:'1.5'}}>
                       Tugma bosilsa Facebook login oynasi ochiladi. Sahifangizga admin ekanligingizni tasdiqlang.
@@ -1250,7 +1250,7 @@
                   {/* Step 1: Waiting */}
                   {fbStep === 1 && (
                     <div style={{textAlign:'center',padding:'36px 20px'}}>
-                      <div style={{fontSize:'36px',marginBottom:'14px',animation:'spin 1s linear infinite',display:'inline-block'}}>⏳</div>
+                      <div style={{marginBottom:'14px',animation:'spin 1s linear infinite',display:'inline-block'}}><span className="material-symbols-outlined" style={{fontSize:'36px',color:'#1877F2'}}>progress_activity</span></div>
                       <div style={{fontWeight:700,fontSize:'15px',marginBottom:'6px'}}>Facebook oynasi ochiq...</div>
                       <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'20px'}}>Yangi oynada Facebook ga kiring va ruxsat bering</div>
                       <button className="btn-outline" onClick={()=>setFbStep(0)}>← Bekor qilish</button>
@@ -1263,13 +1263,13 @@
                       <span style={{background:'#1877F2',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>2</span>
                       Qaysi sahifani ulash?
                     </div>
-                    {fbPages.length === 0 && <div style={{padding:'20px',textAlign:'center',color:'var(--text-muted)',fontSize:'13px'}}>⚠️ Sahifalar topilmadi. Sahifangizning admin ekanligingizni tekshiring.</div>}
+                    {fbPages.length === 0 && <div style={{padding:'20px',textAlign:'center',color:'var(--text-muted)',fontSize:'13px'}}><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>warning</span>Sahifalar topilmadi. Sahifangizning admin ekanligingizni tekshiring.</div>}
                     <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'14px'}}>
                       {fbPages.map(pg=>(
                         <button key={pg.id} onClick={()=>selectFbPage(pg)} style={{padding:'13px 16px',background:'var(--bg-base)',border:'2px solid var(--outline-variant)',borderRadius:'10px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',textAlign:'left',transition:'all 0.15s'}}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='#1877F2';e.currentTarget.style.background='rgba(24,119,242,0.06)';}}
                           onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.background='var(--bg-base)';}}>
-                          <div style={{width:'36px',height:'36px',background:'rgba(24,119,242,0.12)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}}>👥</div>
+                          <div style={{width:'36px',height:'36px',background:'rgba(24,119,242,0.12)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span className="material-symbols-outlined" style={{fontSize:'20px',color:'#1877F2'}}>groups</span></div>
                           <div style={{flex:1}}><div style={{fontWeight:600,fontSize:'13px'}}>{pg.name}</div><div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>ID: {pg.id}</div></div>
                           <span style={{color:'#1877F2',fontSize:'12px',fontWeight:600}}>Tanlash →</span>
                         </button>
@@ -1281,17 +1281,17 @@
                   {/* Step 3: Forms + field mapping */}
                   {fbStep === 3 && fbPage && (<>
                     {loadingF ? (
-                      <div style={{textAlign:'center',padding:'24px',color:'var(--text-muted)'}}>📄 Formalar yuklanmoqda...</div>
+                      <div style={{textAlign:'center',padding:'24px',color:'var(--text-muted)'}}><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>description</span>Formalar yuklanmoqda...</div>
                     ) : (<>
                       <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
                         <span style={{background:'#1877F2',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>3</span>
-                        <div style={{fontWeight:700,fontSize:'13px'}}>📄 Sahifa: <span style={{color:'#1877F2'}}>{fbPage.name}</span></div>
+                        <div style={{fontWeight:700,fontSize:'13px'}}><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>description</span>Sahifa: <span style={{color:'#1877F2'}}>{fbPage.name}</span></div>
                       </div>
                       <div style={{marginBottom:'14px'}}>
                         <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',marginBottom:'7px'}}>Forma tanlang</div>
                         <div style={{display:'flex',flexDirection:'column',gap:'5px'}}>
                           <button onClick={()=>setFbForm(null)} style={{padding:'9px 13px',background:fbForm===null?'rgba(24,119,242,0.1)':'var(--bg-base)',border:fbForm===null?'2px solid #1877F2':'1px solid var(--outline-variant)',borderRadius:'7px',cursor:'pointer',textAlign:'left',fontSize:'12px',fontWeight:fbForm===null?700:400,color:fbForm===null?'#1877F2':'var(--text-main)'}}>
-                            📋 Barcha formalar (filtr yo'q)
+                            <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>list_alt</span>Barcha formalar (filtr yo'q)
                           </button>
                           {fbForms.map(f=>(
                             <button key={f.id} onClick={()=>setFbForm(f)} style={{padding:'9px 13px',background:fbForm?.id===f.id?'rgba(24,119,242,0.1)':'var(--bg-base)',border:fbForm?.id===f.id?'2px solid #1877F2':'1px solid var(--outline-variant)',borderRadius:'7px',cursor:'pointer',textAlign:'left',fontSize:'12px',fontWeight:fbForm?.id===f.id?700:400,color:fbForm?.id===f.id?'#1877F2':'var(--text-main)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -1299,14 +1299,14 @@
                               {f.status&&<span style={{fontSize:'10px',color:'var(--text-muted)',padding:'2px 6px',background:'var(--surface-variant)',borderRadius:'4px'}}>{f.status}</span>}
                             </button>
                           ))}
-                          {fbForms.length===0&&<div style={{fontSize:'12px',color:'var(--text-muted)',padding:'8px 12px',background:'rgba(245,158,11,0.07)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'7px'}}>⚠️ Bu sahifada lead formalar topilmadi. Barcha eventlar qabul qilinadi.</div>}
+                          {fbForms.length===0&&<div style={{fontSize:'12px',color:'var(--text-muted)',padding:'8px 12px',background:'rgba(245,158,11,0.07)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'7px'}}><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>warning</span>Bu sahifada lead formalar topilmadi. Barcha eventlar qabul qilinadi.</div>}
                         </div>
                       </div>
                       {/* Field Mapping */}
                       <div style={{marginBottom:'14px'}}>
                         <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'9px'}}>
                           <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
-                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>📋 Maydon Moslash</span>
+                          <span style={{fontSize:'10px',fontWeight:700,color:'#1877F2',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>list_alt</span>Maydon Moslash</span>
                           <div style={{flex:1,height:'1px',background:'var(--outline-variant)'}}></div>
                         </div>
                         <div style={{background:'rgba(24,119,242,0.05)',border:'1px solid rgba(24,119,242,0.15)',borderRadius:'9px',overflow:'hidden'}}>
@@ -1327,7 +1327,7 @@
                         </div>
                       </div>
                       <div style={{display:'flex',gap:'8px'}}>
-                        <button className="btn-primary" style={{flex:1,padding:'11px'}} disabled={fbSaving} onClick={saveFb}>{fbSaving?'⏳ Ulanmoqda...':'🔌 Ulash'}</button>
+                        <button className="btn-primary" style={{flex:1,padding:'11px'}} disabled={fbSaving} onClick={saveFb}>{fbSaving?'Ulanmoqda...':(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>link</span>Ulash</>)}</button>
                         <button className="btn-outline" style={{padding:'11px 15px'}} onClick={()=>setFbStep(2)}>← Sahifalar</button>
                       </div>
                     </>)}
@@ -1402,8 +1402,8 @@
                           <div key={a.id||i} style={{display:'flex',alignItems:'center',gap:'10px',padding:'10px 13px',background:'rgba(228,64,95,0.07)',border:'1px solid rgba(228,64,95,0.25)',borderRadius:'8px',marginBottom:'6px'}}>
                             <div style={{flex:1}}>
                               <div style={{fontWeight:600,fontSize:'13px'}}>@{a.account_name||a.ig_id}</div>
-                              {a.page_name&&<div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}>📄 {a.page_name}</div>}
-                              {a.connection_type&&<div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{a.connection_type==='direct'?'💬 Direct xabarlar':'💭 Izohlar'}</div>}
+                              {a.page_name&&<div style={{fontSize:'11px',color:'var(--text-muted)',marginTop:'1px'}}><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>description</span>{a.page_name}</div>}
+                              {a.connection_type&&<div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>{a.connection_type==='direct'?<><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>chat</span>Direct xabarlar</>:<><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>forum</span>Izohlar</>}</div>}
                             </div>
                             <span style={{padding:'2px 8px',borderRadius:'20px',fontSize:'10px',fontWeight:700,background:'rgba(1,167,80,0.12)',color:'#01a750',border:'1px solid rgba(1,167,80,0.3)'}}>● Faol</span>
                             <button style={{padding:'4px 10px',fontSize:'11px',background:'none',border:'1px solid rgba(239,68,68,0.3)',color:'#ef4444',borderRadius:'6px',cursor:'pointer'}} onClick={()=>disconnectIgAccount(a)}>Uzish</button>
@@ -1415,11 +1415,11 @@
                       <div style={{fontSize:'10px',fontWeight:700,color:'#E4405F',marginBottom:'5px',textTransform:'uppercase'}}>Webhook URL — Meta Developer → Webhooks → messages</div>
                       <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                         <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{origin}/api/webhook/meta</code>
-                        <button onClick={()=>copyText(origin+'/api/webhook/meta','ig_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='ig_wh'?'#01a750':'#E4405F',color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{copiedItem==='ig_wh'?'✓':'📋 Nusxa'}</button>
+                        <button onClick={()=>copyText(origin+'/api/webhook/meta','ig_wh')} style={{padding:'3px 9px',fontSize:'11px',fontWeight:700,background:copiedItem==='ig_wh'?'#01a750':'#E4405F',color:'white',border:'none',borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,display:'inline-flex',alignItems:'center'}}>{copiedItem==='ig_wh'?'✓':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Nusxa</>}</button>
                       </div>
                     </div>
                     <button onClick={startIgOAuth} style={{width:'100%',padding:'14px',background:'linear-gradient(135deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%)',color:'white',border:'none',borderRadius:'10px',fontSize:'14px',fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',marginBottom:'8px'}}>
-                      <span style={{fontSize:'18px'}}>📸</span> Instagram bilan kirish
+                      <span className="material-symbols-outlined" style={{fontSize:'18px'}}>photo_camera</span> Instagram bilan kirish
                     </button>
                     <div style={{fontSize:'11px',color:'var(--text-muted)',textAlign:'center',lineHeight:'1.5'}}>
                       Instagram Business hisobingiz Facebook Sahifasiga ulangan bo'lishi kerak.
@@ -1429,7 +1429,7 @@
                   {/* Step 1: Waiting */}
                   {igStep === 1 && (
                     <div style={{textAlign:'center',padding:'36px 20px'}}>
-                      <div style={{fontSize:'36px',marginBottom:'14px'}}>⏳</div>
+                      <div style={{marginBottom:'14px',animation:'spin 1s linear infinite',display:'inline-block'}}><span className="material-symbols-outlined" style={{fontSize:'36px',color:'#E4405F'}}>progress_activity</span></div>
                       <div style={{fontWeight:700,fontSize:'15px',marginBottom:'6px'}}>Instagram oynasi ochiq...</div>
                       <div style={{fontSize:'12px',color:'var(--text-muted)',marginBottom:'20px'}}>Yangi oynada Facebook orqali kiring va ruxsat bering</div>
                       <button className="btn-outline" onClick={()=>setIgStep(0)}>← Bekor qilish</button>
@@ -1442,16 +1442,16 @@
                       <span style={{background:'#E4405F',color:'white',borderRadius:'50%',width:'20px',height:'20px',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800}}>2</span>
                       Instagram Business hisobini tanlang
                     </div>
-                    {igAccounts.length===0&&<div style={{padding:'20px',textAlign:'center',color:'var(--text-muted)',fontSize:'12px'}}>⚠️ Instagram Business hisobi topilmadi. Sahifangizga Instagram ulangan ekanligini tekshiring.</div>}
+                    {igAccounts.length===0&&<div style={{padding:'20px',textAlign:'center',color:'var(--text-muted)',fontSize:'12px'}}><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>warning</span>Instagram Business hisobi topilmadi. Sahifangizga Instagram ulangan ekanligini tekshiring.</div>}
                     <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'14px'}}>
                       {igAccounts.map((a,i)=>(
                         <button key={a.ig_id||i} onClick={()=>{setIgAccount(a);setIgStep(3);}} style={{padding:'13px 16px',background:'var(--bg-base)',border:'2px solid var(--outline-variant)',borderRadius:'10px',cursor:'pointer',display:'flex',alignItems:'center',gap:'12px',textAlign:'left',transition:'all 0.15s'}}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor='#E4405F';e.currentTarget.style.background='rgba(228,64,95,0.06)';}}
                           onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--outline-variant)';e.currentTarget.style.background='var(--bg-base)';}}>
-                          <div style={{width:'36px',height:'36px',background:'rgba(228,64,95,0.12)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'18px',flexShrink:0}}>📸</div>
+                          <div style={{width:'36px',height:'36px',background:'rgba(228,64,95,0.12)',borderRadius:'9px',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span className="material-symbols-outlined" style={{fontSize:'20px',color:'#E4405F'}}>photo_camera</span></div>
                           <div style={{flex:1}}>
                             <div style={{fontWeight:600,fontSize:'13px'}}>@{a.ig_username||a.ig_name}</div>
-                            <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}>📄 {a.page_name} · ID: {a.ig_id}</div>
+                            <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:'1px'}}><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>description</span>{a.page_name} · ID: {a.ig_id}</div>
                           </div>
                           <span style={{color:'#E4405F',fontSize:'12px',fontWeight:600}}>Tanlash →</span>
                         </button>
@@ -1469,8 +1469,8 @@
                     <div style={{marginBottom:'16px'}}>
                       <div style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase',marginBottom:'8px'}}>Ulanish turini tanlang</div>
                       {[
-                        {v:'direct',  label:'💬 Direct xabarlar', desc:'Instagram DM ga kelgan har bir xabar — yangi lead'},
-                        {v:'comments',label:'💭 Izohlar (Comments)', desc:'Post izohlaridan lead yaratish'},
+                        {v:'direct',  label:(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>chat</span>Direct xabarlar</>), desc:'Instagram DM ga kelgan har bir xabar — yangi lead'},
+                        {v:'comments',label:(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>forum</span>Izohlar (Comments)</>), desc:'Post izohlaridan lead yaratish'},
                       ].map(opt=>(
                         <button key={opt.v} onClick={()=>setIgConnType(opt.v)} style={{width:'100%',padding:'12px 16px',background:igConnType===opt.v?'rgba(228,64,95,0.1)':'var(--bg-base)',border:igConnType===opt.v?'2px solid #E4405F':'1px solid var(--outline-variant)',borderRadius:'9px',cursor:'pointer',textAlign:'left',marginBottom:'7px',transition:'all 0.15s'}}>
                           <div style={{fontWeight:600,fontSize:'13px',color:igConnType===opt.v?'#E4405F':'var(--text-main)'}}>{opt.label}</div>
@@ -1479,7 +1479,7 @@
                       ))}
                     </div>
                     <div style={{display:'flex',gap:'8px'}}>
-                      <button style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366)',color:'white',border:'none',borderRadius:'9px',fontSize:'13px',fontWeight:700,cursor:'pointer',opacity:igSaving?0.7:1}} disabled={igSaving} onClick={saveIg}>{igSaving?'⏳ Ulanmoqda...':'📸 Ulash'}</button>
+                      <button style={{flex:1,padding:'11px',background:'linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366)',color:'white',border:'none',borderRadius:'9px',fontSize:'13px',fontWeight:700,cursor:'pointer',opacity:igSaving?0.7:1}} disabled={igSaving} onClick={saveIg}>{igSaving?'Ulanmoqda...':(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>photo_camera</span>Ulash</>)}</button>
                       <button className="btn-outline" style={{padding:'11px 15px'}} onClick={()=>setIgStep(2)}>← Hisob</button>
                     </div>
                   </>)}
@@ -1725,7 +1725,7 @@
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
                       <span style={{fontSize:'11px',fontWeight:700,color:'var(--text-muted)',textTransform:'uppercase'}}>Google Apps Script kodi</span>
                       <button onClick={()=>copyText(script,'gs_script')} style={{padding:'4px 12px',fontSize:'11px',fontWeight:700,background:copiedItem==='gs_script'?'rgba(1,167,80,0.15)':'rgba(15,157,88,0.12)',color:copiedItem==='gs_script'?'#01a750':GS,border:`1px solid ${copiedItem==='gs_script'?'rgba(1,167,80,0.3)':'rgba(15,157,88,0.3)'}`,borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap'}}>
-                        {copiedItem==='gs_script'?'✓ Nusxalandi':'📋 Kodni Nusxalash'}
+                        {copiedItem==='gs_script'?'✓ Nusxalandi':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Kodni Nusxalash</>}
                       </button>
                     </div>
                     <pre style={{background:'var(--bg-base)',border:'1px solid var(--outline-variant)',borderRadius:'8px',padding:'12px',fontSize:'10px',lineHeight:'1.65',color:'var(--text-secondary)',overflow:'auto',maxHeight:'220px',margin:0,fontFamily:'monospace',whiteSpace:'pre'}}>{script}</pre>
@@ -1734,10 +1734,10 @@
                   {/* Amallar */}
                   <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
                     <button style={{flex:1,padding:'10px',background:GS,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:700,cursor:'pointer',opacity:gsSaving?0.7:1}} disabled={gsSaving} onClick={saveGs}>
-                      {gsSaving?'⏳ Saqlanmoqda...':(cfgIsOn('google_sheets')?'💾 Yangilash':'✅ Faollashtirish')}
+                      {gsSaving?'Saqlanmoqda...':(cfgIsOn('google_sheets')?(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>save</span>Yangilash</>):(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>power_settings_new</span>Faollashtirish</>))}
                     </button>
                     <button onClick={testConn} disabled={testStatus==='loading'} style={{padding:'10px 14px',background:testStatus==='ok'?'rgba(1,167,80,0.12)':testStatus==='err'?'rgba(239,68,68,0.1)':'var(--surface-variant)',border:`1px solid ${testStatus==='ok'?'rgba(1,167,80,0.3)':testStatus==='err'?'rgba(239,68,68,0.3)':'var(--outline-variant)'}`,color:testStatus==='ok'?'#01a750':testStatus==='err'?'#ef4444':'var(--text-secondary)',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:600,whiteSpace:'nowrap'}}>
-                      {testStatus==='loading'?'⏳ Test...':testStatus==='ok'?'✅ Ishlaydi':testStatus==='err'?'❌ Xato':'🧪 Test'}
+                      {testStatus==='loading'?'Test...':testStatus==='ok'?'✅ Ishlaydi':testStatus==='err'?'❌ Xato':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>science</span>Test</>}
                     </button>
                     {cfgIsOn('google_sheets') && (
                       <button style={{padding:'10px 12px',background:'none',border:'1px solid rgba(239,68,68,0.35)',color:'#ef4444',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:600}} onClick={()=>disconnectIntg('google_sheets')}>Uzish</button>
@@ -1858,7 +1858,7 @@
                     <span className="label-sm">Conversions API Access Token *</span>
                     <div style={{position:'relative'}}>
                       <input className="input-base" type={showToken?'text':'password'} placeholder="EAABwzLjNMZBxxxxx..." value={accessToken} onChange={e=>setAccessToken(e.target.value)} style={{marginBottom:0, paddingRight:'40px', fontFamily:'monospace'}}/>
-                      <button type="button" onClick={()=>setShowToken(v=>!v)} style={{position:'absolute',right:'8px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:'14px'}} title={showToken?'Yashirish':'Ko\'rsatish'}>{showToken?'🙈':'👁'}</button>
+                      <button type="button" onClick={()=>setShowToken(v=>!v)} style={{position:'absolute',right:'8px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',fontSize:'14px'}} title={showToken?'Yashirish':'Ko\'rsatish'}><span className="material-symbols-outlined" style={{fontSize:'16px'}}>{showToken?'visibility_off':'visibility'}</span></button>
                     </div>
                     {cfg?.configured && !accessToken && <div style={{fontSize:'10px', color:'var(--text-muted)', marginTop:'4px'}}>Token allaqachon saqlangan. O'zgartirish uchun yangisini kiriting.</div>}
                   </div>
@@ -1884,11 +1884,11 @@
                   {/* Amallar */}
                   <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'16px'}}>
                     <button style={{flex:1,padding:'10px',background:CAPI,color:'white',border:'none',borderRadius:'8px',fontSize:'13px',fontWeight:700,cursor:'pointer',opacity:saving?0.7:1}} disabled={saving} onClick={saveCapi}>
-                      {saving?'⏳ Saqlanmoqda...':(cfg?.configured?'💾 Yangilash':'✅ Saqlash')}
+                      {saving?'Saqlanmoqda...':(cfg?.configured?(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>save</span>Yangilash</>):(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>save</span>Saqlash</>))}
                     </button>
                     {cfg?.configured && (
                       <button onClick={testCapi} disabled={tStat==='loading'} style={{padding:'10px 14px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',color:'var(--text-secondary)',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:600,whiteSpace:'nowrap'}}>
-                        {tStat==='loading'?'⏳ Yuborilmoqda...':'🧪 Test event'}
+                        {tStat==='loading'?'Yuborilmoqda...':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>science</span>Test event</>}
                       </button>
                     )}
                     {cfg?.configured && (
@@ -1898,7 +1898,7 @@
 
                   {/* Foydali ma'lumot */}
                   <div style={{marginTop:'16px',padding:'10px 12px',background:'rgba(24,119,242,0.05)',border:'1px solid rgba(24,119,242,0.15)',borderRadius:'8px',fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.6'}}>
-                    <div style={{fontWeight:700,color:CAPI,marginBottom:'4px'}}>ℹ️ Qachon eventlar yuboriladi?</div>
+                    <div style={{fontWeight:700,color:CAPI,marginBottom:'4px',display:'flex',alignItems:'center',gap:'5px'}}><span className="material-symbols-outlined" style={{fontSize:'15px'}}>info</span>Qachon eventlar yuboriladi?</div>
                     Hozircha qo'lda Test orqali. Avtomatik triggerlar (lead WON → Purchase, lead yaratilganda → Lead) keyingi versiyada qo'shiladi.
                     Yuboriluvchi PII (email/telefon) Meta talabiga ko'ra SHA-256 bilan hash qilinadi.
                   </div>
@@ -2041,27 +2041,27 @@ fetch('${webhookUrl}', {
                   {/* ── KIRISH BANNERI — qanday ishlaydi? ──────────── */}
                   <div style={{background:`linear-gradient(135deg, ${WH}15 0%, ${WH}05 100%)`,border:`1px solid ${WH}25`,borderRadius:'12px',padding:'16px',marginBottom:'18px'}}>
                     <div style={{fontWeight:700,fontSize:'13px',color:'var(--text-main)',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}}>
-                      <span style={{fontSize:'20px'}}>📡</span> Webhook — saytdan CRM ga avtomatik ulash
+                      <span className="material-symbols-outlined" style={{fontSize:'20px',color:WH}}>sensors</span> Webhook — saytdan CRM ga avtomatik ulash
                     </div>
                     {/* Vizual sxema */}
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'4px',marginBottom:'10px',flexWrap:'nowrap',overflow:'hidden'}}>
                       {[
-                        {ico:'🌐',t:'Saytingiz',d:'Mijoz forma to\'ldiradi'},
+                        {ico:'language',t:'Saytingiz',d:'Mijoz forma to\'ldiradi'},
                         {ico:'→',t:'',d:''},
-                        {ico:'📨',t:'Webhook',d:'Ma\'lumot avtomatik yuboriladi'},
+                        {ico:'mail',t:'Webhook',d:'Ma\'lumot avtomatik yuboriladi'},
                         {ico:'→',t:'',d:''},
-                        {ico:'📋',t:'CRM',d:'Lead ro\'yxatiga tushadi'},
+                        {ico:'inventory_2',t:'CRM',d:'Lead ro\'yxatiga tushadi'},
                       ].map((s,i)=> i%2===1
                         ? <span key={i} style={{fontSize:'16px',color:`${WH}80`,flexShrink:0}}>→</span>
                         : <div key={i} style={{flex:1,textAlign:'center',background:'var(--bg-surface)',borderRadius:'8px',padding:'7px 4px',border:`1px solid ${WH}20`,minWidth:0}}>
-                            <div style={{fontSize:'18px'}}>{s.ico}</div>
+                            <div><span className="material-symbols-outlined" style={{fontSize:'20px',color:WH}}>{s.ico}</span></div>
                             <div style={{fontSize:'10px',fontWeight:700,color:'var(--text-main)',marginTop:'2px'}}>{s.t}</div>
                             <div style={{fontSize:'9px',color:'var(--text-muted)',lineHeight:1.3,marginTop:'1px'}}>{s.d}</div>
                           </div>
                       )}
                     </div>
                     <div style={{fontSize:'11px',color:'var(--text-secondary)',lineHeight:1.5,padding:'8px 10px',background:'var(--bg-surface)',borderRadius:'7px',border:`1px solid ${WH}15`}}>
-                      💡 <b>Qanday ishlaydi?</b> Saytingizda mijoz formani to'ldirib "Yuborish" tugmasini bosganda, uning ismi, telefoni va boshqa ma'lumotlari <b>bir zumda</b> CRM ga tushadi. Siz alohida hech narsa qilmaysiz — hamma narsa avtomatik.
+                      <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>lightbulb</span><b>Qanday ishlaydi?</b> Saytingizda mijoz formani to'ldirib "Yuborish" tugmasini bosganda, uning ismi, telefoni va boshqa ma'lumotlari <b>bir zumda</b> CRM ga tushadi. Siz alohida hech narsa qilmaysiz — hamma narsa avtomatik.
                     </div>
                   </div>
 
@@ -2086,7 +2086,7 @@ fetch('${webhookUrl}', {
                       <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
                         <code style={{flex:1,fontSize:'11px',padding:'10px 12px',background:'var(--bg-base)',border:`2px solid ${WH}40`,borderRadius:'8px',wordBreak:'break-all',fontFamily:'ui-monospace, Menlo, monospace',color:'var(--text-main)',lineHeight:1.4}}>{webhookUrl}</code>
                         <button onClick={()=>copyText(webhookUrl,'wh_url')} style={{flexShrink:0,padding:'10px 16px',fontSize:'12px',fontWeight:700,background:copiedItem==='wh_url'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'8px',cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.2s',boxShadow:copiedItem==='wh_url'?'none':`0 2px 6px ${WH}40`}}>
-                          {copiedItem==='wh_url'?'✓ Nusxalandi':'📋 Nusxalash'}
+                          {copiedItem==='wh_url'?'✓ Nusxalandi':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Nusxalash</>}
                         </button>
                       </div>
                     </div>
@@ -2106,11 +2106,11 @@ fetch('${webhookUrl}', {
                       <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
                         <div style={{flex:1,padding:'10px 16px',background:'#fef9c3',border:'2px solid #fde047',borderRadius:'8px',fontFamily:'ui-monospace, Menlo, monospace',fontSize:'15px',fontWeight:800,color:'#92400e',letterSpacing:'0.05em'}}>{slug}</div>
                         <button onClick={()=>copyText(slug,'wh_slug')} style={{flexShrink:0,padding:'10px 16px',fontSize:'12px',fontWeight:700,background:copiedItem==='wh_slug'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_slug'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'8px',cursor:'pointer',whiteSpace:'nowrap',transition:'background 0.2s'}}>
-                          {copiedItem==='wh_slug'?'✓ Nusxalandi':'📋 Nusxalash'}
+                          {copiedItem==='wh_slug'?'✓ Nusxalandi':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Nusxalash</>}
                         </button>
                       </div>
                       <div style={{marginTop:'7px',fontSize:'10px',color:'var(--text-muted)',padding:'6px 10px',background:'rgba(254,243,199,0.4)',border:'1px solid rgba(253,224,71,0.4)',borderRadius:'5px'}}>
-                        ⚠️ Bu kalit <b>sir emas</b> — lekin o'zgartirmang, har doim shu qiymatni ishlating.
+                        <span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>warning</span>Bu kalit <b>sir emas</b> — lekin o'zgartirmang, har doim shu qiymatni ishlating.
                       </div>
                     </div>
                   </div>
@@ -2143,7 +2143,7 @@ fetch('${webhookUrl}', {
                     <div style={{display:'flex',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:'13px',fontWeight:700,marginBottom:'3px'}}>
-                          🧪 Ulash ishlayaptimi? Hoziroq sinab ko'ring
+                          <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>science</span>Ulash ishlayaptimi? Hoziroq sinab ko'ring
                         </div>
                         <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:1.45}}>
                           Tugmani bosing — CRM ga sinov mijoz yuboriladi va Sotuv varonkasida paydo bo'ladi.
@@ -2151,7 +2151,7 @@ fetch('${webhookUrl}', {
                       </div>
                       <button onClick={sendTestRequest} disabled={testStatus==='loading'}
                         style={{padding:'11px 22px',fontSize:'13px',fontWeight:700,background:testStatus==='loading'?'var(--surface-variant)':(testStatus?.ok===true?'#01a750':WH),color:'#fff',border:'none',borderRadius:'9px',cursor:testStatus==='loading'?'wait':'pointer',whiteSpace:'nowrap',flexShrink:0,transition:'background 0.25s',boxShadow:testStatus==='loading'?'none':`0 2px 8px ${WH}40`}}>
-                        {testStatus==='loading' ? '⏳ Yuborilmoqda...' : testStatus?.ok===true ? '✓ Ishlayapti!' : '▶ Sinab ko\'rish'}
+                        {testStatus==='loading' ? 'Yuborilmoqda...' : testStatus?.ok===true ? '✓ Ishlayapti!' : (<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>play_arrow</span>Sinab ko'rish</>)}
                       </button>
                     </div>
                     {testStatus && testStatus !== 'loading' && (
@@ -2165,7 +2165,7 @@ fetch('${webhookUrl}', {
                         </div>
                         {testStatus.ok && !testStatus.duplicate && (
                           <div style={{marginTop:'8px',fontSize:'11px',color:'var(--text-secondary)',borderTop:'1px solid rgba(1,167,80,0.2)',paddingTop:'8px'}}>
-                            🎉 Endi sayt formangizdagi "Yuborish" tugmasi bosilganda, <b>mijoz ma'lumotlari avtomatik CRM ga tushadi</b>.<br/>
+                            <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>celebration</span>Endi sayt formangizdagi "Yuborish" tugmasi bosilganda, <b>mijoz ma'lumotlari avtomatik CRM ga tushadi</b>.<br/>
                             Sotuv varonkasiga o'ting va "Test Mijoz (Webhook sinov)" nomli yozuvni ko'ring.
                           </div>
                         )}
@@ -2181,7 +2181,7 @@ fetch('${webhookUrl}', {
                   {/* ── QO'SHIMCHA HIMOYA (API Kalit) — collapsible ── */}
                   <div style={{marginBottom:'8px'}}>
                     <SectionToggle open={keyOpen} onToggle={()=>setKeyOpen(p=>!p)}
-                      label="🔒 Qo'shimcha himoya — API kalit (ixtiyoriy)"
+                      label={<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'5px'}}>lock</span>Qo'shimcha himoya — API kalit (ixtiyoriy)</>}
                       badge={apiKeys.length ? apiKeys.length + ' kalit' : null} />
                     {keyOpen && (
                       <div style={{border:'1px solid var(--outline-variant)',borderTop:'none',borderRadius:'0 0 8px 8px',padding:'14px',background:'var(--bg-base)'}}>
@@ -2209,8 +2209,8 @@ fetch('${webhookUrl}', {
                             {selectedKey?.token && (
                               <div style={{display:'flex',gap:'6px',alignItems:'center'}}>
                                 <code style={{flex:1,fontSize:'10px',padding:'7px 10px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'6px',fontFamily:'ui-monospace, Menlo, monospace',wordBreak:'break-all',color:'var(--text-secondary)'}}>{selectedKey.token}</code>
-                                <button onClick={()=>copyText(selectedKey.token,'wh_key')} style={{padding:'7px 11px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_key'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_key'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'6px',cursor:'pointer'}}>
-                                  {copiedItem==='wh_key'?'✓':'📋'}
+                                <button onClick={()=>copyText(selectedKey.token,'wh_key')} style={{padding:'7px 11px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_key'?'#01a750':'var(--surface-variant)',color:copiedItem==='wh_key'?'#fff':'var(--text-main)',border:'1px solid var(--outline-variant)',borderRadius:'6px',cursor:'pointer',display:'inline-flex',alignItems:'center'}}>
+                                  {copiedItem==='wh_key'?'✓':<span className="material-symbols-outlined" style={{fontSize:'14px'}}>content_copy</span>}
                                 </button>
                               </div>
                             )}
@@ -2223,12 +2223,12 @@ fetch('${webhookUrl}', {
 
                   {/* ── FAOLLIK JURNALI — collapsible ──────────────── */}
                   <div style={{marginBottom:'8px'}}>
-                    <SectionToggle open={actOpen} onToggle={()=>setActOpen(p=>!p)} label="📊 Kirish jurnali — qachon va kim yubordi" />
+                    <SectionToggle open={actOpen} onToggle={()=>setActOpen(p=>!p)} label={<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'5px'}}>bar_chart</span>Kirish jurnali — qachon va kim yubordi</>} />
                     {actOpen && (
                       <div style={{border:'1px solid var(--outline-variant)',borderTop:'none',borderRadius:'0 0 8px 8px',padding:'12px 14px',background:'var(--bg-base)'}}>
                         <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'10px'}}>
                           <button onClick={loadActivity} disabled={actLoad} style={{padding:'5px 12px',fontSize:'10px',fontWeight:700,background:`${WH}18`,color:WH,border:`1px solid ${WH}40`,borderRadius:'5px',cursor:actLoad?'wait':'pointer'}}>
-                            {actLoad?'⏳':'🔄 Yangilash'}
+                            {actLoad?'...':<><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>refresh</span>Yangilash</>}
                           </button>
                         </div>
                         {actErr && <div style={{padding:'7px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'6px',fontSize:'11px',color:'#ef4444',marginBottom:'8px'}}>❌ {actErr}</div>}
@@ -2244,7 +2244,7 @@ fetch('${webhookUrl}', {
                         )}
                         {actStats && actStats.top_errors?.length > 0 && (
                           <div style={{marginBottom:'10px',padding:'8px 10px',background:'rgba(239,68,68,0.05)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'6px'}}>
-                            <div style={{fontSize:'10px',fontWeight:700,color:'#ef4444',marginBottom:'4px'}}>🚨 Xatolar:</div>
+                            <div style={{fontSize:'10px',fontWeight:700,color:'#ef4444',marginBottom:'4px'}}><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>error</span>Xatolar:</div>
                             {actStats.top_errors.map((e,i)=>(
                               <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--text-secondary)',padding:'2px 0'}}><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{e.msg}</span><b style={{color:'#ef4444',marginLeft:'8px',flexShrink:0}}>×{e.cnt}</b></div>
                             ))}
@@ -2252,7 +2252,7 @@ fetch('${webhookUrl}', {
                         )}
                         {actLogs.length === 0 ? (
                           <div style={{padding:'16px',textAlign:'center',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'11px',color:'var(--text-muted)'}}>
-                            {actLoad?'⏳ Yuklanmoqda...':'📭 Hali so\'rov yo\'q — yuqoridagi "Sinab ko\'rish" tugmasini bosing'}
+                            {actLoad?'Yuklanmoqda...':<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>inbox</span>Hali so'rov yo'q — yuqoridagi "Sinab ko'rish" tugmasini bosing</>}
                           </div>
                         ) : (
                           <div style={{overflow:'auto',maxHeight:'260px',border:'1px solid var(--outline-variant)',borderRadius:'6px'}}>
@@ -2283,7 +2283,7 @@ fetch('${webhookUrl}', {
 
                   {/* ── DASTURCHI UCHUN — collapsible ──────────────── */}
                   <div style={{marginBottom:'16px'}}>
-                    <SectionToggle open={devOpen} onToggle={()=>setDevOpen(p=>!p)} label="👨‍💻 Dasturchi/Webmaster uchun — tayyor kod misollari" />
+                    <SectionToggle open={devOpen} onToggle={()=>setDevOpen(p=>!p)} label={<><span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'5px'}}>code</span>Dasturchi/Webmaster uchun — tayyor kod misollari</>} />
                     {devOpen && (
                       <div style={{border:'1px solid var(--outline-variant)',borderTop:'none',borderRadius:'0 0 8px 8px',background:'var(--bg-base)'}}>
                         {/* Sub-tabs */}
@@ -2298,7 +2298,7 @@ fetch('${webhookUrl}', {
                           {(devTab==='curl'||devTab==='js') && (
                             <div style={{position:'relative'}}>
                               <button onClick={()=>copyText(devTab==='curl'?curlExample:jsExample,'wh_ex')} style={{position:'absolute',top:'8px',right:'8px',padding:'4px 9px',fontSize:'10px',fontWeight:700,background:copiedItem==='wh_ex'?'#01a750':WH,color:'#fff',border:'none',borderRadius:'4px',cursor:'pointer',zIndex:2}}>
-                                {copiedItem==='wh_ex'?'✓':'📋 Nusxa'}
+                                {copiedItem==='wh_ex'?'✓':<><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Nusxa</>}
                               </button>
                               <pre style={{margin:0,padding:'12px',background:'var(--surface-variant)',borderRadius:'7px',fontSize:'10px',overflow:'auto',maxHeight:'280px',lineHeight:1.55,fontFamily:'ui-monospace, Menlo, monospace',whiteSpace:'pre',color:'var(--text-main)'}}>
                                 {devTab==='curl'?curlExample:jsExample}
@@ -2324,21 +2324,21 @@ fetch('${webhookUrl}', {
                                 </tbody>
                               </table>
                               <div style={{padding:'10px',background:'var(--surface-variant)',borderRadius:'6px',fontSize:'10px',color:'var(--text-secondary)',lineHeight:1.55}}>
-                                💡 <b>Qo'shimcha maydon</b> — standart bo'lmagan har qanday maydon (masalan: <code>kasb</code>, <code>byudjet</code>, <code>utm_source</code>) avtomatik lid kartasida chiqadi. Alohida belgilash shart emas.
+                                <span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>lightbulb</span><b>Qo'shimcha maydon</b> — standart bo'lmagan har qanday maydon (masalan: <code>kasb</code>, <code>byudjet</code>, <code>utm_source</code>) avtomatik lid kartasida chiqadi. Alohida belgilash shart emas.
                               </div>
                             </div>
                           )}
                           {devTab==='security' && (
                             <div style={{fontSize:'11px',lineHeight:1.6}}>
                               {[
-                                {ico:'🚫',t:'Dublikat blok',d:"Bir telefon ikkinchi marta kelsa — yangi lead yaratilmaydi, eskisi qaytariladi (success:true + duplicate:true)"},
-                                {ico:'🔑',t:'API Key Bearer',d:"Authorization: Bearer <kalit> headerida — server kalitni va kompaniya mosligini tekshiradi (401/403)"},
-                                {ico:'📧',t:'Email/telefon format',d:"Format noto'g'ri bo'lsa 400 qaytariladi; telefon 7-15 raqam, email RFC 5322"},
-                                {ico:'🧼',t:'XSS sanitizatsiya',d:"name, extra, region, source va custom_data — HTML/script/javascript: URI tozalanadi"},
-                                {ico:'🌍',t:'CORS',d:"/api/public/* — har qanday domenden fetch ishlaydi (preflight 24 soat cache)"},
+                                {ico:'block',t:'Dublikat blok',d:"Bir telefon ikkinchi marta kelsa — yangi lead yaratilmaydi, eskisi qaytariladi (success:true + duplicate:true)"},
+                                {ico:'key',t:'API Key Bearer',d:"Authorization: Bearer <kalit> headerida — server kalitni va kompaniya mosligini tekshiradi (401/403)"},
+                                {ico:'mail',t:'Email/telefon format',d:"Format noto'g'ri bo'lsa 400 qaytariladi; telefon 7-15 raqam, email RFC 5322"},
+                                {ico:'cleaning_services',t:'XSS sanitizatsiya',d:"name, extra, region, source va custom_data — HTML/script/javascript: URI tozalanadi"},
+                                {ico:'public',t:'CORS',d:"/api/public/* — har qanday domenden fetch ishlaydi (preflight 24 soat cache)"},
                               ].map((r,i)=>(
                                 <div key={i} style={{display:'flex',gap:'10px',padding:'8px 0',borderBottom:i<4?'1px solid var(--outline-variant)':'none'}}>
-                                  <span style={{fontSize:'16px',flexShrink:0}}>{r.ico}</span>
+                                  <span className="material-symbols-outlined" style={{fontSize:'16px',flexShrink:0,color:WH}}>{r.ico}</span>
                                   <div><b style={{color:'var(--text-main)'}}>{r.t}</b> — <span style={{color:'var(--text-secondary)'}}>{r.d}</span></div>
                                 </div>
                               ))}
@@ -2422,7 +2422,7 @@ fetch('${webhookUrl}', {
               return (
                 <div style={{marginTop:'18px',padding:'14px',background:'rgba(1,167,80,0.05)',border:'1px solid rgba(1,167,80,0.25)',borderRadius:'10px'}}>
                   <div style={{fontSize:'12px',fontWeight:700,color:'#01a750',marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
-                    🔍 Diagnostika
+                    <span className="material-symbols-outlined" style={{fontSize:'15px'}}>search</span>Diagnostika
                   </div>
 
                   {/* 1. Webhook subscription status */}
@@ -2431,10 +2431,10 @@ fetch('${webhookUrl}', {
                       <div style={{fontSize:'11px',fontWeight:600,color:'var(--text-secondary)'}}>1. Moizvonki webhook ro'yxati (kabinet o'rniga API)</div>
                       <div style={{display:'flex',gap:'5px'}}>
                         <button onClick={loadSubs} disabled={subLoading} style={{padding:'4px 9px',fontSize:'10px',fontWeight:600,background:'var(--surface-variant)',color:'var(--text-secondary)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:subLoading?'wait':'pointer'}}>
-                          {subLoading ? '⏳' : '🔄 Tekshirish'}
+                          {subLoading ? '...' : <><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>refresh</span>Tekshirish</>}
                         </button>
                         <button onClick={resubscribe} disabled={subLoading} style={{padding:'4px 9px',fontSize:'10px',fontWeight:600,background:'#01a750',color:'#fff',border:'none',borderRadius:'5px',cursor:subLoading?'wait':'pointer'}}>
-                          {subLoading ? '⏳' : '⚙️ Qayta ro\'yxatdan o\'tkazish'}
+                          {subLoading ? '...' : <><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>settings</span>Qayta ro'yxatdan o'tkazish</>}
                         </button>
                       </div>
                     </div>
@@ -2474,11 +2474,11 @@ fetch('${webhookUrl}', {
                     <div style={{fontSize:'11px',fontWeight:600,marginBottom:'6px',color:'var(--text-secondary)'}}>2. Moizvonki API bilan ulanishni tekshirish</div>
                     <div style={{display:'flex',gap:'6px',marginBottom:'8px',flexWrap:'wrap'}}>
                       <button onClick={()=>runTest(false)} disabled={testLoading} style={{padding:'7px 12px',fontSize:'11px',fontWeight:600,background:'#01a750',color:'#fff',border:'none',borderRadius:'6px',cursor:testLoading?'wait':'pointer'}}>
-                        {testLoading ? '⏳ Tekshirilmoqda...' : '🔌 Ulanishni sinab ko\'rish'}
+                        {testLoading ? 'Tekshirilmoqda...' : (<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>power</span>Ulanishni sinab ko'rish</>)}
                       </button>
                       <input className="input-base" placeholder="+998901234567 (test qo'ng'iroq)" value={testPhone} onChange={e=>setTestPhone(e.target.value)} style={{flex:1,minWidth:'140px',marginBottom:0,fontSize:'11px',padding:'7px 10px'}} />
                       <button onClick={()=>runTest(true)} disabled={testLoading || !testPhone} style={{padding:'7px 12px',fontSize:'11px',fontWeight:600,background:!testPhone?'var(--surface-variant)':'#f59e0b',color:!testPhone?'var(--text-muted)':'#fff',border:'none',borderRadius:'6px',cursor:testLoading?'wait':(testPhone?'pointer':'not-allowed')}}>
-                        📞 Test qo'ng'iroq
+                        <span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>call</span>Test qo'ng'iroq
                       </button>
                     </div>
 
@@ -2511,7 +2511,7 @@ fetch('${webhookUrl}', {
                             <span style={{color:'var(--text-muted)'}}>Test qo'ng'iroq:</span> HTTP <strong>{testResult.call_test.status}</strong> • <code style={{fontSize:'10px'}}>{testResult.call_test.body || '(bo\'sh)'}</code>
                           </div>
                         )}
-                        {testResult.hint && <div style={{marginTop:'6px',color:'var(--text-secondary)'}}>💡 {testResult.hint}</div>}
+                        {testResult.hint && <div style={{marginTop:'6px',color:'var(--text-secondary)'}}><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>lightbulb</span>{testResult.hint}</div>}
                         {testResult.error && <div style={{marginTop:'4px',color:'#ef4444'}}>Xato: {testResult.error}</div>}
                         {testResult.auth_check?.body && (
                           <div style={{marginTop:'6px'}}>
@@ -2530,12 +2530,13 @@ fetch('${webhookUrl}', {
                     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px'}}>
                       <div style={{fontSize:'11px',fontWeight:600,color:'var(--text-secondary)'}}>3. Moizvonki bizga so'rov yuboryaptimi?</div>
                       <button onClick={loadActivity} disabled={whLoading} style={{padding:'4px 10px',fontSize:'10px',fontWeight:600,background:'var(--surface-variant)',color:'var(--text-secondary)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:whLoading?'wait':'pointer'}}>
-                        {whLoading ? '⏳' : '🔄 Yangilash'}
+                        {whLoading ? '...' : <><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>refresh</span>Yangilash</>}
                       </button>
                     </div>
                     {whItems.length === 0 ? (
-                      <div style={{padding:'10px 12px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:'7px',fontSize:'11px',color:'var(--text-secondary)',lineHeight:'1.55'}}>
-                        ℹ️  Hozircha Moizvonki dan so'rov kelmagan. Avval webhook ro'yxatga olinganligini (1-bo'lim) tekshiring, keyin smartfondagi Moizvonki ilovasidan haqiqiy qo'ng'iroq qiling.
+                      <div style={{padding:'10px 12px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:'7px',fontSize:'11px',color:'var(--text-secondary)',lineHeight:'1.55',display:'flex',gap:'6px'}}>
+                        <span className="material-symbols-outlined" style={{fontSize:'15px',flexShrink:0}}>info</span>
+                        <span>Hozircha Moizvonki dan so'rov kelmagan. Avval webhook ro'yxatga olinganligini (1-bo'lim) tekshiring, keyin smartfondagi Moizvonki ilovasidan haqiqiy qo'ng'iroq qiling.</span>
                       </div>
                     ) : (
                       <div style={{maxHeight:'180px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'5px'}}>
@@ -2565,7 +2566,7 @@ fetch('${webhookUrl}', {
 
                   {/* Header */}
                   <div style={{padding:'18px 22px 14px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)',position:'sticky',top:0,background:'var(--bg-surface)',zIndex:1}}>
-                    <div style={{width:'42px',height:'42px',background:activeModal.bg,borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>{activeModal.logo}</div>
+                    <div style={{width:'42px',height:'42px',background:activeModal.bg,borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center'}}><span className="material-symbols-outlined" style={{fontSize:'22px',color:activeModal.color}}>{activeModal.logo}</span></div>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:700,fontSize:'16px'}}>{activeModal.name}</div>
                       <div style={{fontSize:'11px',color:'var(--text-muted)'}}>
@@ -2597,16 +2598,20 @@ fetch('${webhookUrl}', {
                       {activeModal.intro && (
                         <div style={{background:'var(--bg-base)',border:`1px solid ${activeModal.color}35`,borderRadius:'10px',padding:'14px 16px',marginBottom:'16px'}}>
                           <div style={{fontSize:'12px',fontWeight:700,color:activeModal.color,marginBottom:'10px',display:'flex',alignItems:'center',gap:'6px'}}>
-                            <span>💡</span>{activeModal.intro.title}
+                            <span className="material-symbols-outlined" style={{fontSize:'15px'}}>lightbulb</span>{activeModal.intro.title}
                           </div>
-                          <div style={{display:'flex',flexDirection:'column',gap:'7px',marginBottom:activeModal.intro.note?'12px':0}}>
+                          <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:activeModal.intro.note?'12px':0}}>
                             {activeModal.intro.steps.map((s,i)=>(
-                              <div key={i} style={{fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.55'}}>{s}</div>
+                              <div key={i} style={{fontSize:'12px',color:'var(--text-secondary)',lineHeight:'1.55',display:'flex',gap:'9px',alignItems:'flex-start'}}>
+                                <span style={{flexShrink:0,width:'19px',height:'19px',borderRadius:'50%',background:activeModal.color+'22',color:activeModal.color,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:800,marginTop:'1px'}}>{i+1}</span>
+                                <span>{s}</span>
+                              </div>
                             ))}
                           </div>
                           {activeModal.intro.note && (
-                            <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.55',padding:'9px 11px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:'7px'}}>
-                              {activeModal.intro.note}
+                            <div style={{fontSize:'11px',color:'var(--text-muted)',lineHeight:'1.55',padding:'9px 11px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:'7px',display:'flex',gap:'6px'}}>
+                              <span className="material-symbols-outlined" style={{fontSize:'15px',flexShrink:0,color:'#f59e0b'}}>warning</span>
+                              <span>{activeModal.intro.note}</span>
                             </div>
                           )}
                         </div>
@@ -2617,7 +2622,7 @@ fetch('${webhookUrl}', {
                           <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                             <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all',lineHeight:'1.5'}}>{activeModal.wh.url}</code>
                             <button onClick={()=>copyText(activeModal.wh.url,'modal_wh')} style={{padding:'4px 10px',fontSize:'11px',fontWeight:700,background:copiedItem==='modal_wh'?'#01a750':activeModal.color,color:'white',border:'none',borderRadius:'6px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,transition:'background 0.15s'}}>
-                              {copiedItem==='modal_wh'?'✓ Nusxalandi':'📋 Nusxa'}
+                              {copiedItem==='modal_wh'?'✓ Nusxalandi':<><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'4px'}}>content_copy</span>Nusxa</>}
                             </button>
                           </div>
                         </div>
@@ -2628,7 +2633,7 @@ fetch('${webhookUrl}', {
                           <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                             <code style={{flex:1,fontSize:'12px',color:'var(--primary)',fontWeight:600}}>{activeModal.verifyToken}</code>
                             <button onClick={()=>copyText(activeModal.verifyToken,'vtok')} style={{padding:'3px 9px',fontSize:'11px',background:'var(--surface-variant)',border:'1px solid var(--outline-variant)',borderRadius:'5px',cursor:'pointer',color:copiedItem==='vtok'?'#01a750':'var(--text-muted)',fontWeight:700}}>
-                              {copiedItem==='vtok'?'✓':'📋'}
+                              {copiedItem==='vtok'?'✓':<span className="material-symbols-outlined" style={{fontSize:'14px'}}>content_copy</span>}
                             </button>
                           </div>
                         </div>
@@ -2638,8 +2643,9 @@ fetch('${webhookUrl}', {
                           <span className="label-sm">{f.label}</span>
                           <input className="input-base" type={f.t} placeholder={f.ph} value={formData[f.k]||''} onChange={e=>setFormData({...formData,[f.k]:e.target.value})} style={{marginBottom:0}}/>
                           {f.hint && (
-                            <div style={{fontSize:'10.5px',color:'var(--text-muted)',marginTop:'4px',lineHeight:'1.5',paddingLeft:'2px'}}>
-                              ℹ️  {f.hint}
+                            <div style={{fontSize:'10.5px',color:'var(--text-muted)',marginTop:'4px',lineHeight:'1.5',paddingLeft:'2px',display:'flex',gap:'5px'}}>
+                              <span className="material-symbols-outlined" style={{fontSize:'14px',flexShrink:0}}>info</span>
+                              <span>{f.hint}</span>
                             </div>
                           )}
                         </div>
@@ -2650,7 +2656,7 @@ fetch('${webhookUrl}', {
                       )}
                       <div style={{display:'flex',gap:'9px',marginTop:'20px'}}>
                         <button className="btn-primary" style={{flex:1,padding:'10px'}} disabled={saving} onClick={()=>saveConfig(activeModal.key, formData)}>
-                          {saving ? '⏳ Saqlanmoqda...' : (cfgIsOn(activeModal.key)?'💾 Yangilash':'🔌 Ulash')}
+                          {saving ? 'Saqlanmoqda...' : (cfgIsOn(activeModal.key)?(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>save</span>Yangilash</>):(<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>link</span>Ulash</>))}
                         </button>
                         {cfgIsOn(activeModal.key) && (
                           <button style={{padding:'10px 14px',background:'none',border:'1px solid rgba(239,68,68,0.35)',color:'#ef4444',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:600}} onClick={()=>disconnectIntg(activeModal.key)}>Uzish</button>
@@ -2669,7 +2675,7 @@ fetch('${webhookUrl}', {
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}} onClick={e=>{if(e.target===e.currentTarget)setActiveModal(null);}}>
               <div style={{background:'var(--bg-surface)',borderRadius:'16px',width:'100%',maxWidth:'500px',maxHeight:'88vh',overflow:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.4)'}}>
                 <div style={{padding:'20px 22px 16px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)'}}>
-                  <div style={{width:'42px',height:'42px',background:'rgba(245,158,11,0.12)',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>🔑</div>
+                  <div style={{width:'42px',height:'42px',background:'rgba(245,158,11,0.12)',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center'}}><span className="material-symbols-outlined" style={{fontSize:'22px',color:'#f59e0b'}}>key</span></div>
                   <div style={{flex:1}}><div style={{fontWeight:700,fontSize:'16px'}}>API Kalitlar</div><div style={{fontSize:'11px',color:'var(--text-muted)'}}>Tashqi tizimlar uchun kirish kalitlari</div></div>
                   <button onClick={()=>setActiveModal(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'var(--text-muted)',lineHeight:1}}>✕</button>
                 </div>
@@ -2684,8 +2690,8 @@ fetch('${webhookUrl}', {
                     {apiKeys.map(k => (
                       <div key={k.id} style={{padding:'10px 13px',background:'rgba(245,158,11,0.07)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'8px',display:'flex',alignItems:'center',gap:'10px'}}>
                         <code style={{flex:1,fontSize:'11px',color:'var(--text-main)',wordBreak:'break-all'}}>{k.token}</code>
-                        <button onClick={()=>copyText(k.token,k.id)} style={{padding:'4px 9px',fontSize:'11px',fontWeight:700,background:copiedItem===k.id?'rgba(1,167,80,0.15)':'rgba(245,158,11,0.12)',color:copiedItem===k.id?'#01a750':'#f59e0b',border:`1px solid ${copiedItem===k.id?'rgba(1,167,80,0.3)':'rgba(245,158,11,0.3)'}`,borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>
-                          {copiedItem===k.id?'✓':'📋'}
+                        <button onClick={()=>copyText(k.token,k.id)} style={{padding:'4px 9px',fontSize:'11px',fontWeight:700,background:copiedItem===k.id?'rgba(1,167,80,0.15)':'rgba(245,158,11,0.12)',color:copiedItem===k.id?'#01a750':'#f59e0b',border:`1px solid ${copiedItem===k.id?'rgba(1,167,80,0.3)':'rgba(245,158,11,0.3)'}`,borderRadius:'5px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,display:'inline-flex',alignItems:'center'}}>
+                          {copiedItem===k.id?'✓':<span className="material-symbols-outlined" style={{fontSize:'14px'}}>content_copy</span>}
                         </button>
                         <button onClick={()=>delApiKey(k.id)} style={{padding:'4px 8px',fontSize:'12px',background:'none',border:'1px solid rgba(239,68,68,0.3)',color:'#ef4444',borderRadius:'5px',cursor:'pointer'}}>✕</button>
                       </div>
@@ -2704,7 +2710,7 @@ fetch('${webhookUrl}', {
 
                 {/* Header */}
                 <div style={{padding:'18px 22px 14px',display:'flex',alignItems:'center',gap:'12px',borderBottom:'1px solid var(--outline-variant)',flexShrink:0}}>
-                  <div style={{width:'42px',height:'42px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'21px'}}>🔗</div>
+                  <div style={{width:'42px',height:'42px',background:'linear-gradient(135deg,rgba(90,223,129,0.15),rgba(139,92,246,0.15))',borderRadius:'11px',display:'flex',alignItems:'center',justifyContent:'center'}}><span className="material-symbols-outlined" style={{fontSize:'22px',color:'#8b5cf6'}}>link</span></div>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:700,fontSize:'16px'}}>Tashqi Havola & Forma Sozlamalari</div>
                     <div style={{fontSize:'11px',color:'var(--text-muted)'}}>Mijoz ro'yxatdan o'tish formasi — dizayn, savollar va URL</div>
@@ -2714,7 +2720,7 @@ fetch('${webhookUrl}', {
 
                 {/* Tab bar */}
                 <div style={{display:'flex',gap:'4px',padding:'12px 22px 0',borderBottom:'1px solid var(--outline-variant)',flexShrink:0}}>
-                  {[['design','🎨 Dizayn'],['fields','📋 Forma Savollari'],['link','🔗 Havola Yaratish']].map(([id,label])=>(
+                  {[['design',<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>palette</span>Dizayn</>],['fields',<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>list_alt</span>Forma Savollari</>],['link',<><span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>link</span>Havola Yaratish</>]].map(([id,label])=>(
                     <button key={id} style={wfTabSt(id)} onClick={()=>setActiveWfTab(id)}>{label}</button>
                   ))}
                 </div>
@@ -2810,11 +2816,11 @@ fetch('${webhookUrl}', {
                       </select>
                       {intgPipelines.length === 0 && (
                         <div style={{fontSize:'12px',color:'var(--warning)',marginBottom:'10px',padding:'10px',background:'rgba(245,158,11,0.08)',borderRadius:'6px'}}>
-                          ⚠️ Quvur topilmadi. Avval Sozlamalar → Varonkalar bo'limida quvur yarating.
+                          <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>warning</span>Quvur topilmadi. Avval Sozlamalar → Varonkalar bo'limida quvur yarating.
                         </div>
                       )}
                       <button className="btn-primary" style={{width:'100%',marginBottom:'14px'}} onClick={generateLink} disabled={!wfPipe}>
-                        🔗 Havola Yaratish va Nusxalash
+                        <span className="material-symbols-outlined" style={{fontSize:'15px',verticalAlign:'middle',marginRight:'5px'}}>link</span>Havola Yaratish va Nusxalash
                       </button>
                       {wfLink && (
                         <div style={{display:'flex',gap:'8px',alignItems:'center',padding:'12px 14px',background:'var(--bg-base)',border:`1px solid ${wfCopied?'rgba(1,167,80,0.4)':'var(--border-light)'}`,borderRadius:'8px',transition:'border-color 0.3s',marginBottom:'12px'}}>
@@ -2823,7 +2829,7 @@ fetch('${webhookUrl}', {
                         </div>
                       )}
                       <div style={{padding:'12px',background:'rgba(99,102,241,0.07)',border:'1px solid rgba(99,102,241,0.15)',borderRadius:'8px',fontSize:'12px',color:'var(--text-muted)',lineHeight:'1.7'}}>
-                        💡 Forma dizayni va sarlavhasini <b>🎨 Dizayn</b> tabida, savollarni <b>📋 Forma Savollari</b> tabida o'zgartiring. O'zgarishlar "<b>Saqlash</b>" tugmasini bosganingizda kuchga kiradi.
+                        <span className="material-symbols-outlined" style={{fontSize:'14px',verticalAlign:'middle',marginRight:'4px'}}>lightbulb</span>Forma dizayni va sarlavhasini <b><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'3px'}}>palette</span>Dizayn</b> tabida, savollarni <b><span className="material-symbols-outlined" style={{fontSize:'13px',verticalAlign:'middle',marginRight:'3px'}}>list_alt</span>Forma Savollari</b> tabida o'zgartiring. O'zgarishlar "<b>Saqlash</b>" tugmasini bosganingizda kuchga kiradi.
                       </div>
                     </div>
                   )}
