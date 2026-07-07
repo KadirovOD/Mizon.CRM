@@ -6348,6 +6348,16 @@ fetch('${webhookUrl}', {
         else localStorage.removeItem('mizon_selectedLeadId');
       }, [selectedLeadId]);
 
+      // ── Chat oynasi ochilganda eng oxirgi (yangi) xabarga aylantirish ──
+      const chatLogsRef = useRef(null);
+      const _selChatLen = leads.find(l => l.id == selectedLeadId)?.chatLogs?.length || 0;
+      useEffect(() => {
+        if (!selectedLeadId) return;
+        const el = chatLogsRef.current;
+        if (!el) return;
+        requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+      }, [selectedLeadId, _selChatLen]);
+
       // ── Auto-claim: lead birinchi ochilganda — kim birinchi ochsa — o'sha mas'ul ──
       // Faqat ichki userlar (CEO/MANAGER) uchun. WATCHER va SUPERADMIN claim qilmaydi (kuzatuvchi).
       // Idempotent: backend claimed_at IS NULL shartiga ko'ra atomar.
@@ -7839,7 +7849,7 @@ fetch('${webhookUrl}', {
                           </span>
                         )}
                       </div>
-                      <div className="chat-logs-area">
+                      <div className="chat-logs-area" ref={chatLogsRef}>
                         {(() => {
                           // Telegram uslubi: kun bir marta o'rtada ajratgich sifatida, har bir log faqat HH:MM
                           let lastDateKey = '';
