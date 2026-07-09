@@ -6127,6 +6127,8 @@ fetch('${webhookUrl}', {
       // ── Bildirishnomalar state ────────────────────────────────────────────────
       const [notifications,  setNotifications]  = useState([]);
       const [showNotifPanel, setShowNotifPanel] = useState(false);
+      const [notifMuted,     setNotifMuted]     = useState(() => localStorage.getItem('mizon_notif_muted') === '1');
+      useEffect(() => { localStorage.setItem('mizon_notif_muted', notifMuted ? '1' : '0'); }, [notifMuted]);
       // Kompaniyaga bog'liq kalitdan yuklash
       useEffect(() => {
         if (!authUser) return;
@@ -6257,6 +6259,7 @@ fetch('${webhookUrl}', {
                     addNotifRef.current('new_lead', `${icon} Yangi lid keldi`,
                       `${l.name || "Noma'lum"} — ${src.replace('meta_','').replace('_',' ')}${l.phone ? ' • ' + l.phone : ''}`,
                       l.id);
+                    playSoundRef.current?.();
                   }
                 }
               });
@@ -6740,22 +6743,56 @@ fetch('${webhookUrl}', {
       // reloadLeadsFromApi addNotif'ni ref orqali chaqirsin (closure muammosini chetlab o'tish)
       React.useEffect(() => { addNotifRef.current = addNotif; }, [addNotif]);
 
-      // Bildirishnoma ovozi (qisqa "ding")
-      const playNotifSound = () => {
+      // Bildirishnoma ovozi — yumshoq ikki notali "ding-dong" qo'ng'iroq (throttled + mute)
+      const audioCtxRef  = React.useRef(null);
+      const lastSoundRef = React.useRef(0);
+      const notifMutedRef = React.useRef(notifMuted);
+      useEffect(() => { notifMutedRef.current = notifMuted; }, [notifMuted]);
+      const playNotifSound = React.useCallback(() => {
+        if (notifMutedRef.current) return;
+        // Bir vaqtda ko'p bildirishnoma kelsa — ovozni takrorlamaslik (1.2s oralig'i)
+        const now = Date.now();
+        if (now - lastSoundRef.current < 1200) return;
+        lastSoundRef.current = now;
         try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(880, ctx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
-          gain.gain.setValueAtTime(0.25, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-          osc.start(ctx.currentTime);
-          osc.stop(ctx.currentTime + 0.5);
+          let ctx = audioCtxRef.current;
+          if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); audioCtxRef.current = ctx; }
+          if (ctx.state === 'suspended') ctx.resume();
+          const t0 = ctx.currentTime;
+          // Master gain — umumiy balandlik va yumshoq tugash
+          const master = ctx.createGain();
+          master.gain.setValueAtTime(0.0001, t0);
+          master.connect(ctx.destination);
+          // Ikki nota: E6 (1318.5Hz) → C6 (1046.5Hz) — tiniq, xush ohang
+          const notes = [
+            { f: 1318.51, at: 0.00 },
+            { f: 1046.50, at: 0.13 },
+          ];
+          notes.forEach(({ f, at }) => {
+            const start = t0 + at;
+            const g = ctx.createGain();
+            g.connect(master);
+            g.gain.setValueAtTime(0.0001, start);
+            g.gain.exponentialRampToValueAtTime(0.32, start + 0.012); // tez attack
+            g.gain.exponentialRampToValueAtTime(0.0001, start + 0.42); // bell-simon decay
+            // Asosiy sine + yumshoq harmonik (bell tembri uchun)
+            const o1 = ctx.createOscillator();
+            o1.type = 'sine'; o1.frequency.setValueAtTime(f, start);
+            o1.connect(g);
+            const o2 = ctx.createOscillator();
+            o2.type = 'sine'; o2.frequency.setValueAtTime(f * 2.01, start);
+            const g2 = ctx.createGain(); g2.gain.setValueAtTime(0.18, start);
+            o2.connect(g2); g2.connect(g);
+            o1.start(start); o2.start(start);
+            o1.stop(start + 0.45); o2.stop(start + 0.45);
+          });
+          master.gain.exponentialRampToValueAtTime(0.9, t0 + 0.02);
+          master.gain.setValueAtTime(0.9, t0 + 0.5);
         } catch(e) {}
-      };
+      }, []);
+      // Polling callback'lar (yangi lid / VoIP) ichidan chaqirish uchun ref
+      const playSoundRef = React.useRef(null);
+      useEffect(() => { playSoundRef.current = playNotifSound; }, [playNotifSound]);
 
       // ── Obuna muddati tugashi haqida bildirishnoma (faqat CEO uchun) ─────────
       React.useEffect(() => {
@@ -6855,6 +6892,7 @@ fetch('${webhookUrl}', {
                 ? `${ev.phone} — yangi mijoz avtomatik qo'shildi`
                 : `${ev.phone}${ev.lead_name ? ' — ' + ev.lead_name : ''}`;
               addNotif('voip_incoming', title, body, ev.lead_id || null);
+              playSoundRef.current?.();
             });
             reloadLeadsFromApi(); // yangi/yangilangan leadlarni ko'rsatish
           } catch { /* server yo'q — skip */ }
@@ -7500,7 +7538,11 @@ fetch('${webhookUrl}', {
                       {/* Header */}
                       <div className="notif-panel-head">
                         <span style={{fontWeight:700, fontSize:'14px'}}>Bildirishnomalar</span>
-                        <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+                        <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+                          <button onClick={()=>setNotifMuted(m=>{ const next=!m; if(!next){ notifMutedRef.current=false; lastSoundRef.current=0; setTimeout(()=>playNotifSound(),0); } return next; })} title={notifMuted ? 'Ovozni yoqish' : 'Ovozni o\'chirish'}
+                            style={{background:'none', border:'none', cursor:'pointer', color:notifMuted?'var(--text-muted)':'var(--accent)', display:'flex', alignItems:'center', padding:0}}>
+                            <span className="material-symbols-outlined" style={{fontSize:'18px'}}>{notifMuted ? 'notifications_off' : 'notifications_active'}</span>
+                          </button>
                           {unreadCount > 0 && (
                             <button onClick={markAllRead} style={{fontSize:'11px', background:'none', border:'none', color:'var(--accent)', cursor:'pointer', fontWeight:600, padding:0}}>
                               Barchasini o'qildi ✓
