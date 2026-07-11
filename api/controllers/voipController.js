@@ -488,11 +488,28 @@ async function _processSingleEvent(db, companyId, ev, webhookMeta) {
   }
 
   const cleanPhone = normalizePhone(phoneRaw);
+  // Lidni oxirgi 9 ta muhim raqam bo'yicha topamiz — telefon bazada turli formatlarda
+  // saqlangan bo'lishi mumkin ("+998901234567", "998901234567", "901234567", "90 123 45 67").
+  // Faqat to'liq raqamli tenglik ishlatilsa, format farqi tufayli lid topilmay, dublikat lid
+  // yaratilardi. RIGHT(...,9) bilan formatdan qat'i nazar bitta lidga tushamiz. Bir nechta mos
+  // kelsa — avval aniq to'liq mos keluvchisi, so'ng eng oxirgi lid tanlanadi.
+  const phoneTail = cleanPhone.slice(-9);
   const leadQ = await db.query(
     companyId
-      ? "SELECT id, name, chatlogs, actualcallattempts FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 AND company_id=$2 LIMIT 1"
-      : "SELECT id, name, chatlogs, actualcallattempts FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 LIMIT 1",
-    companyId ? [cleanPhone, companyId] : [cleanPhone]
+      ? `SELECT id, name, chatlogs, actualcallattempts FROM crm_lead
+           WHERE company_id=$2
+             AND phone IS NOT NULL
+             AND LENGTH(REGEXP_REPLACE(phone, '\\D', '', 'g')) >= 9
+             AND RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 9) = $1
+           ORDER BY (REGEXP_REPLACE(phone, '\\D', '', 'g') = $3) DESC, id DESC
+           LIMIT 1`
+      : `SELECT id, name, chatlogs, actualcallattempts FROM crm_lead
+           WHERE phone IS NOT NULL
+             AND LENGTH(REGEXP_REPLACE(phone, '\\D', '', 'g')) >= 9
+             AND RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 9) = $1
+           ORDER BY (REGEXP_REPLACE(phone, '\\D', '', 'g') = $2) DESC, id DESC
+           LIMIT 1`,
+    companyId ? [phoneTail, companyId, cleanPhone] : [phoneTail, cleanPhone]
   );
 
   // call.start (kiruvchi) → UI notification + lead avtomatik yaratish
