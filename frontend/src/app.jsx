@@ -3068,8 +3068,8 @@ fetch('${webhookUrl}', {
               <div style={{padding:'12px', background:'var(--bg-hover)', border:'1px solid var(--border-light)', borderRadius:'8px'}}>
                 <div style={{fontSize:'10px', color:'var(--text-muted)', marginBottom:'8px', textTransform:'uppercase', fontWeight:700, letterSpacing:'0.06em'}}>Umumiy ko'rsatkichlar</div>
                 {[
-                  {label:"Jami qo'ng'iroqlar", val:totalAttempts},
-                  {label:"Javob %", val: totalAttempts ? Math.round(answered/totalAttempts*100)+'%' : '0%'},
+                  {label:"Jami qo'ng'iroqlar", val:allCalls.length},
+                  {label:"Javob %", val: allCalls.length ? Math.round(answered/allCalls.length*100)+'%' : '0%'},
                   {label:"Konversiya", val: leads.length ? Math.round(leads.filter(l=>l.status==='WON').length/leads.length*100)+'%' : '0%'},
                 ].map((s,i) => (
                   <div key={i} style={{display:'flex', justifyContent:'space-between', marginBottom:'5px'}}>
@@ -3116,8 +3116,9 @@ fetch('${webhookUrl}', {
                 />
               </div>
             </div>
+            <div style={{maxHeight:'520px', overflowY:'auto'}}>
             <table>
-              <thead><tr><th>Vaqt</th><th>Yo'nalish</th><th>Mijoz</th><th>Telefon</th><th>Operator</th><th>Holat</th><th>Izoh / Yozuv</th></tr></thead>
+              <thead style={{position:'sticky', top:0, zIndex:1}}><tr><th>Vaqt</th><th>Yo'nalish</th><th>Mijoz</th><th>Telefon</th><th>Operator</th><th>Holat</th><th>Izoh / Yozuv</th></tr></thead>
               <tbody>
                 {filtered.length === 0 && (
                   <tr><td colSpan="7" style={{textAlign:'center', padding:'40px', color:'var(--text-muted)'}}>
@@ -3133,12 +3134,16 @@ fetch('${webhookUrl}', {
                     </td>
                     <td>
                       <span style={{
+                        display:'inline-flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap',
                         padding:'2px 8px', borderRadius:'10px', fontSize:'10px', fontWeight:700,
                         background: c.direction==='in' ? 'rgba(59,130,246,0.12)' : 'rgba(90,223,129,0.1)',
                         color:      c.direction==='in' ? '#3b82f6' : 'var(--primary)',
                         border:`1px solid ${c.direction==='in' ? 'rgba(59,130,246,0.3)' : 'rgba(90,223,129,0.25)'}`,
                       }}>
-                        {c.direction==='in' ? '⬇ Kiruvchi' : '⬆ Chiquvchi'}
+                        <span className="material-symbols-outlined" style={{fontSize:'13px', lineHeight:1}}>
+                          {c.direction==='in' ? 'call_received' : 'call_made'}
+                        </span>
+                        {c.direction==='in' ? 'Kiruvchi' : 'Chiquvchi'}
                       </span>
                     </td>
                     <td style={{fontWeight:600}}>{c.leadName}</td>
@@ -3167,6 +3172,12 @@ fetch('${webhookUrl}', {
                 ))}
               </tbody>
             </table>
+            </div>
+            {filtered.length > 100 && (
+              <div style={{padding:'10px 20px', borderTop:'1px solid var(--outline-variant)', fontSize:'11px', color:'var(--text-muted)', textAlign:'center'}}>
+                {filtered.length} tadan oxirgi 100 ta ko'rsatilmoqda — kerakli qo'ng'iroqni topish uchun yuqoridagi filtrlardan foydalaning.
+              </div>
+            )}
           </div>
 
           {/* ===== DRILL-DOWN MODAL ===== */}
