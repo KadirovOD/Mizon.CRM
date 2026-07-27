@@ -354,6 +354,27 @@ async function initDb() {
       CREATE INDEX IF NOT EXISTS idx_audit_log_company_created ON crm_audit_log(company_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_audit_log_lead             ON crm_audit_log(lead_id);
       CREATE INDEX IF NOT EXISTS idx_audit_log_action           ON crm_audit_log(action);
+
+      -- V61: Kunlik vazifalar tizimi — xodimlarning kunlik topshiriqlarini
+      -- lidlardan mustaqil ravishda kuzatish uchun (bitta lidga bitta task
+      -- cheklovi mavjud edi, endi xodim boshqa turdagi ko'p vazifalarni
+      -- (hisobot, uchrashuv, qo'ng'iroq rejasi va h.k.) qo'sha oladi).
+      CREATE TABLE IF NOT EXISTS crm_tasks (
+        id           SERIAL PRIMARY KEY,
+        company_id   INT REFERENCES companies(id) ON DELETE CASCADE,
+        lead_id      INTEGER REFERENCES crm_lead(id) ON DELETE SET NULL,
+        title        VARCHAR(255) NOT NULL,
+        description  TEXT,
+        assignee     VARCHAR(100) NOT NULL,
+        due_date     TIMESTAMP,
+        status       VARCHAR(20) DEFAULT 'open',
+        created_by   VARCHAR(100),
+        created_at   TIMESTAMP DEFAULT NOW(),
+        completed_at TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_tasks_company_assignee ON crm_tasks(company_id, assignee);
+      CREATE INDEX IF NOT EXISTS idx_tasks_company_status    ON crm_tasks(company_id, status);
+      CREATE INDEX IF NOT EXISTS idx_tasks_company_due       ON crm_tasks(company_id, due_date);
     `);
 
     // ── Migrations for existing tables ───────────────────────────────────────
@@ -573,6 +594,7 @@ const automationCtrl       = require('./controllers/automationController');
 const smsMasterCtrl        = require('./controllers/smsMasterController');
 const billingController    = require('./controllers/billingController');
 const metaCapiController   = require('./controllers/metaCapiController');
+const taskController       = require('./controllers/taskController');
 
 // leadController va webhookController ga runTrigger uzatish
 leadController._setAutomation(automationCtrl.runTrigger);
@@ -617,6 +639,13 @@ app.post  ('/api/leads/:id/claim',    leadController.claimLead);
 app.get   ('/api/stages',             leadController.getStages);
 app.put   ('/api/stages/sync',        leadController.syncStages);
 app.get   ('/api/stats',              leadController.getStats);
+
+// ── Kunlik vazifalar (xodim samaradorligi) ────────────────────────────────────
+app.get   ('/api/tasks',        taskController.getTasks);
+app.post  ('/api/tasks',        taskController.createTask);
+app.put   ('/api/tasks/:id',    taskController.updateTask);
+app.delete('/api/tasks/:id',    taskController.deleteTask);
+app.get   ('/api/tasks/stats',  taskController.getTaskStats);
 
 // ── Company settings (CEO) ────────────────────────────────────────────────────
 app.get('/api/company/settings', companyController.getSettings);

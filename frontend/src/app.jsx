@@ -205,6 +205,28 @@
                       const mLost  = mLeads.filter(l => l.status === 'LOST').length;
                       const roleLabel = u.role === 'CEO' ? 'CEO' : u.role === 'MANAGER' ? 'Menejer' : u.role;
                       const statusLabel = u.is_active === false ? 'Nofaol' : 'Faol';
+
+                      // ── Qo'ng'iroq statistikasi (chatlogs'dan, CallCenterModule bilan bir xil mantiq) ──
+                      const mCalls = [];
+                      mLeads.forEach(lead => {
+                        (lead.chatLogs || []).forEach(log => {
+                          if (!log.text) return;
+                          const isCallEntry = log.type === 'call' || log.text.includes('📞') || log.text.includes('⛔');
+                          if (!isCallEntry) return;
+                          const isMissed = log.text.includes('⛔') || /missed|no.?answer/i.test(log.text);
+                          mCalls.push({ missed: isMissed, duration: Number(log.duration) || 0 });
+                        });
+                      });
+                      const mCallsTotal = mCalls.length;
+                      const mAnswered   = mCalls.filter(c => !c.missed).length;
+                      const mAnsRate    = mCallsTotal ? Math.round(mAnswered / mCallsTotal * 100) : 0;
+                      const withDur     = mCalls.filter(c => c.duration > 0);
+                      const mAvgDurSec  = withDur.length ? Math.round(withDur.reduce((s,c)=>s+c.duration,0) / withDur.length) : 0;
+                      const mAvgDurStr  = mAvgDurSec ? `${Math.floor(mAvgDurSec/60)}:${String(mAvgDurSec%60).padStart(2,'0')}` : '—';
+
+                      // ── Kechikkan (SLA "danger") vazifalar shu xodimda ──
+                      const mOverdue = mLeads.filter(l => determineSLAType(l.deadline) === 'danger').length;
+
                       return (
                         <div key={u.id || u.username} style={{padding:'14px', background:'var(--bg-base)', borderRadius:'10px', border:'1px solid var(--border-light)'}}>
                           <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
@@ -216,7 +238,7 @@
                               <div style={{fontSize:'11px', color:'var(--text-muted)'}}>{roleLabel} • {statusLabel}</div>
                             </div>
                           </div>
-                          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px', textAlign:'center'}}>
+                          <div style={{display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px', textAlign:'center', marginBottom:'8px'}}>
                             {[
                               ['Jami',    mLeads.length, 'var(--text-main)', 'var(--surface-variant)'],
                               ['Yutildi', mWon,          '#01a750',          'rgba(1,167,80,0.1)'],
@@ -225,6 +247,19 @@
                               <div key={label} style={{padding:'8px', background:bg, borderRadius:'8px'}}>
                                 <div style={{fontSize:'20px', fontWeight:700, color:clr}}>{val}</div>
                                 <div style={{color:'var(--text-muted)', fontSize:'10px', marginTop:'2px'}}>{label}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'8px', textAlign:'center'}}>
+                            {[
+                              ["Qo'ng'iroq", mCallsTotal, 'var(--text-main)',  'var(--surface-variant)'],
+                              ['Javob %',    mAnsRate+'%', mAnsRate>=70?'#01a750':mAnsRate>=40?'#f59e0b':'#ef4444', 'rgba(59,130,246,0.08)'],
+                              ['O\'rt. vaqt', mAvgDurStr, '#3b82f6',          'rgba(59,130,246,0.08)'],
+                              ['Kechikkan',  mOverdue,    mOverdue>0?'#ef4444':'var(--text-main)', 'rgba(245,158,11,0.08)'],
+                            ].map(([label, val, clr, bg]) => (
+                              <div key={label} style={{padding:'8px', background:bg, borderRadius:'8px'}}>
+                                <div style={{fontSize:'16px', fontWeight:700, color:clr}}>{val}</div>
+                                <div style={{color:'var(--text-muted)', fontSize:'9px', marginTop:'2px'}}>{label}</div>
                               </div>
                             ))}
                           </div>
@@ -3239,6 +3274,199 @@ fetch('${webhookUrl}', {
                     Mijoz ustiga bosing — kartasini ochadi
                   </span>
                 </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ===== VAZIFALAR (kunlik topshiriqlar) MODULI =====
+    // Lidlardan mustaqil, xodimlarning kunlik ish vazifalarini yaratish/kuzatish
+    // uchun (hisobot topshirish, uchrashuv, qo'ng'iroq rejasi va h.k.). CEO/WATCHER
+    // barcha xodimlarning vazifalarini ko'radi, MANAGER faqat o'zinikini.
+    const TasksModule = ({ getAuthHeaders, authUser, leads, setSelectedLeadId }) => {
+      const role = authUser?.role;
+      const isBoss = role === 'CEO' || role === 'WATCHER';
+      const [tasks,        setTasks]        = useState([]);
+      const [companyUsers, setCompanyUsers] = useState([]);
+      const [filterAssignee, setFilterAssignee] = useState('');
+      const [filterStatus,   setFilterStatus]   = useState('open'); // open|done|''(hammasi)
+      const [loading, setLoading] = useState(false);
+      const [msg, setMsg] = useState('');
+      const [modal, setModal] = useState(null); // null | {} (yangi) | {...task} (tahrirlash)
+      const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
+
+      const H = () => getAuthHeaders();
+
+      const loadTasks = () => {
+        setLoading(true);
+        const params = new URLSearchParams();
+        if (isBoss && filterAssignee) params.set('assignee', filterAssignee);
+        if (filterStatus) params.set('status', filterStatus);
+        fetch('/api/tasks?' + params.toString(), { headers: H() })
+          .then(r => r.json())
+          .then(d => setTasks(Array.isArray(d.tasks) ? d.tasks : []))
+          .catch(() => setTasks([]))
+          .finally(() => setLoading(false));
+      };
+
+      useEffect(() => { loadTasks(); }, [filterAssignee, filterStatus]);
+
+      useEffect(() => {
+        if (!isBoss) return;
+        fetch('/api/company/users', { headers: H() })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d)) setCompanyUsers(d); })
+          .catch(() => {});
+      }, []);
+
+      const cardStyle = { background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px', padding:'16px', marginBottom:'10px' };
+      const inputStyle = { width:'100%', padding:'9px 12px', borderRadius:'8px', border:'1px solid var(--outline-variant)', background:'var(--bg-base)', color:'var(--text-main)', fontSize:'13px', boxSizing:'border-box' };
+
+      const saveTask = async (e) => {
+        e.preventDefault();
+        const isEdit = !!modal.id;
+        const body = {
+          title: modal.title, description: modal.description || null,
+          assignee: modal.assignee, dueDate: modal.due_date || modal.dueDate || null,
+        };
+        const url = isEdit ? `/api/tasks/${modal.id}` : '/api/tasks';
+        const r = await fetch(url, { method: isEdit ? 'PUT' : 'POST', headers: H(), body: JSON.stringify(body) });
+        const d = await r.json();
+        if (d.success) { flash('✅ Saqlandi'); setModal(null); loadTasks(); }
+        else flash('❌ ' + (d.error || 'Xato'));
+      };
+
+      const toggleDone = async (t) => {
+        const newStatus = t.status === 'done' ? 'open' : 'done';
+        const r = await fetch(`/api/tasks/${t.id}`, { method: 'PUT', headers: H(), body: JSON.stringify({ status: newStatus }) });
+        const d = await r.json();
+        if (d.success) loadTasks(); else flash('❌ ' + (d.error || 'Xato'));
+      };
+
+      const removeTask = async (t) => {
+        if (!window.confirm(`"${t.title}" vazifasini o'chirasizmi?`)) return;
+        const r = await fetch(`/api/tasks/${t.id}`, { method: 'DELETE', headers: H() });
+        const d = await r.json();
+        if (d.success) { flash('🗑️ O\'chirildi'); loadTasks(); }
+        else flash('❌ ' + (d.error || 'Xato'));
+      };
+
+      const isOverdue = (t) => t.status === 'open' && t.due_date && new Date(t.due_date) < new Date();
+
+      return (
+        <div style={{padding:'24px', maxWidth:'900px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'6px'}}>
+            <div>
+              <h2 style={{fontSize:'20px', fontWeight:700, marginBottom:'4px'}}>Vazifalar</h2>
+              <p style={{color:'var(--text-muted)', fontSize:'13px'}}>
+                {isBoss ? 'Xodimlarning kunlik vazifalari va bajarilishi' : 'Mening kunlik vazifalarim'}
+              </p>
+            </div>
+            <button className="btn-primary" onClick={() => setModal({ assignee: isBoss ? '' : (authUser?.username || '') })}>
+              <span className="material-symbols-outlined" style={{fontSize:'16px', verticalAlign:'middle', marginRight:'4px'}}>add</span>
+              Yangi vazifa
+            </button>
+          </div>
+
+          {msg && (
+            <div style={{padding:'10px 16px', borderRadius:'8px', margin:'14px 0', fontSize:'13px',
+              background: msg.startsWith('✅') || msg.startsWith('🗑️') ? 'rgba(90,223,129,0.1)' : 'rgba(255,80,80,0.1)',
+              color: msg.startsWith('✅') || msg.startsWith('🗑️') ? 'var(--success)' : 'var(--danger)',
+            }}>{msg}</div>
+          )}
+
+          {/* Filtrlar */}
+          <div style={{display:'flex', gap:'10px', margin:'16px 0'}}>
+            {isBoss && (
+              <select style={{...inputStyle, width:'auto'}} value={filterAssignee} onChange={e=>setFilterAssignee(e.target.value)}>
+                <option value="">Barcha xodimlar</option>
+                {companyUsers.map(u => <option key={u.id || u.username} value={u.username}>{u.full_name || u.username}</option>)}
+              </select>
+            )}
+            <select style={{...inputStyle, width:'auto'}} value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+              <option value="open">Faol</option>
+              <option value="done">Bajarilgan</option>
+              <option value="">Barchasi</option>
+            </select>
+          </div>
+
+          {/* Ro'yxat */}
+          {loading ? (
+            <div style={{color:'var(--text-muted)', fontSize:'13px'}}>Yuklanmoqda...</div>
+          ) : tasks.length === 0 ? (
+            <div style={{color:'var(--text-muted)', fontSize:'13px', padding:'20px', textAlign:'center'}}>Vazifalar topilmadi</div>
+          ) : (
+            tasks.map(t => (
+              <div key={t.id} style={{...cardStyle, display:'flex', alignItems:'flex-start', gap:'12px',
+                borderColor: isOverdue(t) ? 'rgba(239,68,68,0.4)' : 'var(--outline-variant)'}}>
+                <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'16px', height:'16px', cursor:'pointer'}} />
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600, fontSize:14, textDecoration: t.status==='done' ? 'line-through' : 'none', color: t.status==='done' ? 'var(--text-muted)' : 'var(--text-main)'}}>
+                    {t.title}
+                  </div>
+                  {t.description && <div style={{fontSize:12, color:'var(--text-muted)', marginTop:'4px'}}>{t.description}</div>}
+                  <div style={{display:'flex', gap:'10px', marginTop:'6px', fontSize:11, color:'var(--text-muted)', flexWrap:'wrap'}}>
+                    {isBoss && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person</span> {t.assignee}</span>}
+                    {t.due_date && (
+                      <span style={{color: isOverdue(t) ? '#ef4444' : 'var(--text-muted)'}}>
+                        <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>schedule</span> {new Date(t.due_date).toLocaleString('uz-UZ')}
+                      </span>
+                    )}
+                    {t.lead_name && (
+                      <span onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)} style={{cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
+                        <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person_search</span> {t.lead_name}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{display:'flex', gap:'4px'}}>
+                  <button title="Tahrirlash" onClick={()=>setModal({ ...t, dueDate: t.due_date ? new Date(t.due_date).toISOString().slice(0,16) : '' })}
+                    style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:16}}>edit</span>
+                  </button>
+                  <button title="O'chirish" onClick={()=>removeTask(t)}
+                    style={{background:'none', border:'none', cursor:'pointer', color:'var(--danger)'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:16}}>delete</span>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* Yangi/Tahrirlash modal */}
+          {modal && (
+            <div className="login-overlay" onClick={e=>{if(e.target===e.currentTarget) setModal(null);}}>
+              <div className="login-box" style={{width:'420px'}}>
+                <h2 style={{marginBottom:'16px', fontSize:'18px', fontWeight:700}}>{modal.id ? 'Vazifani tahrirlash' : 'Yangi vazifa'}</h2>
+                <form onSubmit={saveTask} style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                  <div>
+                    <span className="label-sm">Sarlavha *</span>
+                    <input className="input-base" required autoFocus value={modal.title || ''} onChange={e=>setModal({...modal, title: e.target.value})} placeholder="Masalan: Kunlik hisobotni topshirish" />
+                  </div>
+                  <div>
+                    <span className="label-sm">Tavsif</span>
+                    <textarea className="input-base" rows={3} value={modal.description || ''} onChange={e=>setModal({...modal, description: e.target.value})} placeholder="Qo'shimcha izoh (ixtiyoriy)" />
+                  </div>
+                  {isBoss && (
+                    <div>
+                      <span className="label-sm">Xodim *</span>
+                      <select className="input-base" required value={modal.assignee || ''} onChange={e=>setModal({...modal, assignee: e.target.value})}>
+                        <option value="" disabled>Tanlang...</option>
+                        {companyUsers.map(u => <option key={u.id || u.username} value={u.username}>{u.full_name || u.username}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <span className="label-sm">Muddat</span>
+                    <input className="input-base" type="datetime-local" value={modal.dueDate || ''} onChange={e=>setModal({...modal, dueDate: e.target.value})} />
+                  </div>
+                  <div style={{display:'flex', gap:'10px', marginTop:'8px'}}>
+                    <button type="submit" className="btn-primary" style={{flex:1}}>Saqlash</button>
+                    <button type="button" className="btn-outline" onClick={()=>setModal(null)}>Bekor</button>
+                  </div>
+                </form>
               </div>
             </div>
           )}
@@ -7481,7 +7709,7 @@ fetch('${webhookUrl}', {
         if (leadId) handleStatusChange(leadId, targetStatus);
       };
 
-      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
+      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', tasks: 'Vazifalar', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
 
       // Filtered leads — qidiruv + manba + mas'ul + SLA
       const filteredActiveLeads = activeLeads.filter(l => {
@@ -7537,6 +7765,9 @@ fetch('${webhookUrl}', {
               </div>
               <div className={`nav-item ${activeTab==='callcenter'?'active':''}`} onClick={()=>{setActiveTab('callcenter');setSelectedLeadId(null);}} title="Call Center">
                 <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>call</span> <span className="nav-item-label">Call Center</span>
+              </div>
+              <div className={`nav-item ${activeTab==='tasks'?'active':''}`} onClick={()=>{setActiveTab('tasks');setSelectedLeadId(null);}} title="Vazifalar">
+                <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>task_alt</span> <span className="nav-item-label">Vazifalar</span>
               </div>
 
               {/* CEO va WATCHER uchun Hisobotlar */}
@@ -8264,6 +8495,8 @@ fetch('${webhookUrl}', {
               {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} importLeadsFromCsv={importLeadsFromCsv} exportLeadsToCsv={exportLeadsToCsv} />}
 
               {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} syncLeadToAPI={syncLeadToAPI} addNotif={addNotif} voipConfigured={voipConfigured} />}
+
+              {activeTab === 'tasks' && <TasksModule getAuthHeaders={getAuthHeaders} authUser={authUser} leads={leads} setSelectedLeadId={setSelectedLeadId} />}
 
               {activeTab === 'reports' && (role === 'CEO' || role === 'WATCHER') && <HisobotlarModule leads={leads} columnsMap={columnsMap} pipelines={pipelines} setSelectedLeadId={setSelectedLeadId} />}
 
