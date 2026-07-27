@@ -135,11 +135,23 @@ exports.deleteTask = async (req, res) => {
   }
 };
 
-// GET /api/tasks/stats — xodim bo'yicha kunlik bajarilish ko'rsatkichlari (CEO/WATCHER uchun)
+// GET /api/tasks/stats?from=&to= — xodim bo'yicha kunlik bajarilish ko'rsatkichlari
+// (CEO/WATCHER uchun — barcha xodimlar; MANAGER — faqat o'zi). from/to — created_at
+// oralig'i bo'yicha filtr (davr bo'yicha samaradorlikni baholash uchun, masalan "shu oy").
 exports.getTaskStats = async (req, res) => {
   if (!req.db) return res.json({ success: true, stats: [] });
   const cid = req.user?.companyId;
+  const { from, to } = req.query;
   try {
+    const conds = ['company_id = $1'];
+    const params = [cid];
+    if (req.user?.role === 'MANAGER') {
+      params.push(req.user.username);
+      conds.push(`assignee = $${params.length}`);
+    }
+    if (from) { params.push(from); conds.push(`created_at >= $${params.length}`); }
+    if (to)   { params.push(to);   conds.push(`created_at <= $${params.length}`); }
+
     const { rows } = await req.db.query(
       `SELECT
          assignee,
@@ -148,10 +160,10 @@ exports.getTaskStats = async (req, res) => {
          COUNT(*) FILTER (WHERE status = 'open' AND due_date < NOW())      AS overdue,
          COUNT(*) FILTER (WHERE status = 'open' AND due_date >= NOW())     AS pending
        FROM crm_tasks
-       WHERE company_id = $1
+       WHERE ${conds.join(' AND ')}
        GROUP BY assignee
        ORDER BY assignee ASC`,
-      [cid]
+      params
     );
     res.json({ success: true, stats: rows });
   } catch (err) {

@@ -3474,6 +3474,174 @@ fetch('${webhookUrl}', {
       );
     };
 
+    // ===== V62: YAGONA SAMARADORLIK PANELI (Phase 4) =====
+    // Lidlar KPI (1-bosqich) + qo'ng'iroq statistikasi (1-bosqich) + kunlik
+    // vazifalar bajarilishi (2-bosqich) — barchasi bitta jadvalda, davr bo'yicha
+    // filtrlanadigan va umumiy ball bo'yicha saralanadigan holda. CEO/WATCHER uchun.
+    const PerformanceModule = ({ leads, getAuthHeaders, authUser, setSelectedLeadId }) => {
+      const [companyUsers, setCompanyUsers] = useState([]);
+      const [taskStats,    setTaskStats]    = useState([]);
+      const [period,       setPeriod]       = useState('month'); // today|week|month|all
+      const [sortKey,      setSortKey]      = useState('score');
+      const [loading,      setLoading]      = useState(false);
+      const [expanded,     setExpanded]     = useState(null); // username | null
+
+      const H = () => getAuthHeaders();
+
+      const periodStart = () => {
+        const now = new Date();
+        if (period === 'today') { const d = new Date(now); d.setHours(0,0,0,0); return d; }
+        if (period === 'week')  { const d = new Date(now); d.setDate(d.getDate()-7); return d; }
+        if (period === 'month') { const d = new Date(now); d.setDate(d.getDate()-30); return d; }
+        return null; // all
+      };
+
+      useEffect(() => {
+        fetch('/api/company/users', { headers: H() })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d)) setCompanyUsers(d); })
+          .catch(() => {});
+      }, []);
+
+      useEffect(() => {
+        setLoading(true);
+        const params = new URLSearchParams();
+        const from = periodStart();
+        if (from) params.set('from', from.toISOString());
+        fetch('/api/tasks/stats?' + params.toString(), { headers: H() })
+          .then(r => r.json())
+          .then(d => setTaskStats(Array.isArray(d.stats) ? d.stats : []))
+          .catch(() => setTaskStats([]))
+          .finally(() => setLoading(false));
+      }, [period]);
+
+      const from = periodStart();
+      const inPeriod = (dateStr) => !from || !dateStr || new Date(dateStr) >= from;
+
+      const employees = companyUsers.filter(u => u.role !== 'CEO' && u.role !== 'WATCHER' && u.role !== 'SUPERADMIN');
+
+      const rows = employees.map(u => {
+        const uLeads = leads.filter(l => l.owner === u.username && inPeriod(l.createdAt));
+        const won  = uLeads.filter(l => l.status === 'WON').length;
+        const lost = uLeads.filter(l => l.status === 'LOST').length;
+        const convRate = uLeads.length ? Math.round(won / uLeads.length * 100) : 0;
+
+        const calls = [];
+        leads.filter(l => l.owner === u.username).forEach(lead => {
+          (lead.chatLogs || []).forEach(log => {
+            if (!log.text || !inPeriod(log.date)) return;
+            const isCallEntry = log.type === 'call' || log.text.includes('📞') || log.text.includes('⛔');
+            if (!isCallEntry) return;
+            const isMissed = log.text.includes('⛔') || /missed|no.?answer/i.test(log.text);
+            calls.push({ missed: isMissed, duration: Number(log.duration) || 0 });
+          });
+        });
+        const callsTotal = calls.length;
+        const answered   = calls.filter(c => !c.missed).length;
+        const ansRate    = callsTotal ? Math.round(answered / callsTotal * 100) : 0;
+        const withDur    = calls.filter(c => c.duration > 0);
+        const avgDurSec  = withDur.length ? Math.round(withDur.reduce((s,c)=>s+c.duration,0) / withDur.length) : 0;
+        const avgDurStr  = avgDurSec ? `${Math.floor(avgDurSec/60)}:${String(avgDurSec%60).padStart(2,'0')}` : '—';
+
+        const ts = taskStats.find(s => s.assignee === u.username) || {};
+        const tTotal   = parseInt(ts.total)   || 0;
+        const tDone    = parseInt(ts.done)    || 0;
+        const tOverdue = parseInt(ts.overdue) || 0;
+        const taskRate = tTotal ? Math.round(tDone / tTotal * 100) : null;
+
+        const overdueLeads = uLeads.filter(l => determineSLAType(l.deadline) === 'danger').length;
+
+        // Umumiy ball: konversiya (30%) + javob % (30%) + vazifa bajarilishi (40%, ma'lumot bo'lmasa e'tiborga olinmaydi)
+        const parts = [ [convRate,0.3], [ansRate,0.3] ];
+        if (taskRate !== null) parts.push([taskRate, 0.4]);
+        const wSum = parts.reduce((s,[,w])=>s+w, 0);
+        const score = wSum ? Math.round(parts.reduce((s,[v,w])=>s+v*w,0) / wSum) : 0;
+
+        return {
+          username: u.username, fullName: u.full_name || u.username,
+          leadsTotal: uLeads.length, won, lost, convRate,
+          callsTotal, ansRate, avgDurStr, overdueLeads,
+          tTotal, tDone, tOverdue, taskRate,
+          score,
+        };
+      });
+
+      const sorted = [...rows].sort((a,b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
+
+      const scoreColor = (s) => s>=70 ? '#01a750' : s>=40 ? '#f59e0b' : '#ef4444';
+      const th = { textAlign:'left', padding:'8px 10px', fontSize:11, color:'var(--text-muted)', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' };
+      const td = { padding:'9px 10px', fontSize:12.5, borderTop:'1px solid var(--outline-variant)' };
+
+      return (
+        <div style={{padding:'24px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'12px', marginBottom:'6px'}}>
+            <div>
+              <h2 style={{fontSize:'20px', fontWeight:700, marginBottom:'4px'}}>Xodimlar samaradorligi</h2>
+              <p style={{color:'var(--text-muted)', fontSize:'13px'}}>Lidlar, qo'ng'iroqlar va kunlik vazifalar — bitta panelda</p>
+            </div>
+            <div style={{display:'flex', gap:'6px', background:'var(--bg-surface)', padding:'5px', borderRadius:'10px', border:'1px solid var(--outline-variant)', height:'fit-content'}}>
+              {[['today','Bugun'],['week','Hafta'],['month','Oy'],['all','Barchasi']].map(([v,label]) => (
+                <button key={v} onClick={()=>setPeriod(v)} style={{
+                  padding:'6px 12px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
+                  background: period===v ? 'var(--primary)' : 'transparent',
+                  color: period===v ? '#fff' : 'var(--text-muted)',
+                }}>{label}</button>
+              ))}
+            </div>
+          </div>
+
+          {loading && <div style={{fontSize:12, color:'var(--text-muted)', margin:'10px 0'}}>Yuklanmoqda...</div>}
+
+          <div style={{overflowX:'auto', marginTop:'16px', background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px'}}>
+            <table style={{width:'100%', borderCollapse:'collapse'}}>
+              <thead>
+                <tr>
+                  <th style={th}>Xodim</th>
+                  <th style={th} onClick={()=>setSortKey('leadsTotal')}>Lidlar</th>
+                  <th style={th} onClick={()=>setSortKey('convRate')}>Konversiya %</th>
+                  <th style={th} onClick={()=>setSortKey('callsTotal')}>Qo'ng'iroq</th>
+                  <th style={th} onClick={()=>setSortKey('ansRate')}>Javob %</th>
+                  <th style={th}>O'rt. vaqt</th>
+                  <th style={th} onClick={()=>setSortKey('taskRate')}>Vazifa bajarildi</th>
+                  <th style={th} onClick={()=>setSortKey('tOverdue')}>Kechikkan vazifa</th>
+                  <th style={th} onClick={()=>setSortKey('overdueLeads')}>Kechikkan lid</th>
+                  <th style={th} onClick={()=>setSortKey('score')}>Umumiy ball</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.length === 0 && (
+                  <tr><td colSpan={10} style={{...td, textAlign:'center', color:'var(--text-muted)'}}>Xodimlar topilmadi</td></tr>
+                )}
+                {sorted.map((r, i) => (
+                  <tr key={r.username} style={{cursor:'pointer'}} onClick={()=>setExpanded(expanded===r.username ? null : r.username)}>
+                    <td style={{...td, fontWeight:600}}>
+                      {i===0 && r.score>0 && <span title="Yetakchi" style={{marginRight:'4px'}}>🏆</span>}
+                      {r.fullName}
+                    </td>
+                    <td style={td}>{r.leadsTotal} <span style={{color:'var(--text-muted)', fontSize:11}}>({r.won}W/{r.lost}L)</span></td>
+                    <td style={td}>{r.convRate}%</td>
+                    <td style={td}>{r.callsTotal}</td>
+                    <td style={td}>{r.ansRate}%</td>
+                    <td style={td}>{r.avgDurStr}</td>
+                    <td style={td}>{r.taskRate === null ? '—' : `${r.taskRate}% (${r.tDone}/${r.tTotal})`}</td>
+                    <td style={{...td, color: r.tOverdue>0 ? '#ef4444' : 'inherit'}}>{r.tOverdue}</td>
+                    <td style={{...td, color: r.overdueLeads>0 ? '#ef4444' : 'inherit'}}>{r.overdueLeads}</td>
+                    <td style={td}>
+                      <span style={{fontWeight:700, color:scoreColor(r.score), background:`${scoreColor(r.score)}1a`, padding:'3px 9px', borderRadius:'999px'}}>{r.score}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p style={{fontSize:11, color:'var(--text-muted)', marginTop:'10px'}}>
+            Umumiy ball = konversiya (30%) + qo'ng'iroqqa javob % (30%) + vazifa bajarilishi (40%, agar davr uchun vazifa bo'lmasa e'tiborga olinmaydi).
+          </p>
+        </div>
+      );
+    };
+
     // ===== V54: ACTIVITY LOG PANEL — Hisobotlar > Harakatlar Jurnali =====
     // Hodimlar bo'yicha filtr, bo'limlarga ajratish (bosqich/komment/vazifa/tahrir/qo'ng'iroq/boshqalar)
     // Bosqich tab'ida qo'shimcha "qaysi bosqichdan qaysi bosqichga" filtri + son
@@ -7709,7 +7877,7 @@ fetch('${webhookUrl}', {
         if (leadId) handleStatusChange(leadId, targetStatus);
       };
 
-      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', tasks: 'Vazifalar', reports: 'Hisobotlar', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
+      const tabTitles = { dashboard: 'Boshqaruv paneli', leads: 'Sotuv Varonkasi', callcenter: 'Call Center', tasks: 'Vazifalar', reports: 'Hisobotlar', performance: 'Xodimlar samaradorligi', marketing: 'Marketing Analitika', integrations: 'Integratsiyalar', settings: 'Sozlamalar', billing: 'Obuna va to\'lovlar' };
 
       // Filtered leads — qidiruv + manba + mas'ul + SLA
       const filteredActiveLeads = activeLeads.filter(l => {
@@ -7776,6 +7944,9 @@ fetch('${webhookUrl}', {
                   <span className="nav-section-label" style={{marginTop:'8px'}}>Analitika</span>
                   <div className={`nav-item ${activeTab==='reports'?'active':''}`} onClick={()=>{setActiveTab('reports');setSelectedLeadId(null);}} title="Hisobotlar">
                     <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>bar_chart_4_bars</span> <span className="nav-item-label">Hisobotlar</span>
+                  </div>
+                  <div className={`nav-item ${activeTab==='performance'?'active':''}`} onClick={()=>{setActiveTab('performance');setSelectedLeadId(null);}} title="Xodimlar samaradorligi">
+                    <span className="material-symbols-outlined" style={{fontSize:'18px', lineHeight:1, flexShrink:0}}>military_tech</span> <span className="nav-item-label">Samaradorlik</span>
                   </div>
                 </>
               )}
@@ -8499,6 +8670,8 @@ fetch('${webhookUrl}', {
               {activeTab === 'tasks' && <TasksModule getAuthHeaders={getAuthHeaders} authUser={authUser} leads={leads} setSelectedLeadId={setSelectedLeadId} />}
 
               {activeTab === 'reports' && (role === 'CEO' || role === 'WATCHER') && <HisobotlarModule leads={leads} columnsMap={columnsMap} pipelines={pipelines} setSelectedLeadId={setSelectedLeadId} />}
+
+              {activeTab === 'performance' && (role === 'CEO' || role === 'WATCHER') && <PerformanceModule leads={leads} getAuthHeaders={getAuthHeaders} authUser={authUser} setSelectedLeadId={setSelectedLeadId} />}
 
               {activeTab === 'automation' && role === 'CEO' && <AutomationModule getAuthHeaders={getAuthHeaders} />}
               {activeTab === 'marketing' && role === 'CEO' && <MarketingModule />}
