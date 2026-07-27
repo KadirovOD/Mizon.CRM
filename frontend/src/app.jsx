@@ -4614,10 +4614,18 @@ fetch('${webhookUrl}', {
       const saveMktToServer = (next) => {
         if (!_mktToken || !_mktLoaded.current) return;
         clearTimeout(_mktSaveTimer.current);
-        _mktSaveTimer.current = setTimeout(() => {
-          const extra = {..._mktExtraRef.current, marketing: next};
-          _mktExtraRef.current = extra;
-          fetch('/api/company/settings', {method:'PUT', headers:_mktAuth, body:JSON.stringify({extra_settings: extra})}).catch(()=>{});
+        _mktSaveTimer.current = setTimeout(async () => {
+          try {
+            // Yozishdan oldin serverdagi eng so'nggi holatni olamiz — aks holda boshqa
+            // modullar (masalan Karta Maydonlari) yozgan kalitlar o'chib ketadi.
+            const g = await fetch('/api/company/settings', {headers:_mktAuth});
+            let extra = g.ok ? ((await g.json())?.extra_settings ?? {}) : {};
+            if (typeof extra === 'string') { try { extra = JSON.parse(extra); } catch { extra = {}; } }
+            if (!extra || typeof extra !== 'object') extra = {};
+            const merged = {...extra, marketing: next};
+            _mktExtraRef.current = merged;
+            await fetch('/api/company/settings', {method:'PUT', headers:_mktAuth, body:JSON.stringify({extra_settings: merged})});
+          } catch {}
         }, 600);
       };
 
@@ -6428,11 +6436,75 @@ fetch('${webhookUrl}', {
       useEffect(() => { localStorage.setItem('mizon_formFields', JSON.stringify(formFields)); }, [formFields]);
 
       // Mijoz kartasidagi qo'shimcha (custom) maydonlar
+      // Asosiy manba — server (companies.extra_settings.cardFields), shuning uchun ular
+      // barcha xodimlar va qurilmalarda bir xil ko'rinadi. localStorage faqat kesh:
+      // sahifa ochilishida darhol chizish va oflayn zaxira uchun.
       const [cardFields, setCardFields] = useState(() => {
-        const s = localStorage.getItem('mizon_cardFields');
-        return s ? JSON.parse(s) : [];
+        try { return JSON.parse(localStorage.getItem('mizon_cardFields') || '[]'); } catch { return []; }
       });
-      useEffect(() => { localStorage.setItem('mizon_cardFields', JSON.stringify(cardFields)); }, [cardFields]);
+      const _cfServerJson = React.useRef(null); // serverdagi oxirgi ma'lum holat (JSON)
+      const _cfLoaded     = React.useRef(false);
+      const _cfSaveTimer  = React.useRef(null);
+
+      // Birinchi mount'da serverdan yuklaymiz (GET barcha rollar uchun ochiq)
+      useEffect(() => {
+        const t = localStorage.getItem('mizon_token');
+        if (!t) { _cfLoaded.current = true; return; }
+        const hdrs = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + t };
+        fetch('/api/company/settings', { headers: hdrs })
+          .then(r => r.ok ? r.json() : null)
+          .then(async d => {
+            let extra = d?.extra_settings ?? {};
+            if (typeof extra === 'string') { try { extra = JSON.parse(extra); } catch { extra = {}; } }
+            if (!extra || typeof extra !== 'object') extra = {};
+            if (Array.isArray(extra.cardFields)) {
+              _cfServerJson.current = JSON.stringify(extra.cardFields);
+              setCardFields(extra.cardFields);
+              return;
+            }
+            // Serverda hali yo'q — brauzerda qolgan eski sozlamalarni bir marta ko'chiramiz.
+            // (PUT faqat CEO'da o'tadi; boshqa rollarda jimgina o'tkazib yuboriladi.)
+            if (cardFields.length) {
+              try {
+                const r = await fetch('/api/company/settings', {
+                  method: 'PUT', headers: hdrs,
+                  body: JSON.stringify({ extra_settings: { ...extra, cardFields } }),
+                });
+                if (r.ok) _cfServerJson.current = JSON.stringify(cardFields);
+              } catch {}
+            }
+          })
+          .catch(()=>{})
+          .finally(() => { _cfLoaded.current = true; });
+      }, []);
+
+      // O'zgarganda: localStorage'ga kesh + serverga debounce bilan saqlash.
+      // PUT faqat CEO uchun ruxsat etilgan — boshqa rollarda jimgina e'tiborsiz qoldiriladi.
+      useEffect(() => {
+        localStorage.setItem('mizon_cardFields', JSON.stringify(cardFields));
+        if (!_cfLoaded.current) return;                       // serverdan yuklanmaguncha yozmaymiz
+        const cur = JSON.stringify(cardFields);
+        if (cur === _cfServerJson.current) return;            // o'zgarish yo'q — PUT shart emas
+        const t = localStorage.getItem('mizon_token');
+        if (!t) return;
+        clearTimeout(_cfSaveTimer.current);
+        _cfSaveTimer.current = setTimeout(async () => {
+          const hdrs = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + t };
+          try {
+            // Yozishdan oldin serverdagi eng so'nggi extra_settings'ni olamiz, aks holda
+            // boshqa modullar (masalan Marketing) yozgan kalitlarni o'chirib yuborishimiz mumkin.
+            const g = await fetch('/api/company/settings', { headers: hdrs });
+            let extra = g.ok ? ((await g.json())?.extra_settings ?? {}) : {};
+            if (typeof extra === 'string') { try { extra = JSON.parse(extra); } catch { extra = {}; } }
+            if (!extra || typeof extra !== 'object') extra = {};
+            const r = await fetch('/api/company/settings', {
+              method: 'PUT', headers: hdrs,
+              body: JSON.stringify({ extra_settings: { ...extra, cardFields } }),
+            });
+            if (r.ok) _cfServerJson.current = cur;
+          } catch {}
+        }, 600);
+      }, [cardFields]);
 
       // Forma sarlavhasi va qo'shimcha matn (Veb Shakl sozlamalari)
       const [formSettings, setFormSettings] = useState({ form_title:'', form_subtitle:'' });
