@@ -7844,12 +7844,12 @@ fetch('${webhookUrl}', {
                             <span className="info-label">Manba</span>
                             <span className="info-value"><span className={`source-badge badge-${selectedLeadData.source}`}>{selectedLeadData.source.replace('meta_','')}</span></span>
                           </div>
-                          {/* Qo'shimcha (custom) maydonlar — ko'rish rejimi */}
-                          {cardFields.filter(cf=>(selectedLeadData.customData||{})[cf.key]).map(cf => (
+                          {/* Qo'shimcha (custom) maydonlar — ko'rish rejimi (bo'sh bo'lsa ham ko'rsatamiz) */}
+                          {cardFields.filter(cf=>cf.label).map(cf => (
                             <div key={cf.id} className="info-row">
                               <div className="info-row-icon"><span className="material-symbols-outlined" style={{fontSize:'15px'}}>more_horiz</span></div>
                               <span className="info-label">{cf.label}</span>
-                              <span className="info-value">{(selectedLeadData.customData||{})[cf.key]}</span>
+                              <span className="info-value">{(selectedLeadData.customData||{})[cf.key] || '—'}</span>
                             </div>
                           ))}
                           {/* V51: Vebhook orqali kelgan, lekin cardFields da sozlanmagan maydonlarni ham ko'rsatamiz */}
