@@ -77,12 +77,40 @@ exports.createLead = async (req, res) => {
     region = "Noma'lum",
     owner = 'ceo',
     status = null,
-    pipelineId = 'p1'
+    pipelineId = 'p1',
+    force = false, // true bo'lsa — telefon dublikat topilsa ham majburan yaratiladi
   } = req.body;
 
   if (!name) return res.status(400).json({ error: 'Name is required' });
 
   try {
+    // V63: TELEFON BO'YICHA DUBLIKAT OGOHLANTIRISHI — xodim bir xil mijozni bilmasdan
+    // ikkinchi marta qo'lda kiritib qo'yishi mumkin (masalan boshqasi allaqachon ishlab
+    // yotgan lidni ko'rmay). force=true yuborilmasa, mavjud lidni ko'rsatib, yaratmasdan
+    // qaytaramiz — frontend foydalanuvchidan tasdiq so'raydi.
+    if (phone && !force && cid) {
+      const digits = String(phone).replace(/\D/g, '');
+      if (digits.length >= 7) {
+        const tail = digits.slice(-9);
+        const dup = await req.db.query(
+          `SELECT id, name, owner FROM crm_lead
+             WHERE company_id=$2 AND phone IS NOT NULL
+               AND LENGTH(REGEXP_REPLACE(phone,'\\D','','g')) >= 9
+               AND RIGHT(REGEXP_REPLACE(phone,'\\D','','g'), 9) = $1
+             ORDER BY id DESC LIMIT 1`,
+          [tail, cid]
+        );
+        if (dup.rows.length) {
+          return res.status(409).json({
+            success: false,
+            duplicate: true,
+            existingLead: dup.rows[0],
+            error: `Bu telefon raqam bilan lid allaqachon mavjud: "${dup.rows[0].name}" (${dup.rows[0].owner || '—'})`,
+          });
+        }
+      }
+    }
+
     let score = source === 'manual' ? 10 : 30;
     if (phone) score += 20;
     if (email) score += 10;
@@ -466,5 +494,136 @@ exports.syncStages = async (req, res) => {
   } catch (err) {
     console.error('syncStages error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+};
+
+// GET /api/leads/duplicates — CEO/WATCHER: bir xil telefon raqamiga ega (oxirgi 9 raqam
+// bo'yicha, format farqidan qat'i nazar) lid guruhlarini topadi. Sabab: turli manbalar
+// (Facebook forma qayta to'ldirilishi, qo'lda ikkinchi marta kiritish va h.k.) orqali bitta
+// mijoz uchun bir nechta mustaqil lid yaratilib qolishi mumkin — bu KPI/hisobotlarda
+// (masalan "Yutildi" ro'yxatida) bitta mijozni ikki marta ko'rsatadi.
+exports.getDuplicateLeads = async (req, res) => {
+  if (!req.db) return res.json({ success: true, groups: [] });
+  if (!req.user || !['CEO', 'WATCHER', 'SUPERADMIN'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Ruxsat yo\'q' });
+  }
+  const cid = req.user?.companyId;
+  try {
+    const { rows: tails } = await req.db.query(
+      `SELECT RIGHT(REGEXP_REPLACE(phone,'\\D','','g'), 9) AS tail, COUNT(*) AS cnt
+         FROM crm_lead
+        WHERE company_id=$1 AND phone IS NOT NULL
+          AND LENGTH(REGEXP_REPLACE(phone,'\\D','','g')) >= 9
+        GROUP BY tail
+       HAVING COUNT(*) > 1
+        ORDER BY cnt DESC
+        LIMIT 100`,
+      [cid]
+    );
+    if (!tails.length) return res.json({ success: true, groups: [] });
+
+    const groups = [];
+    for (const t of tails) {
+      const { rows: leads } = await req.db.query(
+        `SELECT l.id, l.name, l.phone, l.owner, l.mizon_source, l.created_at,
+                s.name AS stage_name, s.is_won, s.is_lost,
+                COALESCE(jsonb_array_length(l.chatlogs), 0) AS chatlogs_count
+           FROM crm_lead l
+           LEFT JOIN crm_stage s ON s.id = l.stage_id
+          WHERE l.company_id=$2
+            AND RIGHT(REGEXP_REPLACE(l.phone,'\\D','','g'), 9) = $1
+          ORDER BY l.id ASC`,
+        [t.tail, cid]
+      );
+      groups.push({ phoneTail: t.tail, leads });
+    }
+    res.json({ success: true, groups });
+  } catch (err) {
+    console.error('getDuplicateLeads error:', err.message);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+};
+
+// POST /api/leads/merge — CEO: bir nechta dublikat lidni bitta "asosiy" lidga birlashtiradi.
+// body: { keepId, removeIds: [id, ...] }
+// removeIds dagi lidlarning chatlogs'i keepId'ga ko'chiriladi (birlashtirilgan holda,
+// sana bo'yicha saralanadi), so'ng removeIds o'chiriladi (crm_audit_log ga 'merge' sifatida
+// yoziladi — deleteLead bilan bir xil audit yondashuvi).
+exports.mergeLeads = async (req, res) => {
+  if (!req.db) return res.status(503).json({ error: 'Database not configured' });
+  if (!req.user || req.user.role !== 'CEO') {
+    return res.status(403).json({ error: "Faqat CEO lidlarni birlashtira oladi" });
+  }
+  const cid = req.user?.companyId;
+  const { keepId, removeIds } = req.body || {};
+  if (!keepId || !Array.isArray(removeIds) || !removeIds.length) {
+    return res.status(400).json({ error: 'keepId va removeIds majburiy' });
+  }
+  const ids = removeIds.map(Number).filter(n => n && n !== Number(keepId));
+  if (!ids.length) return res.status(400).json({ error: "O'chiriladigan lidlar noto'g'ri" });
+
+  try {
+    const keepRes = await req.db.query(
+      'SELECT id, chatlogs, actualcallattempts FROM crm_lead WHERE id=$1 AND company_id=$2',
+      [keepId, cid]
+    );
+    if (!keepRes.rows.length) return res.status(404).json({ error: 'Asosiy lid topilmadi' });
+    let keepLogs = keepRes.rows[0].chatlogs || [];
+    let keepAttempts = keepRes.rows[0].actualcallattempts || 0;
+
+    for (const rid of ids) {
+      const snap = await req.db.query(
+        `SELECT l.id, l.name, l.phone, l.email, l.owner, l.mizon_source, l.pipelineid,
+                l.region, l.lead_score, l.created_at, l.chatlogs, l.actualcallattempts,
+                l.stage_id, s.name AS stage_name
+           FROM crm_lead l LEFT JOIN crm_stage s ON s.id = l.stage_id
+          WHERE l.id=$1 AND l.company_id=$2`,
+        [rid, cid]
+      );
+      if (!snap.rows.length) continue;
+      const lead = snap.rows[0];
+      const logs = lead.chatlogs || [];
+      keepLogs = [
+        ...keepLogs,
+        { type: 'sys', date: new Date().toISOString(),
+          text: `🔗 Dublikat lid #${rid} ("${lead.name}", mas'ul: ${lead.owner || '—'}) shu lidga birlashtirildi (${req.user.username}).` },
+        ...logs,
+      ];
+      keepAttempts += lead.actualcallattempts || 0;
+
+      await req.db.query('DELETE FROM crm_lead WHERE id=$1 AND company_id=$2', [rid, cid]);
+
+      let chatlogsCount = 0;
+      try { chatlogsCount = Array.isArray(logs) ? logs.length : 0; } catch {}
+      await req.db.query(
+        `INSERT INTO crm_audit_log
+           (company_id, lead_id, lead_name, lead_phone, action, actor_user, actor_role, details)
+         VALUES ($1, $2, $3, $4, 'merge', $5, $6, $7::jsonb)`,
+        [
+          cid, lead.id, lead.name || '', lead.phone || '',
+          req.user.username || '', req.user.role || '',
+          JSON.stringify({
+            merged_into: Number(keepId),
+            owner: lead.owner || null,
+            source: lead.mizon_source || null,
+            stage_name: lead.stage_name || null,
+            lead_created_at: lead.created_at || null,
+            chatlogs_count: chatlogsCount,
+          }),
+        ]
+      );
+    }
+
+    // sana bo'yicha saralash (eng eskisi birinchi)
+    keepLogs.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+
+    const upd = await req.db.query(
+      'UPDATE crm_lead SET chatlogs=$1, actualcallattempts=$2 WHERE id=$3 AND company_id=$4 RETURNING *',
+      [JSON.stringify(keepLogs), keepAttempts, keepId, cid]
+    );
+    res.json({ success: true, lead: upd.rows[0] });
+  } catch (err) {
+    console.error('mergeLeads error:', err.message);
+    res.status(500).json({ error: 'Server error', details: err.message });
   }
 };

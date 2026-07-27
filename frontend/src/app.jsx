@@ -678,6 +678,97 @@
       );
     };
 
+    // ===== V63: DUBLIKAT LIDLARNI ANIQLASH VA BIRLASHTIRISH =====
+    // Bir xil telefon raqamiga ega bir nechta mustaqil lid (masalan Facebook forma
+    // qayta to'ldirilganda yoki qo'lda ikkinchi marta kiritilganda paydo bo'ladi) —
+    // KPI/hisobotlarda bitta mijozni ikki marta ko'rsatadi. Bu panel shunday
+    // guruhlarni topadi va CEO birini "asosiy" qilib qolgan(lar)ini birlashtira oladi.
+    const DuplicateLeadsPanel = () => {
+      const [groups,  setGroups]  = useState(null); // null = hali skan qilinmagan
+      const [loading, setLoading] = useState(false);
+      const [keepSel, setKeepSel] = useState({}); // { [phoneTail]: leadId }
+      const [msg,     setMsg]     = useState('');
+      const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
+
+      const token = localStorage.getItem('mizon_token');
+      const H = { 'Content-Type':'application/json', ...(token ? {'Authorization':'Bearer '+token} : {}) };
+
+      const scan = () => {
+        setLoading(true);
+        fetch('/api/leads/duplicates', { headers: H })
+          .then(r => r.json())
+          .then(d => {
+            const gs = Array.isArray(d.groups) ? d.groups : [];
+            setGroups(gs);
+            const initSel = {};
+            gs.forEach(g => { initSel[g.phoneTail] = g.leads[0]?.id; });
+            setKeepSel(initSel);
+          })
+          .catch(() => setGroups([]))
+          .finally(() => setLoading(false));
+      };
+
+      const merge = async (group) => {
+        const keepId = keepSel[group.phoneTail];
+        const removeIds = group.leads.map(l => l.id).filter(id => id !== keepId);
+        if (!removeIds.length) return;
+        if (!window.confirm(`${removeIds.length} ta dublikat lid asosiy lidga birlashtirilsin va o'chirilsinmi? Bu amalni ortga qaytarib bo'lmaydi.`)) return;
+        const r = await fetch('/api/leads/merge', { method:'POST', headers:H, body: JSON.stringify({ keepId, removeIds }) });
+        const d = await r.json();
+        if (d.success) { flash('✅ Birlashtirildi'); scan(); }
+        else flash('❌ ' + (d.error || 'Xato'));
+      };
+
+      return (
+        <div>
+          <h3 style={{marginBottom:'6px', fontWeight:600}}>Dublikat lidlar</h3>
+          <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>
+            Bir xil telefon raqamiga ega, lekin alohida yaratilgan lidlarni topadi (masalan bitta mijoz Facebook formasini ikki marta to'ldirsa). Har bir guruhda qaysi lid "asosiy" bo'lib qolishini tanlang — qolganlari shu lidga birlashtiriladi (chatlogs birlashadi) va o'chiriladi.
+          </p>
+          <button className="btn-outline" onClick={scan} disabled={loading} style={{marginBottom:'16px'}}>
+            {loading ? 'Skanerlanmoqda...' : (groups === null ? 'Dublikatlarni qidirish' : 'Qayta skanerlash')}
+          </button>
+
+          {msg && (
+            <div style={{padding:'8px 14px', borderRadius:'8px', marginBottom:'14px', fontSize:'13px',
+              background: msg.startsWith('✅') ? 'rgba(90,223,129,0.1)' : 'rgba(255,80,80,0.1)',
+              color: msg.startsWith('✅') ? 'var(--success)' : 'var(--danger)'}}>{msg}</div>
+          )}
+
+          {groups !== null && groups.length === 0 && (
+            <div style={{padding:'20px', textAlign:'center', color:'var(--text-muted)', background:'var(--bg-base)', borderRadius:'8px', border:'1px dashed var(--border-light)'}}>
+              Dublikat topilmadi 🎉
+            </div>
+          )}
+
+          {groups && groups.map(g => (
+            <div key={g.phoneTail} style={{border:'1px solid var(--border-light)', borderRadius:'10px', padding:'14px', marginBottom:'12px'}}>
+              <div style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'10px'}}>
+                Telefon: ...{g.phoneTail} · {g.leads.length} ta lid
+              </div>
+              {g.leads.map(l => (
+                <label key={l.id} style={{display:'flex', alignItems:'center', gap:'10px', padding:'8px', borderRadius:'6px', cursor:'pointer',
+                  background: keepSel[g.phoneTail] === l.id ? 'rgba(1,167,80,0.08)' : 'transparent'}}>
+                  <input type="radio" name={`keep_${g.phoneTail}`} checked={keepSel[g.phoneTail] === l.id}
+                    onChange={()=>setKeepSel({...keepSel, [g.phoneTail]: l.id})} />
+                  <div style={{flex:1, fontSize:13}}>
+                    <b>#{l.id} {l.name}</b>
+                    <span style={{color:'var(--text-muted)', marginLeft:'8px'}}>
+                      {l.owner} · {l.stage_name || '—'} {l.is_won ? '🏆' : l.is_lost ? '❌' : ''} · {l.chatlogs_count} ta yozuv · {l.created_at ? new Date(l.created_at).toLocaleDateString('uz-UZ') : ''}
+                    </span>
+                  </div>
+                  {keepSel[g.phoneTail] === l.id && <span style={{fontSize:11, fontWeight:700, color:'var(--success)'}}>ASOSIY</span>}
+                </label>
+              ))}
+              <button className="btn-primary" style={{marginTop:'10px', fontSize:'12px', padding:'6px 12px'}} onClick={()=>merge(g)}>
+                Qolganlarini shu lidga birlashtirish
+              </button>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
     // ===== INTEGRATIONS =====
     // ┌──────────────────────────────────────────────────────────────────────────┐
     // │ WEBHOOK STATE RESET BUG — TUSHUNTIRISH (kod bilmaydigan uchun ham):        │
@@ -7532,7 +7623,7 @@ fetch('${webhookUrl}', {
           });
       };
 
-      const handleAddManualLead = () => {
+      const handleAddManualLead = (force) => {
         if(!newLeadForm.name||!newLeadForm.phone) return alert("Ism va Raqamni kiriting");
         const cols = columnsMap[activePipe];
         if(!cols||cols.length===0) return alert("Avval quvurga bosqich qo'shing");
@@ -7545,8 +7636,17 @@ fetch('${webhookUrl}', {
         };
         fetch('/api/leads', {
           method:'POST', headers: getAuthHeaders(),
-          body:JSON.stringify({name:newLeadForm.name, phone:newLeadForm.phone, region:newLeadForm.region, owner:authUser.username, pipelineId:activePipe, status:stageMapRef.current.toDbId[initialStage]||1})
+          body:JSON.stringify({name:newLeadForm.name, phone:newLeadForm.phone, region:newLeadForm.region, owner:authUser.username, pipelineId:activePipe, status:stageMapRef.current.toDbId[initialStage]||1, force: !!force})
         }).then(res=>res.json()).then(data => {
+          // V63: telefon bo'yicha dublikat topildi — foydalanuvchidan tasdiq so'raymiz
+          if (data.duplicate && !force) {
+            const ex = data.existingLead || {};
+            const proceed = window.confirm(
+              `⚠️ Bu telefon raqam bilan lid allaqachon mavjud:\n"${ex.name || '?'}" (mas'ul: ${ex.owner || '—'})\n\nBaribir yangi lid sifatida qo'shilsinmi?`
+            );
+            if (proceed) handleAddManualLead(true);
+            return;
+          }
           if(data.success) localLead.id = data.lead.id;
           setLeads(prev=>[...prev,localLead]); setShowAddLead(false); setNewLeadForm({name:'',phone:'',region:''});
           addNotif('new_lead', '🆕 Yangi lead qo\'shildi', `${localLead.name} — qo'lda kiritildi (${authUser.username})`, localLead.id);
@@ -8655,7 +8755,7 @@ fetch('${webhookUrl}', {
                       <input className="input-base" placeholder="Toshkent, Yunusobod..." value={newLeadForm.region} onChange={e=>setNewLeadForm({...newLeadForm,region:e.target.value})} />
                     </div>
                     <div style={{display:'flex', gap:'10px', marginTop:'16px'}}>
-                      <button className="btn-primary" style={{flex:1}} onClick={handleAddManualLead}>Qo'shish</button>
+                      <button className="btn-primary" style={{flex:1}} onClick={()=>handleAddManualLead()}>Qo'shish</button>
                       <button className="btn-outline" onClick={()=>setShowAddLead(false)}>Bekor</button>
                     </div>
                   </div>
@@ -8935,6 +9035,7 @@ fetch('${webhookUrl}', {
                     <div className={`settings-tab ${settingsActiveTab==='limits'?'active':''}`} onClick={()=>setSettingsActiveTab('limits')}><Ico n="settings" s={14}/> Sozlamalar</div>
                     <div className={`settings-tab ${settingsActiveTab==='pipelines'?'active':''}`} onClick={()=>setSettingsActiveTab('pipelines')}><Ico n="layers" s={14}/> Varonkalar</div>
                     <div className={`settings-tab ${settingsActiveTab==='cardfields'?'active':''}`} onClick={()=>setSettingsActiveTab('cardfields')}><Ico n="list" s={14}/> Karta Maydonlari</div>
+                    <div className={`settings-tab ${settingsActiveTab==='duplicates'?'active':''}`} onClick={()=>setSettingsActiveTab('duplicates')}><Ico n="content_copy" s={14}/> Dublikatlar</div>
                   </div>
                   <div className="card" style={{minHeight:'400px'}}>
                     {settingsActiveTab==='users' && (
@@ -8983,6 +9084,9 @@ fetch('${webhookUrl}', {
                           </div>
                         )}
                       </div>
+                    )}
+                    {settingsActiveTab==='duplicates' && (
+                      <DuplicateLeadsPanel />
                     )}
 
                   </div>

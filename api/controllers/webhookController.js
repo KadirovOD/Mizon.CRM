@@ -188,6 +188,51 @@ exports.handleMetaWebhook = async (req, res) => {
 
           const leadName = fields.name || `Facebook Lead #${leadgen_id}`;
 
+          // V63: TELEFON BO'YICHA DUBLIKAT TEKSHIRUVI — Meta har bir forma yuborilishiga
+          // yangi, betakror leadgen_id beradi. Agar bitta mijoz (ota-ona) formani ikki marta
+          // to'ldirsa (masalan boshqa reklama orqali qayta ko'rib), facebook_lead_id bo'yicha
+          // dublikat guard (yuqorida) buni ushlay olmaydi — chunki leadgen_id har safar yangi.
+          // Natijada bitta mijoz uchun ikkita mustaqil lid yaratilib, ikki xil menejer ular
+          // ustida ishlab, ikkalasi ham "Yutildi" bo'lib qolishi mumkin edi (KPI/hisobotlarda
+          // ikki marta hisoblanadi). Shu sababli — telefon (oxirgi 9 raqam, format farqidan
+          // qat'i nazar) bo'yicha shu kompaniyada mos lid bo'lsa, yangi qator yaratilmaydi;
+          // o'rniga mavjud lidga eslatma yoziladi.
+          if (fields.phone) {
+            const digits = String(fields.phone).replace(/\D/g, '');
+            if (digits.length >= 7) {
+              const tail = digits.slice(-9);
+              const dupPhone = await req.db.query(
+                companyId
+                  ? `SELECT id, name FROM crm_lead
+                       WHERE company_id=$2 AND phone IS NOT NULL
+                         AND LENGTH(REGEXP_REPLACE(phone,'\\D','','g')) >= 9
+                         AND RIGHT(REGEXP_REPLACE(phone,'\\D','','g'), 9) = $1
+                       ORDER BY id DESC LIMIT 1`
+                  : `SELECT id, name FROM crm_lead
+                       WHERE phone IS NOT NULL
+                         AND LENGTH(REGEXP_REPLACE(phone,'\\D','','g')) >= 9
+                         AND RIGHT(REGEXP_REPLACE(phone,'\\D','','g'), 9) = $1
+                       ORDER BY id DESC LIMIT 1`,
+                companyId ? [tail, companyId] : [tail]
+              );
+              if (dupPhone.rows.length) {
+                const existingId = dupPhone.rows[0].id;
+                await req.db.query(
+                  `UPDATE crm_lead SET chatlogs = COALESCE(chatlogs,'[]'::jsonb) || $1::jsonb WHERE id=$2`,
+                  [
+                    JSON.stringify([{
+                      type: 'sys', date: new Date().toISOString(),
+                      text: `📘 Yana Facebook orqali murojaat keldi (Reklama: ${adName||'-'} | Form: ${formName||form_id}) — shu telefon bo'yicha mavjud lid bo'lgani uchun dublikat yaratilmadi.`,
+                    }]),
+                    existingId,
+                  ]
+                );
+                console.log(`↩️  FB lead ${leadgen_id}: telefon dublikat → mavjud lead #${existingId} ("${dupPhone.rows[0].name}")ga qo'shildi, yangi qator yaratilmadi`);
+                continue;
+              }
+            }
+          }
+
           // Get first stage for this company
           const stageRes = await req.db.query(
             companyId

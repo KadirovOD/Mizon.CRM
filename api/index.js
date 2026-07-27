@@ -636,6 +636,8 @@ app.put   ('/api/leads/:id',          leadController.updateLeadFull);
 app.delete('/api/leads/:id',          leadController.deleteLead);
 app.get   ('/api/leads/:id/chatlogs', leadController.getLeadChatlogs);
 app.post  ('/api/leads/:id/claim',    leadController.claimLead);
+app.get   ('/api/leads/duplicates',   leadController.getDuplicateLeads);
+app.post  ('/api/leads/merge',        leadController.mergeLeads);
 app.get   ('/api/stages',             leadController.getStages);
 app.put   ('/api/stages/sync',        leadController.syncStages);
 app.get   ('/api/stats',              leadController.getStats);
