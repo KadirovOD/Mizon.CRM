@@ -3446,6 +3446,40 @@ fetch('${webhookUrl}', {
 
       const isOverdue = (t) => t.status === 'open' && t.due_date && new Date(t.due_date) < new Date();
 
+      // V63: lidga bevosita biriktirilgan "eski" vazifalar (crm_lead.taskdescription/
+      // deadline) — bu alohida, mustaqil crm_tasks jadvaliga tegishli emas, lekin
+      // xodim uchun ular ham "mening vazifam" hisoblanadi. Shu jadvaldagi vazifalar
+      // bilan bir qatorda ko'rsatmasak, xodim/CEO "mavjud vazifalar ko'rsatilmayapti"
+      // deb o'ylashi tabiiy — chunki ular aynan shu turdagi vazifalarni ko'proq ishlatgan.
+      // Bu yozuvlar faqat "ochiq" holatda bo'lishi mumkin (bajarilgach deadline
+      // tozalanadi), shuning uchun faqat 'done' filtri tanlanmaganda ko'rsatamiz.
+      const leadTasks = (filterStatus === 'done') ? [] : (leads || [])
+        .filter(l => l.deadline)
+        .filter(l => {
+          const resp = l.taskAssignee || l.owner;
+          if (isBoss) return !filterAssignee || resp === filterAssignee;
+          return resp === authUser?.username;
+        })
+        .map(l => ({
+          id: 'lead_' + l.id,
+          title: l.taskDescription || 'Vazifa',
+          description: null,
+          assignee: l.taskAssignee || l.owner,
+          due_date: l.deadline,
+          status: 'open',
+          lead_id: l.id,
+          lead_name: l.name,
+          isLeadTask: true,
+        }));
+
+      const combinedTasks = [...leadTasks, ...tasks].sort((a, b) => {
+        const aOpen = a.status !== 'done', bOpen = b.status !== 'done';
+        if (aOpen !== bOpen) return aOpen ? -1 : 1;
+        const ad = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+        const bd = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+        return ad - bd;
+      });
+
       return (
         <div style={{padding:'24px', maxWidth:'900px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'6px'}}>
@@ -3486,19 +3520,28 @@ fetch('${webhookUrl}', {
           {/* Ro'yxat */}
           {loading ? (
             <div style={{color:'var(--text-muted)', fontSize:'13px'}}>Yuklanmoqda...</div>
-          ) : tasks.length === 0 ? (
+          ) : combinedTasks.length === 0 ? (
             <div style={{color:'var(--text-muted)', fontSize:'13px', padding:'20px', textAlign:'center'}}>Vazifalar topilmadi</div>
           ) : (
-            tasks.map(t => (
+            combinedTasks.map(t => (
               <div key={t.id} style={{...cardStyle, display:'flex', alignItems:'flex-start', gap:'12px',
                 borderColor: isOverdue(t) ? 'rgba(239,68,68,0.4)' : 'var(--outline-variant)'}}>
-                <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'16px', height:'16px', cursor:'pointer'}} />
+                {t.isLeadTask ? (
+                  <span title="Lidga biriktirilgan vazifa — lid ichidan yakunlanadi"
+                    onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)}
+                    style={{marginTop:'3px', cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:18}}>link</span>
+                  </span>
+                ) : (
+                  <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'16px', height:'16px', cursor:'pointer'}} />
+                )}
                 <div style={{flex:1}}>
                   <div style={{fontWeight:600, fontSize:14, textDecoration: t.status==='done' ? 'line-through' : 'none', color: t.status==='done' ? 'var(--text-muted)' : 'var(--text-main)'}}>
                     {t.title}
                   </div>
                   {t.description && <div style={{fontSize:12, color:'var(--text-muted)', marginTop:'4px'}}>{t.description}</div>}
                   <div style={{display:'flex', gap:'10px', marginTop:'6px', fontSize:11, color:'var(--text-muted)', flexWrap:'wrap'}}>
+                    {t.isLeadTask && <span style={{color:'var(--primary)', fontWeight:600}}>LID VAZIFASI</span>}
                     {isBoss && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person</span> {t.assignee}</span>}
                     {t.due_date && (
                       <span style={{color: isOverdue(t) ? '#ef4444' : 'var(--text-muted)'}}>
@@ -3512,16 +3555,18 @@ fetch('${webhookUrl}', {
                     )}
                   </div>
                 </div>
-                <div style={{display:'flex', gap:'4px'}}>
-                  <button title="Tahrirlash" onClick={()=>setModal({ ...t, dueDate: t.due_date ? new Date(t.due_date).toISOString().slice(0,16) : '' })}
-                    style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)'}}>
-                    <span className="material-symbols-outlined" style={{fontSize:16}}>edit</span>
-                  </button>
-                  <button title="O'chirish" onClick={()=>removeTask(t)}
-                    style={{background:'none', border:'none', cursor:'pointer', color:'var(--danger)'}}>
-                    <span className="material-symbols-outlined" style={{fontSize:16}}>delete</span>
-                  </button>
-                </div>
+                {!t.isLeadTask && (
+                  <div style={{display:'flex', gap:'4px'}}>
+                    <button title="Tahrirlash" onClick={()=>setModal({ ...t, dueDate: t.due_date ? new Date(t.due_date).toISOString().slice(0,16) : '' })}
+                      style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)'}}>
+                      <span className="material-symbols-outlined" style={{fontSize:16}}>edit</span>
+                    </button>
+                    <button title="O'chirish" onClick={()=>removeTask(t)}
+                      style={{background:'none', border:'none', cursor:'pointer', color:'var(--danger)'}}>
+                      <span className="material-symbols-outlined" style={{fontSize:16}}>delete</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}
