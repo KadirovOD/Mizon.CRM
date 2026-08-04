@@ -3706,6 +3706,131 @@ fetch('${webhookUrl}', {
       );
     };
 
+    // ===== V65: XODIM "O'YINCHI KARTASI" — RADAR DIAGRAMMA =====
+    // Tashqi kutubxonasiz (Chart.js/recharts yo'q), xom SVG bilan chizilgan
+    // pentagon radar diagramma. Futbolchi kartalaridagi ko'nikmalar chizmasiga o'xshaydi.
+    const RadarChart = ({ attrs, size = 168, color = '#5adf81' }) => {
+      const n  = attrs.length;
+      const cx = size / 2, cy = size / 2;
+      const r  = size / 2 - 30;
+      const angleFor = (i) => (Math.PI * 2 * i / n) - Math.PI / 2;
+      const ptAt = (i, factor) => {
+        const a = angleFor(i);
+        return [cx + r * factor * Math.cos(a), cy + r * factor * Math.sin(a)];
+      };
+      const levels   = [0.25, 0.5, 0.75, 1];
+      const dataPts  = attrs.map((a, i) => ptAt(i, Math.max(0.04, (a.value || 0) / 100)));
+      const dataPath = dataPts.map(p => p.join(',')).join(' ');
+
+      return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{overflow:'visible', flexShrink:0}}>
+          {levels.map((lvl, gi) => (
+            <polygon key={gi} points={attrs.map((_, i) => ptAt(i, lvl).join(',')).join(' ')}
+              fill="none" stroke="var(--outline-variant)" strokeWidth="1" />
+          ))}
+          {attrs.map((_, i) => {
+            const [x, y] = ptAt(i, 1);
+            return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--outline-variant)" strokeWidth="1" />;
+          })}
+          <polygon points={dataPath} fill={color + '33'} stroke={color} strokeWidth="2" strokeLinejoin="round" />
+          {dataPts.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="2.5" fill={color} />)}
+          {attrs.map((a, i) => {
+            const [lx, ly] = ptAt(i, 1.34);
+            const anchor = lx < cx - 4 ? 'end' : lx > cx + 4 ? 'start' : 'middle';
+            return (
+              <text key={i} x={lx} y={ly} fontSize="9.5" fontWeight="700" fill="var(--text-secondary)"
+                textAnchor={anchor} dominantBaseline="middle">{a.label}</text>
+            );
+          })}
+        </svg>
+      );
+    };
+
+    // Har bir asosiy ko'nikma qaysi xodimda eng kuchli bo'lsa — shunga mos "pozitsiya" belgisi
+    const PC_POSITIONS = {
+      conv:     "🎯 Yopuvchi",
+      aloqa:    "📞 Operator",
+      faollik:  "⚡ Faol xodim",
+      intizom:  "✅ Intizomli",
+      barqaror: "🛡 Barqaror",
+    };
+
+    const PlayerCard = ({ r, isTop }) => {
+      const scoreColor = (s) => s>=70 ? '#01a750' : s>=40 ? '#f59e0b' : '#ef4444';
+      const color = scoreColor(r.score);
+      const attrs = [
+        { key:'conv',     label:'YAKUN',    value: r.convRate },
+        { key:'aloqa',    label:'ALOQA',    value: r.ansRate },
+        { key:'faollik',  label:'FAOLLIK',  value: r.activityScore },
+        { key:'intizom',  label:'INTIZOM',  value: r.taskRate ?? 0 },
+        { key:'barqaror', label:'BARQAROR', value: r.reliability },
+      ];
+      const best  = attrs.reduce((a,b) => b.value > a.value ? b : a);
+      const worst = attrs.reduce((a,b) => b.value < a.value ? b : a);
+      const posLabel = PC_POSITIONS[best.key] || '';
+      const initials = (r.fullName || '?').trim().split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase();
+      const overdueTotal = r.tOverdue + r.overdueLeads;
+
+      return (
+        <div style={{
+          position:'relative',
+          background: isTop ? 'linear-gradient(160deg, rgba(245,197,24,0.14), var(--bg-surface) 55%)' : 'var(--bg-surface)',
+          border: isTop ? '1px solid rgba(245,197,24,0.5)' : '1px solid var(--outline-variant)',
+          borderRadius:'16px', padding:'18px 16px',
+          boxShadow: isTop ? '0 0 26px rgba(245,197,24,0.14)' : 'var(--card-shadow)',
+          transition:'transform 0.15s, box-shadow 0.15s',
+        }}>
+          {isTop && <div style={{position:'absolute', top:'14px', left:'16px', fontSize:18}} title="Yetakchi">🏆</div>}
+          <div style={{position:'absolute', top:'14px', right:'16px', textAlign:'center'}}>
+            <div style={{fontSize:26, fontWeight:800, color, lineHeight:1}}>{r.score}</div>
+            <div style={{fontSize:9, color:'var(--text-muted)', fontWeight:700, letterSpacing:'0.05em'}}>OVR</div>
+          </div>
+
+          <div style={{display:'flex', flexDirection:'column', alignItems:'center', paddingTop:'6px'}}>
+            <div style={{
+              width:56, height:56, borderRadius:'50%',
+              background:'linear-gradient(135deg, var(--primary-container), #006b33)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              fontWeight:800, color:'#fff', fontSize:18, marginBottom:'8px',
+              border: isTop ? '2px solid #f5c518' : '2px solid var(--outline-variant)',
+            }}>{initials}</div>
+            <div style={{fontWeight:700, fontSize:14, textAlign:'center'}}>{r.fullName}</div>
+            <div style={{fontSize:11, color:'var(--text-muted)', marginTop:'2px', marginBottom:'6px'}}>{posLabel}</div>
+
+            <RadarChart attrs={attrs} color={color} />
+
+            <div style={{display:'flex', flexDirection:'column', gap:'5px', width:'100%', marginTop:'12px', fontSize:11.5}}>
+              <div style={{display:'flex', alignItems:'center', gap:'6px', color:'#5adf81'}}>
+                <span>💪</span><span>Kuchli: <b>{best.label}</b> ({best.value})</span>
+              </div>
+              <div style={{display:'flex', alignItems:'center', gap:'6px', color:'#ef4444'}}>
+                <span>⚠️</span><span>Zaif: <b>{worst.label}</b> ({worst.value})</span>
+              </div>
+            </div>
+
+            <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'4px', width:'100%', marginTop:'14px', paddingTop:'12px', borderTop:'1px solid var(--outline-variant)'}}>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:13, fontWeight:700}}>{r.leadsTotal}</div>
+                <div style={{fontSize:9, color:'var(--text-muted)'}}>LID</div>
+              </div>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:13, fontWeight:700}}>{r.callsTotal}</div>
+                <div style={{fontSize:9, color:'var(--text-muted)'}}>QO'NG'IROQ</div>
+              </div>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:13, fontWeight:700}}>{r.taskRate===null ? '—' : `${r.tDone}/${r.tTotal}`}</div>
+                <div style={{fontSize:9, color:'var(--text-muted)'}}>VAZIFA</div>
+              </div>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:13, fontWeight:700, color: overdueTotal>0 ? '#ef4444' : 'inherit'}}>{overdueTotal}</div>
+                <div style={{fontSize:9, color:'var(--text-muted)'}}>KECHIKISH</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     // ===== V62: YAGONA SAMARADORLIK PANELI (Phase 4) =====
     // Lidlar KPI (1-bosqich) + qo'ng'iroq statistikasi (1-bosqich) + kunlik
     // vazifalar bajarilishi (2-bosqich) — barchasi bitta jadvalda, davr bo'yicha
@@ -3716,7 +3841,7 @@ fetch('${webhookUrl}', {
       const [period,       setPeriod]       = useState('month'); // today|week|month|all
       const [sortKey,      setSortKey]      = useState('score');
       const [loading,      setLoading]      = useState(false);
-      const [expanded,     setExpanded]     = useState(null); // username | null
+      const [viewMode,     setViewMode]     = useState('cards'); // cards|table
 
       const H = () => getAuthHeaders();
 
@@ -3798,7 +3923,15 @@ fetch('${webhookUrl}', {
         };
       });
 
-      const sorted = [...rows].sort((a,b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
+      // Radar diagramma uchun jamoaviy nisbiy ko'rsatkichlar (0-100 ga normallashtirilgan)
+      const maxCalls = Math.max(1, ...rows.map(r => r.callsTotal));
+      const enriched = rows.map(r => ({
+        ...r,
+        activityScore: Math.round((r.callsTotal / maxCalls) * 100),
+        reliability:   Math.max(0, 100 - Math.min(100, (r.tOverdue + r.overdueLeads) * 15)),
+      }));
+
+      const sorted = [...enriched].sort((a,b) => (b[sortKey] ?? -1) - (a[sortKey] ?? -1));
 
       const scoreColor = (s) => s>=70 ? '#01a750' : s>=40 ? '#f59e0b' : '#ef4444';
       const th = { textAlign:'left', padding:'8px 10px', fontSize:11, color:'var(--text-muted)', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' };
@@ -3811,64 +3944,90 @@ fetch('${webhookUrl}', {
               <h2 style={{fontSize:'20px', fontWeight:700, marginBottom:'4px'}}>Xodimlar samaradorligi</h2>
               <p style={{color:'var(--text-muted)', fontSize:'13px'}}>Lidlar, qo'ng'iroqlar va kunlik vazifalar — bitta panelda</p>
             </div>
-            <div style={{display:'flex', gap:'6px', background:'var(--bg-surface)', padding:'5px', borderRadius:'10px', border:'1px solid var(--outline-variant)', height:'fit-content'}}>
-              {[['today','Bugun'],['week','Hafta'],['month','Oy'],['all','Barchasi']].map(([v,label]) => (
-                <button key={v} onClick={()=>setPeriod(v)} style={{
-                  padding:'6px 12px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
-                  background: period===v ? 'var(--primary)' : 'transparent',
-                  color: period===v ? '#fff' : 'var(--text-muted)',
-                }}>{label}</button>
-              ))}
+            <div style={{display:'flex', gap:'10px', flexWrap:'wrap'}}>
+              <div style={{display:'flex', gap:'4px', background:'var(--bg-surface)', padding:'5px', borderRadius:'10px', border:'1px solid var(--outline-variant)', height:'fit-content'}}>
+                {[['cards','🃏 Kartalar'],['table','📋 Jadval']].map(([v,label]) => (
+                  <button key={v} onClick={()=>setViewMode(v)} style={{
+                    padding:'6px 12px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
+                    background: viewMode===v ? 'var(--primary)' : 'transparent',
+                    color: viewMode===v ? '#fff' : 'var(--text-muted)',
+                  }}>{label}</button>
+                ))}
+              </div>
+              <div style={{display:'flex', gap:'6px', background:'var(--bg-surface)', padding:'5px', borderRadius:'10px', border:'1px solid var(--outline-variant)', height:'fit-content'}}>
+                {[['today','Bugun'],['week','Hafta'],['month','Oy'],['all','Barchasi']].map(([v,label]) => (
+                  <button key={v} onClick={()=>setPeriod(v)} style={{
+                    padding:'6px 12px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
+                    background: period===v ? 'var(--primary)' : 'transparent',
+                    color: period===v ? '#fff' : 'var(--text-muted)',
+                  }}>{label}</button>
+                ))}
+              </div>
             </div>
           </div>
 
           {loading && <div style={{fontSize:12, color:'var(--text-muted)', margin:'10px 0'}}>Yuklanmoqda...</div>}
 
-          <div style={{overflowX:'auto', marginTop:'16px', background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px'}}>
-            <table style={{width:'100%', borderCollapse:'collapse'}}>
-              <thead>
-                <tr>
-                  <th style={th}>Xodim</th>
-                  <th style={th} onClick={()=>setSortKey('leadsTotal')}>Lidlar</th>
-                  <th style={th} onClick={()=>setSortKey('convRate')}>Konversiya %</th>
-                  <th style={th} onClick={()=>setSortKey('callsTotal')}>Qo'ng'iroq</th>
-                  <th style={th} onClick={()=>setSortKey('ansRate')}>Javob %</th>
-                  <th style={th}>O'rt. vaqt</th>
-                  <th style={th} onClick={()=>setSortKey('taskRate')}>Vazifa bajarildi</th>
-                  <th style={th} onClick={()=>setSortKey('tOverdue')}>Kechikkan vazifa</th>
-                  <th style={th} onClick={()=>setSortKey('overdueLeads')}>Kechikkan lid</th>
-                  <th style={th} onClick={()=>setSortKey('score')}>Umumiy ball</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.length === 0 && (
-                  <tr><td colSpan={10} style={{...td, textAlign:'center', color:'var(--text-muted)'}}>Xodimlar topilmadi</td></tr>
-                )}
+          {viewMode === 'cards' ? (
+            <>
+              {sorted.length === 0 && (
+                <div style={{padding:'40px', textAlign:'center', color:'var(--text-muted)', background:'var(--bg-surface)', border:'1px dashed var(--outline-variant)', borderRadius:'12px', marginTop:'16px'}}>
+                  Xodimlar topilmadi
+                </div>
+              )}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(270px, 1fr))', gap:'18px', marginTop:'16px'}}>
                 {sorted.map((r, i) => (
-                  <tr key={r.username} style={{cursor:'pointer'}} onClick={()=>setExpanded(expanded===r.username ? null : r.username)}>
-                    <td style={{...td, fontWeight:600}}>
-                      {i===0 && r.score>0 && <span title="Yetakchi" style={{marginRight:'4px'}}>🏆</span>}
-                      {r.fullName}
-                    </td>
-                    <td style={td}>{r.leadsTotal} <span style={{color:'var(--text-muted)', fontSize:11}}>({r.won}W/{r.lost}L)</span></td>
-                    <td style={td}>{r.convRate}%</td>
-                    <td style={td}>{r.callsTotal}</td>
-                    <td style={td}>{r.ansRate}%</td>
-                    <td style={td}>{r.avgDurStr}</td>
-                    <td style={td}>{r.taskRate === null ? '—' : `${r.taskRate}% (${r.tDone}/${r.tTotal})`}</td>
-                    <td style={{...td, color: r.tOverdue>0 ? '#ef4444' : 'inherit'}}>{r.tOverdue}</td>
-                    <td style={{...td, color: r.overdueLeads>0 ? '#ef4444' : 'inherit'}}>{r.overdueLeads}</td>
-                    <td style={td}>
-                      <span style={{fontWeight:700, color:scoreColor(r.score), background:`${scoreColor(r.score)}1a`, padding:'3px 9px', borderRadius:'999px'}}>{r.score}</span>
-                    </td>
-                  </tr>
+                  <PlayerCard key={r.username} r={r} isTop={i===0 && r.score>0} />
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </>
+          ) : (
+            <div style={{overflowX:'auto', marginTop:'16px', background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px'}}>
+              <table style={{width:'100%', borderCollapse:'collapse'}}>
+                <thead>
+                  <tr>
+                    <th style={th}>Xodim</th>
+                    <th style={th} onClick={()=>setSortKey('leadsTotal')}>Lidlar</th>
+                    <th style={th} onClick={()=>setSortKey('convRate')}>Konversiya %</th>
+                    <th style={th} onClick={()=>setSortKey('callsTotal')}>Qo'ng'iroq</th>
+                    <th style={th} onClick={()=>setSortKey('ansRate')}>Javob %</th>
+                    <th style={th}>O'rt. vaqt</th>
+                    <th style={th} onClick={()=>setSortKey('taskRate')}>Vazifa bajarildi</th>
+                    <th style={th} onClick={()=>setSortKey('tOverdue')}>Kechikkan vazifa</th>
+                    <th style={th} onClick={()=>setSortKey('overdueLeads')}>Kechikkan lid</th>
+                    <th style={th} onClick={()=>setSortKey('score')}>Umumiy ball</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.length === 0 && (
+                    <tr><td colSpan={10} style={{...td, textAlign:'center', color:'var(--text-muted)'}}>Xodimlar topilmadi</td></tr>
+                  )}
+                  {sorted.map((r, i) => (
+                    <tr key={r.username}>
+                      <td style={{...td, fontWeight:600}}>
+                        {i===0 && r.score>0 && <span title="Yetakchi" style={{marginRight:'4px'}}>🏆</span>}
+                        {r.fullName}
+                      </td>
+                      <td style={td}>{r.leadsTotal} <span style={{color:'var(--text-muted)', fontSize:11}}>({r.won}W/{r.lost}L)</span></td>
+                      <td style={td}>{r.convRate}%</td>
+                      <td style={td}>{r.callsTotal}</td>
+                      <td style={td}>{r.ansRate}%</td>
+                      <td style={td}>{r.avgDurStr}</td>
+                      <td style={td}>{r.taskRate === null ? '—' : `${r.taskRate}% (${r.tDone}/${r.tTotal})`}</td>
+                      <td style={{...td, color: r.tOverdue>0 ? '#ef4444' : 'inherit'}}>{r.tOverdue}</td>
+                      <td style={{...td, color: r.overdueLeads>0 ? '#ef4444' : 'inherit'}}>{r.overdueLeads}</td>
+                      <td style={td}>
+                        <span style={{fontWeight:700, color:scoreColor(r.score), background:`${scoreColor(r.score)}1a`, padding:'3px 9px', borderRadius:'999px'}}>{r.score}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <p style={{fontSize:11, color:'var(--text-muted)', marginTop:'10px'}}>
-            Umumiy ball = konversiya (30%) + qo'ng'iroqqa javob % (30%) + vazifa bajarilishi (40%, agar davr uchun vazifa bo'lmasa e'tiborga olinmaydi).
+            Umumiy ball = konversiya (30%) + qo'ng'iroqqa javob % (30%) + vazifa bajarilishi (40%, agar davr uchun vazifa bo'lmasa e'tiborga olinmaydi). Kartadagi radar diagramma: YAKUN (konversiya), ALOQA (qo'ng'iroqqa javob %), FAOLLIK (qo'ng'iroqlar hajmi, jamoadagi eng faolga nisbatan), INTIZOM (vazifa bajarilishi), BARQAROR (kechikishlar qanchalik kam).
           </p>
         </div>
       );
