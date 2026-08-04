@@ -7651,6 +7651,18 @@ fetch('${webhookUrl}', {
       // CSV Import — fayldan lidlarni yuklash
       const csvFileInputRef = React.useRef(null);
 
+      // Muvaffaqiyatsizlik sabablari — CEO Sozlamalardan boshqaradi. Lid "Yo'qotildi"
+      // bosqichiga o'tkazilganda shu ro'yxatdan sabab tanlash majburiy qilinadi.
+      // (early return'dan oldin — Rules of Hooks talabi)
+      const [lostReasons, setLostReasons] = useState([]);
+      const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // {leadId, newStatus}
+      useEffect(() => {
+        fetch('/api/lost-reasons', { headers: getAuthHeaders() })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d?.reasons)) setLostReasons(d.reasons); })
+          .catch(() => {});
+      }, []);
+
       if(!authUser) {
         const loginTitle   = isSuperAdminMode ? 'MIZON SUPER ADMIN' : (companyInfo?.name || 'MIZON CRM');
         const loginSubtitle = isSuperAdminMode
@@ -7725,17 +7737,6 @@ fetch('${webhookUrl}', {
       const selectedLeadData = leads.find(l => l.id == selectedLeadId);
       // Note: Bildirishnoma helperlari + hook'lar (addNotif, billing/task/SLA/VoIP/reload useEffect'lar)
       // endi `if(!authUser)` dan oldin chaqiriladi — React Rules of Hooks talabi.
-
-      // Muvaffaqiyatsizlik sabablari — CEO Sozlamalardan boshqaradi. Lid "Yo'qotildi"
-      // bosqichiga o'tkazilganda shu ro'yxatdan sabab tanlash majburiy qilinadi.
-      const [lostReasons, setLostReasons] = useState([]);
-      const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // {leadId, newStatus}
-      useEffect(() => {
-        fetch('/api/lost-reasons', { headers: getAuthHeaders() })
-          .then(r => r.ok ? r.json() : null)
-          .then(d => { if (Array.isArray(d?.reasons)) setLostReasons(d.reasons); })
-          .catch(() => {});
-      }, []);
 
       const syncLeadToAPI = (lead) => {
         if (String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
