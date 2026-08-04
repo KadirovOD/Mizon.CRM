@@ -166,7 +166,7 @@ exports.updateLeadFull = async (req, res) => {
   const {
     name, phone, email, region, source,
     status, actualCallAttempts, deadline,
-    taskDescription, chatLogs, owner, customData
+    taskDescription, chatLogs, owner, customData, lostReason
   } = req.body;
 
   try {
@@ -182,6 +182,16 @@ exports.updateLeadFull = async (req, res) => {
       oldIsWon = !!before.rows[0]?.is_won;
     }
 
+    // YANGI bosqich "Yo'qotildi" (is_lost) bo'lsa — sabab tanlanishi majburiy
+    let newStageRow = null;
+    if (status && !isNaN(parseInt(status))) {
+      const stageCheck = await req.db.query('SELECT name, is_won, is_lost FROM crm_stage WHERE id=$1', [parseInt(status)]);
+      newStageRow = stageCheck.rows[0] || null;
+      if (newStageRow?.is_lost && !lostReason) {
+        return res.status(400).json({ error: "Muvaffaqiyatsiz sababini tanlash majburiy" });
+      }
+    }
+
     const updated = await req.db.query(
       `UPDATE crm_lead
        SET name = COALESCE($1, name),
@@ -195,8 +205,9 @@ exports.updateLeadFull = async (req, res) => {
            taskdescription = $9,
            chatlogs = COALESCE($10, chatlogs),
            owner = COALESCE($11, owner),
-           custom_data = COALESCE($12, custom_data)
-       WHERE id = $13 AND company_id = $14 RETURNING *`,
+           custom_data = COALESCE($12, custom_data),
+           lost_reason = COALESCE($13, lost_reason)
+       WHERE id = $14 AND company_id = $15 RETURNING *`,
       [
         name || null, phone || null, email || null, region || null, source || null,
         isNaN(parseInt(status)) ? null : parseInt(status),
@@ -206,6 +217,7 @@ exports.updateLeadFull = async (req, res) => {
         chatLogs ? JSON.stringify(chatLogs) : null,
         owner,
         customData != null ? JSON.stringify(customData) : null,
+        lostReason || null,
         id,
         cid
       ]
@@ -214,9 +226,8 @@ exports.updateLeadFull = async (req, res) => {
     const updLead = updated.rows[0];
     // Bosqich o'zgargan bo'lsa trigger
     if (status && !isNaN(parseInt(status))) {
-      const stageRow = await req.db.query('SELECT name, is_won FROM crm_stage WHERE id=$1', [parseInt(status)]);
-      const stageName = stageRow.rows[0]?.name || '';
-      const newIsWon  = !!stageRow.rows[0]?.is_won;
+      const stageName = newStageRow?.name || '';
+      const newIsWon  = !!newStageRow?.is_won;
       runTrigger(req.db, 'stage_changed', updLead, { stageId: parseInt(status), stageName });
 
       // Meta CAPI — WON ga o'tdimi? (faqat bir marta, transition'da)

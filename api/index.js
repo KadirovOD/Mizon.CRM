@@ -375,6 +375,18 @@ async function initDb() {
       CREATE INDEX IF NOT EXISTS idx_tasks_company_assignee ON crm_tasks(company_id, assignee);
       CREATE INDEX IF NOT EXISTS idx_tasks_company_status    ON crm_tasks(company_id, status);
       CREATE INDEX IF NOT EXISTS idx_tasks_company_due       ON crm_tasks(company_id, due_date);
+
+      -- V64: Muvaffaqiyatsizlik sabablari — CEO ro'yxatni Sozlamalardan boshqaradi,
+      -- lid "Yo'qotildi" bosqichiga o'tkazilganda shu ro'yxatdan sabab tanlash majburiy
+      -- qilinadi (frontend + backendda ham tekshiriladi).
+      CREATE TABLE IF NOT EXISTS crm_lost_reasons (
+        id         SERIAL PRIMARY KEY,
+        company_id INT REFERENCES companies(id) ON DELETE CASCADE,
+        label      VARCHAR(255) NOT NULL,
+        sequence   INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_lost_reasons_company ON crm_lost_reasons(company_id);
     `);
 
     // ── Migrations for existing tables ───────────────────────────────────────
@@ -384,6 +396,7 @@ async function initDb() {
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS actualcallattempts INTEGER  DEFAULT 0;
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskdescription   TEXT;
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS taskassignee      VARCHAR(100);
+      ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS lost_reason       VARCHAR(255);
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS owner             VARCHAR(50) DEFAULT 'ceo';
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS region            VARCHAR(255);
       ALTER TABLE crm_lead ADD COLUMN IF NOT EXISTS pipelineid        VARCHAR(50) DEFAULT 'p1';
@@ -595,6 +608,7 @@ const smsMasterCtrl        = require('./controllers/smsMasterController');
 const billingController    = require('./controllers/billingController');
 const metaCapiController   = require('./controllers/metaCapiController');
 const taskController       = require('./controllers/taskController');
+const lostReasonController = require('./controllers/lostReasonController');
 
 // leadController va webhookController ga runTrigger uzatish
 leadController._setAutomation(automationCtrl.runTrigger);
@@ -648,6 +662,12 @@ app.post  ('/api/tasks',        taskController.createTask);
 app.put   ('/api/tasks/:id',    taskController.updateTask);
 app.delete('/api/tasks/:id',    taskController.deleteTask);
 app.get   ('/api/tasks/stats',  taskController.getTaskStats);
+
+// ── Muvaffaqiyatsizlik sabablari (CEO boshqaradi) ─────────────────────────────
+app.get   ('/api/lost-reasons',     lostReasonController.getLostReasons);
+app.post  ('/api/lost-reasons',     lostReasonController.createLostReason);
+app.put   ('/api/lost-reasons/:id', lostReasonController.updateLostReason);
+app.delete('/api/lost-reasons/:id', lostReasonController.deleteLostReason);
 
 // ── Company settings (CEO) ────────────────────────────────────────────────────
 app.get('/api/company/settings', companyController.getSettings);

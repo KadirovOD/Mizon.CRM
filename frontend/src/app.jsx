@@ -769,6 +769,102 @@
       );
     };
 
+    const LostReasonsConfig = () => {
+      const [reasons, setReasons] = useState(null); // null = hali yuklanmagan
+      const [newLabel, setNewLabel] = useState('');
+      const [editingId, setEditingId] = useState(null);
+      const [editingLabel, setEditingLabel] = useState('');
+      const [saving, setSaving] = useState(false);
+      const [msg, setMsg] = useState('');
+      const flash = (m) => { setMsg(m); setTimeout(()=>setMsg(''), 4000); };
+
+      const token = localStorage.getItem('mizon_token');
+      const H = { 'Content-Type':'application/json', ...(token ? {'Authorization':'Bearer '+token} : {}) };
+
+      const load = () => {
+        fetch('/api/lost-reasons', { headers: H })
+          .then(r => r.json())
+          .then(d => setReasons(Array.isArray(d.reasons) ? d.reasons : []))
+          .catch(() => setReasons([]));
+      };
+
+      useEffect(() => { load(); }, []);
+
+      const add = async () => {
+        if (!newLabel.trim()) return;
+        setSaving(true);
+        try {
+          const r = await fetch('/api/lost-reasons', { method:'POST', headers:H, body: JSON.stringify({ label:newLabel.trim() }) });
+          const d = await r.json();
+          if (d.success) { setNewLabel(''); load(); }
+          else flash('❌ ' + (d.error || 'Xato'));
+        } finally { setSaving(false); }
+      };
+
+      const save = async (id) => {
+        if (!editingLabel.trim()) return;
+        const r = await fetch(`/api/lost-reasons/${id}`, { method:'PUT', headers:H, body: JSON.stringify({ label:editingLabel.trim() }) });
+        const d = await r.json();
+        if (d.success) { setEditingId(null); load(); }
+        else flash('❌ ' + (d.error || 'Xato'));
+      };
+
+      const remove = async (id) => {
+        if (!window.confirm("Ushbu sababni o'chirishni tasdiqlaysizmi?")) return;
+        const r = await fetch(`/api/lost-reasons/${id}`, { method:'DELETE', headers:H });
+        const d = await r.json();
+        if (d.success) load();
+        else flash('❌ ' + (d.error || 'Xato'));
+      };
+
+      return (
+        <div>
+          <h3 style={{marginBottom:'6px', fontWeight:600}}>Muvaffaqiyatsizlik sabablari</h3>
+          <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>
+            Lid "Yo'qotildi" bosqichiga o'tkazilganda xodim shu ro'yxatdan sababni tanlashi majburiy bo'ladi. Ro'yxatni faqat CEO boshqara oladi.
+          </p>
+
+          {msg && (
+            <div style={{padding:'8px 14px', borderRadius:'8px', marginBottom:'14px', fontSize:'13px',
+              background: msg.startsWith('✅') ? 'rgba(90,223,129,0.1)' : 'rgba(255,80,80,0.1)',
+              color: msg.startsWith('✅') ? 'var(--success)' : 'var(--danger)'}}>{msg}</div>
+          )}
+
+          <div style={{display:'flex', gap:'8px', marginBottom:'16px'}}>
+            <input className="input-base" style={{flex:1}} placeholder="Yangi sabab matni..." value={newLabel}
+              onChange={e=>setNewLabel(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') add(); }} />
+            <button className="btn-primary" disabled={saving || !newLabel.trim()} onClick={add}>Qo'shish</button>
+          </div>
+
+          {reasons === null && <div style={{color:'var(--text-muted)', fontSize:13}}>Yuklanmoqda...</div>}
+          {reasons !== null && reasons.length === 0 && (
+            <div style={{padding:'20px', textAlign:'center', color:'var(--text-muted)', background:'var(--bg-base)', borderRadius:'8px', border:'1px dashed var(--border-light)'}}>
+              Hali sabab qo'shilmagan
+            </div>
+          )}
+
+          {reasons && reasons.map(r => (
+            <div key={r.id} style={{display:'flex', alignItems:'center', gap:'10px', border:'1px solid var(--border-light)', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px'}}>
+              {editingId === r.id ? (
+                <>
+                  <input className="input-base" style={{flex:1}} value={editingLabel} onChange={e=>setEditingLabel(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==='Enter') save(r.id); }} autoFocus />
+                  <button className="btn-primary" style={{padding:'6px 12px', fontSize:12}} onClick={()=>save(r.id)}>Saqlash</button>
+                  <button className="btn-outline" style={{padding:'6px 12px', fontSize:12}} onClick={()=>setEditingId(null)}>Bekor</button>
+                </>
+              ) : (
+                <>
+                  <div style={{flex:1, fontSize:13}}>{r.label}</div>
+                  <button className="btn-outline" style={{padding:'6px 12px', fontSize:12}} onClick={()=>{ setEditingId(r.id); setEditingLabel(r.label); }}>Tahrirlash</button>
+                  <button className="btn-outline" style={{padding:'6px 12px', fontSize:12, color:'var(--danger)'}} onClick={()=>remove(r.id)}>O'chirish</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    };
+
     // ===== INTEGRATIONS =====
     // ┌──────────────────────────────────────────────────────────────────────────┐
     // │ WEBHOOK STATE RESET BUG — TUSHUNTIRISH (kod bilmaydigan uchun ham):        │
@@ -6830,6 +6926,7 @@ fetch('${webhookUrl}', {
               createdAt: l.created_at || null,
               deadline: l.deadline || null,
               taskDescription: l.taskdescription || null,
+              lostReason: l.lost_reason || null,
               customData: (typeof l.custom_data === 'string' ? JSON.parse(l.custom_data) : l.custom_data) || {},
               chatLogs: typeof l.chatlogs === 'string' ? JSON.parse(l.chatlogs) : (l.chatlogs || [{type:'sys', date:l.created_at, text:"Tizimga qo'shildi"}]),
               claimedAt: l.claimed_at || null,
@@ -7629,6 +7726,17 @@ fetch('${webhookUrl}', {
       // Note: Bildirishnoma helperlari + hook'lar (addNotif, billing/task/SLA/VoIP/reload useEffect'lar)
       // endi `if(!authUser)` dan oldin chaqiriladi — React Rules of Hooks talabi.
 
+      // Muvaffaqiyatsizlik sabablari — CEO Sozlamalardan boshqaradi. Lid "Yo'qotildi"
+      // bosqichiga o'tkazilganda shu ro'yxatdan sabab tanlash majburiy qilinadi.
+      const [lostReasons, setLostReasons] = useState([]);
+      const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // {leadId, newStatus}
+      useEffect(() => {
+        fetch('/api/lost-reasons', { headers: getAuthHeaders() })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (Array.isArray(d?.reasons)) setLostReasons(d.reasons); })
+          .catch(() => {});
+      }, []);
+
       const syncLeadToAPI = (lead) => {
         if (String(lead.id).startsWith('L_') || String(lead.id).startsWith('EXT_')) return;
         setSyncStatus('saving');
@@ -7648,6 +7756,7 @@ fetch('${webhookUrl}', {
             chatLogs:           lead.chatLogs,
             owner:              lead.owner,
             customData:         lead.customData || {},
+            lostReason:         lead.lostReason || null,
           }),
         })
           .then(async res => {
@@ -7802,9 +7911,15 @@ fetch('${webhookUrl}', {
         setCallingLeadId(null);
       };
 
-      const handleStatusChange = (leadId, newStatus) => {
+      const handleStatusChange = (leadId, newStatus, lostReason) => {
         const base = leads.find(l => l.id == leadId);
         if(!base) return;
+        // "Yo'qotildi" bosqichiga o'tkazilayotganda sabab tanlanmagan bo'lsa —
+        // o'tkazishni to'xtatib, sabab tanlash oynasini ochamiz.
+        if (newStatus === 'LOST' && !lostReason) {
+          setLostReasonPrompt({ leadId, newStatus });
+          return;
+        }
         // Bosqich nomini ID dan emas, columnsMap dan o'zbek tilida olamiz
         const pipeId = base.pipelineId || activePipe;
         const cols = (columnsMap[pipeId] || []);
@@ -7812,7 +7927,9 @@ fetch('${webhookUrl}', {
         // V54: from-stage ma'lumotini ham yozamiz (Harakatlar Jurnali "qaysi bosqichdan qaysi bosqichga" filtri uchun)
         const fromStatus     = base.status;
         const fromStageTitle = cols.find(c => c.id === fromStatus)?.title || fromStatus || '—';
-        const targetLead = {...base, status:newStatus, actualCallAttempts:0, chatLogs:[...base.chatLogs,{
+        const targetLead = {...base, status:newStatus, actualCallAttempts:0,
+          lostReason: newStatus === 'LOST' ? lostReason : base.lostReason,
+          chatLogs:[...base.chatLogs,{
           type: 'sys',
           date: new Date().toISOString(),
           by:   authUser.username,
@@ -7821,13 +7938,15 @@ fetch('${webhookUrl}', {
           toStatus: newStatus,         // V54
           fromStageTitle,              // V54
           toStageTitle: stageTitle,    // V54
-          text: `🔄 Bosqich o'zgardi: ${fromStageTitle} → ${stageTitle}. Urinishlar nollashtirildi.`,
+          text: newStatus === 'LOST'
+            ? `🔄 Bosqich o'zgardi: ${fromStageTitle} → ${stageTitle}. Sabab: ${lostReason}. Urinishlar nollashtirildi.`
+            : `🔄 Bosqich o'zgardi: ${fromStageTitle} → ${stageTitle}. Urinishlar nollashtirildi.`,
         }]};
         setHasUnsavedChanges(true);
         setLeads(prev=>prev.map(l => l.id==leadId ? targetLead : l));
         syncLeadToAPI(targetLead);
         if (newStatus === 'WON')       addNotif('stage_changed', '🏆 Bitim yutildi!',      `${targetLead.name} → ${stageTitle} bosqichiga o'tdi`, leadId);
-        else if (newStatus === 'LOST') addNotif('stage_changed', '❌ Bitim yo\'qotildi',   `${targetLead.name} → ${stageTitle} bosqichiga o'tdi`, leadId);
+        else if (newStatus === 'LOST') addNotif('stage_changed', '❌ Bitim yo\'qotildi',   `${targetLead.name} → ${stageTitle} bosqichiga o'tdi. Sabab: ${lostReason}`, leadId);
         else                           addNotif('stage_changed', '🔄 Bosqich o\'zgardi',   `${targetLead.name} → ${stageTitle}`, leadId);
       };
 
@@ -9081,6 +9200,7 @@ fetch('${webhookUrl}', {
                     <div className={`settings-tab ${settingsActiveTab==='pipelines'?'active':''}`} onClick={()=>setSettingsActiveTab('pipelines')}><Ico n="layers" s={14}/> Varonkalar</div>
                     <div className={`settings-tab ${settingsActiveTab==='cardfields'?'active':''}`} onClick={()=>setSettingsActiveTab('cardfields')}><Ico n="list" s={14}/> Karta Maydonlari</div>
                     <div className={`settings-tab ${settingsActiveTab==='duplicates'?'active':''}`} onClick={()=>setSettingsActiveTab('duplicates')}><Ico n="content_copy" s={14}/> Dublikatlar</div>
+                    <div className={`settings-tab ${settingsActiveTab==='lostreasons'?'active':''}`} onClick={()=>setSettingsActiveTab('lostreasons')}><Ico n="cancel" s={14}/> Sabablar</div>
                   </div>
                   <div className="card" style={{minHeight:'400px'}}>
                     {settingsActiveTab==='users' && (
@@ -9133,6 +9253,9 @@ fetch('${webhookUrl}', {
                     {settingsActiveTab==='duplicates' && (
                       <DuplicateLeadsPanel />
                     )}
+                    {settingsActiveTab==='lostreasons' && (
+                      <LostReasonsConfig />
+                    )}
 
                   </div>
                 </div>
@@ -9140,6 +9263,37 @@ fetch('${webhookUrl}', {
 
             </div>
           </main>
+
+          {lostReasonPrompt && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+              onClick={e=>{if(e.target===e.currentTarget) setLostReasonPrompt(null);}}>
+              <div className="card" style={{width:'420px', maxWidth:'100%', maxHeight:'80vh', overflowY:'auto'}}>
+                <h3 style={{marginBottom:'6px', fontWeight:600}}>Muvaffaqiyatsizlik sababi</h3>
+                <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'16px'}}>
+                  Lidni "Yo'qotildi" bosqichiga o'tkazish uchun sababni tanlang.
+                </p>
+                {lostReasons.length === 0 ? (
+                  <div style={{padding:'16px', textAlign:'center', color:'var(--text-muted)', background:'var(--bg-base)', borderRadius:'8px', border:'1px dashed var(--border-light)', marginBottom:'16px'}}>
+                    Hali sabablar ro'yxati kiritilmagan. CEO Sozlamalar → Sabablar bo'limidan qo'shishi kerak.
+                  </div>
+                ) : (
+                  <div style={{display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px'}}>
+                    {lostReasons.map(r => (
+                      <button key={r.id} className="btn-outline" style={{textAlign:'left', padding:'10px 14px'}}
+                        onClick={() => {
+                          const { leadId, newStatus } = lostReasonPrompt;
+                          setLostReasonPrompt(null);
+                          handleStatusChange(leadId, newStatus, r.label);
+                        }}>
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button className="btn-outline" style={{width:'100%'}} onClick={()=>setLostReasonPrompt(null)}>Bekor qilish</button>
+              </div>
+            </div>
+          )}
         </div>
       );
     };
