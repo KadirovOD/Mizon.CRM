@@ -347,12 +347,10 @@ exports.initiateCall = async (req, res) => {
 //  CLICK-TO-SMS
 // =============================================================================
 
-// Moizvonki chiquvchi SMS action nomi hujjatlashmagan (kabinet login talab qiladi).
-// Nomlash konvensiyasi: calls.make_call, webhook.subscribe, sms.message.
-// Shuning uchun bir nechta ehtimoliy nomni ketma-ket sinaymiz — birinchi
-// "unknown action" bo'lmagan javob muvaffaqiyat deb hisoblanadi. Action noto'g'ri
-// bo'lsa Moizvonki SMS yubormasdan xato qaytaradi, shuning uchun qayta urinish xavfsiz.
-const SMS_SEND_ACTIONS = ['sms.send', 'messages.send', 'sms.send_message'];
+// Moizvonki chiquvchi SMS action'i (kabinet tarmoq so'rovidan aniqlangan):
+//   { action: 'calls.send_sms', template_id: 0, text, to }
+//   to — xalqaro formatda, "+" bilan (masalan "+998901234567").
+const SMS_SEND_ACTION = 'calls.send_sms';
 
 // POST /api/sms — click-to-SMS via Moi Zvonki API (ulangan telefon SIM orqali)
 exports.sendSms = async (req, res) => {
@@ -363,27 +361,26 @@ exports.sendSms = async (req, res) => {
   if (!text || !String(text).trim()) return res.status(400).json({ error: 'text majburiy' });
   try {
     const cfg = await req.db.query(
-      'SELECT user_name, api_key, subdomain, caller_id FROM crm_voip_config WHERE company_id=$1 LIMIT 1',
+      'SELECT user_name, api_key, subdomain FROM crm_voip_config WHERE company_id=$1 LIMIT 1',
       [cid]
     );
     if (cfg.rows.length === 0) return res.status(400).json({ error: 'Moi Zvonki sozlanmagan' });
 
-    const { user_name, api_key, subdomain, caller_id } = cfg.rows[0];
-    const toDigits = normalizePhone(phone);
-    const message  = String(text).trim();
+    const { user_name, api_key, subdomain } = cfg.rows[0];
+    const toIntl  = '+' + normalizePhone(phone); // API "+" bilan xalqaro formatni kutadi
+    const message = String(text).trim();
 
-    // Ehtimoliy action nomlarini ketma-ket sinaymiz
-    let raw = null, usedAction = null, apiError = null;
-    for (const action of SMS_SEND_ACTIONS) {
-      const params = { to: toDigits, text: message };
-      if (caller_id) params.from = caller_id;
-      raw = await moiZvonkiApiRaw(subdomain, user_name, api_key, action, params);
-      apiError = _extractApiError(raw);
-      const isHttpOk = raw.statusCode >= 200 && raw.statusCode < 300;
-      if (isHttpOk && !apiError) { usedAction = action; break; }
-      console.warn(`[moizvonki] SMS action "${action}" rad etildi: HTTP ${raw.statusCode} ${apiError || raw.body?.slice(0,120)}`);
+    const raw = await moiZvonkiApiRaw(subdomain, user_name, api_key, SMS_SEND_ACTION, {
+      template_id: 0,
+      text:        message,
+      to:          toIntl,
+    });
+    const apiError = _extractApiError(raw);
+    const isHttpOk = raw.statusCode >= 200 && raw.statusCode < 300;
+    const isApiOk  = isHttpOk && !apiError;
+    if (!isApiOk) {
+      console.warn(`[moizvonki] SMS rad etildi: HTTP ${raw.statusCode} ${apiError || raw.body?.slice(0,120)}`);
     }
-    const isApiOk = !!usedAction;
 
     // Chatlog yozish (chiquvchi qo'ng'iroq patternini takrorlaydi)
     if (lead_id) {
@@ -402,7 +399,7 @@ exports.sendSms = async (req, res) => {
             status: 'sent',
           });
         } else {
-          const reason = apiError || `HTTP ${raw?.statusCode}` || 'noma\'lum xato';
+          const reason = apiError || `HTTP ${raw.statusCode}` || 'noma\'lum xato';
           logs.push({
             type: 'sms',
             date: new Date().toISOString(),
@@ -420,17 +417,16 @@ exports.sendSms = async (req, res) => {
     }
 
     if (!isApiOk) {
-      console.error('[moizvonki] SMS rad etildi (barcha action nomlari):', { status: raw?.statusCode, body: raw?.body });
+      console.error('[moizvonki] SMS rad etildi:', { status: raw.statusCode, body: raw.body });
       return res.status(502).json({
         success:          false,
-        error:            apiError || `Moizvonki HTTP ${raw?.statusCode}`,
-        tried_actions:    SMS_SEND_ACTIONS,
-        moizvonki_status: raw?.statusCode,
-        moizvonki_body:   _truncate(raw?.body, 500),
+        error:            apiError || `Moizvonki HTTP ${raw.statusCode}`,
+        moizvonki_status: raw.statusCode,
+        moizvonki_body:   _truncate(raw.body, 500),
       });
     }
 
-    res.json({ success: true, action: usedAction, raw: raw.parsed || raw.body });
+    res.json({ success: true, action: SMS_SEND_ACTION, raw: raw.parsed || raw.body });
   } catch (e) {
     console.error('SMS send error:', e.message);
     res.status(500).json({ error: e.message });
