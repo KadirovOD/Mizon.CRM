@@ -805,9 +805,13 @@ function _extractApiError(raw) {
     return raw.parsed.error || raw.parsed.error_message || raw.parsed.message || null;
   }
   const body = String(raw.body || '').trim();
-  // HTTP 2xx + "OK"/"Make call posted" → xato emas
+  // HTTP 2xx bo'lsa ham Moizvonki xatoni oddiy matn sifatida qaytarishi mumkin
+  // (masalan qurilma ulanmagan / SMS ruxsati yo'q). Shuning uchun matnni tekshiramiz.
   if (raw.statusCode >= 200 && raw.statusCode < 300) {
-    if (/^OK\b/i.test(body) || /Make call posted/i.test(body)) return null;
+    if (/^OK\b/i.test(body) || /posted/i.test(body)) return null;
+    if (/\berror\b|ошибк|unknown|\bfail|denied|не удалось|no device|нет устройств|not connected/i.test(body)) {
+      return body.slice(0, 300);
+    }
     return null;
   }
   // HTTP 4xx/5xx → body matnini xato deb qaytaramiz
