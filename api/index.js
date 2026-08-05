@@ -805,6 +805,7 @@ app.get   ('/api/voip/webhook-activity',      voipController.getWebhookActivity)
 app.get   ('/api/voip/webhook-subscriptions', voipController.getWebhookSubscriptions); // Moizvonki'da ro'yxatdan o'tgan callback URL'lar
 app.post  ('/api/voip/subscribe-webhooks',    voipController.subscribeWebhooks);       // qo'lda webhook re-sync
 app.post  ('/api/call',                       voipController.initiateCall);
+app.post  ('/api/sms',                        voipController.sendSms);                  // click-to-SMS
 app.get   ('/api/calls/recent',               voipController.getRecentEvents);
 
 // ── Automation ───────────────────────────────────────────────────────────────

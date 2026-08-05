@@ -344,6 +344,100 @@ exports.initiateCall = async (req, res) => {
 };
 
 // =============================================================================
+//  CLICK-TO-SMS
+// =============================================================================
+
+// Moizvonki chiquvchi SMS action nomi hujjatlashmagan (kabinet login talab qiladi).
+// Nomlash konvensiyasi: calls.make_call, webhook.subscribe, sms.message.
+// Shuning uchun bir nechta ehtimoliy nomni ketma-ket sinaymiz — birinchi
+// "unknown action" bo'lmagan javob muvaffaqiyat deb hisoblanadi. Action noto'g'ri
+// bo'lsa Moizvonki SMS yubormasdan xato qaytaradi, shuning uchun qayta urinish xavfsiz.
+const SMS_SEND_ACTIONS = ['sms.send', 'messages.send', 'sms.send_message'];
+
+// POST /api/sms — click-to-SMS via Moi Zvonki API (ulangan telefon SIM orqali)
+exports.sendSms = async (req, res) => {
+  if (!req.db) return res.status(500).json({ error: 'DB disabled' });
+  const cid = req.user?.companyId;
+  const { phone, lead_id, text } = req.body;
+  if (!phone) return res.status(400).json({ error: 'phone majburiy' });
+  if (!text || !String(text).trim()) return res.status(400).json({ error: 'text majburiy' });
+  try {
+    const cfg = await req.db.query(
+      'SELECT user_name, api_key, subdomain, caller_id FROM crm_voip_config WHERE company_id=$1 LIMIT 1',
+      [cid]
+    );
+    if (cfg.rows.length === 0) return res.status(400).json({ error: 'Moi Zvonki sozlanmagan' });
+
+    const { user_name, api_key, subdomain, caller_id } = cfg.rows[0];
+    const toDigits = normalizePhone(phone);
+    const message  = String(text).trim();
+
+    // Ehtimoliy action nomlarini ketma-ket sinaymiz
+    let raw = null, usedAction = null, apiError = null;
+    for (const action of SMS_SEND_ACTIONS) {
+      const params = { to: toDigits, text: message };
+      if (caller_id) params.from = caller_id;
+      raw = await moiZvonkiApiRaw(subdomain, user_name, api_key, action, params);
+      apiError = _extractApiError(raw);
+      const isHttpOk = raw.statusCode >= 200 && raw.statusCode < 300;
+      if (isHttpOk && !apiError) { usedAction = action; break; }
+      console.warn(`[moizvonki] SMS action "${action}" rad etildi: HTTP ${raw.statusCode} ${apiError || raw.body?.slice(0,120)}`);
+    }
+    const isApiOk = !!usedAction;
+
+    // Chatlog yozish (chiquvchi qo'ng'iroq patternini takrorlaydi)
+    if (lead_id) {
+      const lead = await req.db.query(
+        'SELECT id, chatlogs FROM crm_lead WHERE id=$1 AND company_id=$2',
+        [lead_id, cid]
+      );
+      if (lead.rows.length > 0) {
+        const logs = lead.rows[0].chatlogs || [];
+        if (isApiOk) {
+          logs.push({
+            type: 'sms',
+            date: new Date().toISOString(),
+            text: `✉️ Chiquvchi SMS: ${phone} — "${message}"`,
+            direction: 'out',
+            status: 'sent',
+          });
+        } else {
+          const reason = apiError || `HTTP ${raw?.statusCode}` || 'noma\'lum xato';
+          logs.push({
+            type: 'sms',
+            date: new Date().toISOString(),
+            text: `⚠️ SMS yuborilmadi: ${reason}`,
+            direction: 'out',
+            status: 'failed',
+            error: reason,
+          });
+        }
+        await req.db.query(
+          'UPDATE crm_lead SET chatlogs=$1 WHERE id=$2 AND company_id=$3',
+          [JSON.stringify(logs), lead_id, cid]
+        );
+      }
+    }
+
+    if (!isApiOk) {
+      console.error('[moizvonki] SMS rad etildi (barcha action nomlari):', { status: raw?.statusCode, body: raw?.body });
+      return res.status(502).json({
+        success:          false,
+        error:            apiError || `Moizvonki HTTP ${raw?.statusCode}`,
+        tried_actions:    SMS_SEND_ACTIONS,
+        moizvonki_status: raw?.statusCode,
+        moizvonki_body:   _truncate(raw?.body, 500),
+      });
+    }
+
+    res.json({ success: true, action: usedAction, raw: raw.parsed || raw.body });
+  } catch (e) {
+    console.error('SMS send error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+};
+
+// =============================================================================
 //  WEBHOOK RECEIVER
 // =============================================================================
 

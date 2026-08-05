@@ -7310,6 +7310,9 @@ fetch('${webhookUrl}', {
       const [filterSla,    setFilterSla]    = useState('all');
       const [callingLeadId, setCallingLeadId] = useState(null); // VoIP: active call lead ID
       const [phoneMenuOpen, setPhoneMenuOpen] = useState(false); // Lead paneli: telefon ustidagi manba tanlash menyusi
+      const [smsPrompt, setSmsPrompt] = useState(null); // {leadId, phone} — SMS yozish oynasi
+      const [smsText, setSmsText] = useState('');
+      const [smsSending, setSmsSending] = useState(false);
       const phoneMenuRef = useRef(null);
       useEffect(() => {
         if (!phoneMenuOpen) return;
@@ -7926,6 +7929,33 @@ fetch('${webhookUrl}', {
             }));
           } catch(e) { /* ignore */ }
         }, 6000); // every 6 s
+      };
+
+      const handleSendSms = async () => {
+        if (!smsPrompt) return;
+        const { leadId, phone } = smsPrompt;
+        const text = smsText.trim();
+        if (!text) return;
+        setSmsSending(true);
+        try {
+          const r = await fetch('/api/sms', {
+            method:'POST', headers: getAuthHeaders(),
+            body: JSON.stringify({ phone, lead_id: leadId, text })
+          });
+          const data = await r.json().catch(()=>({}));
+          if (r.ok && data.success) {
+            const smsLog = {type:'sms', date:new Date().toISOString(), text:`✉️ Chiquvchi SMS: ${phone} — "${text}"`, direction:'out', status:'sent'};
+            setLeads(prev=>prev.map(l=>String(l.id)===String(leadId)?{...l, chatLogs:[...l.chatLogs, smsLog]}:l));
+            addNotif('sms', '✉️ SMS yuborildi', `${phone} — "${text.slice(0,40)}"`, leadId);
+            setSmsPrompt(null); setSmsText('');
+          } else {
+            addNotif('sms', '⚠️ SMS yuborilmadi', data.error || `Xato (HTTP ${r.status})`, leadId);
+          }
+        } catch(e) {
+          addNotif('sms', '⚠️ SMS yuborilmadi', e.message, leadId);
+        } finally {
+          setSmsSending(false);
+        }
       };
 
       const handleLogCall = async (id) => {
@@ -8612,6 +8642,24 @@ fetch('${webhookUrl}', {
                                       <div style={{flex:1, minWidth:0}}>
                                         <div style={{fontSize:'13px', fontWeight:600, color:'var(--text-main)'}}>Qo'lda qayd etish</div>
                                         <div style={{fontSize:'11px', color:'var(--text-muted)'}}>Faqat urinishlar sonini oshirish</div>
+                                      </div>
+                                    </div>
+                                    <div
+                                      className={`phone-menu-item ${!voipConfigured ? 'disabled' : ''}`}
+                                      onClick={()=>{
+                                        if (!voipConfigured) return;
+                                        setPhoneMenuOpen(false);
+                                        setSmsText('');
+                                        setSmsPrompt({ leadId: selectedLeadData.id, phone: selectedLeadData.phone });
+                                      }}
+                                      role="menuitem"
+                                    >
+                                      <span className="material-symbols-outlined" style={{fontSize:'20px', color: voipConfigured ? '#8b5cf6' : 'var(--text-muted)'}}>sms</span>
+                                      <div style={{flex:1, minWidth:0}}>
+                                        <div style={{fontSize:'13px', fontWeight:600, color:'var(--text-main)'}}>SMS yuborish</div>
+                                        <div style={{fontSize:'11px', color:'var(--text-muted)'}}>
+                                          {voipConfigured ? 'Moizvonki telefoni orqali' : 'Sozlanmagan — Integratsiyalar bo\'limi'}
+                                        </div>
                                       </div>
                                     </div>
                                     <a
@@ -9327,6 +9375,34 @@ fetch('${webhookUrl}', {
 
             </div>
           </main>
+
+          {smsPrompt && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
+              onClick={e=>{if(e.target===e.currentTarget && !smsSending) setSmsPrompt(null);}}>
+              <div className="card" style={{width:'440px', maxWidth:'100%'}}>
+                <h3 style={{marginBottom:'6px', fontWeight:600}}>SMS yuborish</h3>
+                <p style={{fontSize:'12px', color:'var(--text-muted)', marginBottom:'14px'}}>
+                  Qabul qiluvchi: <b style={{color:'var(--text-main)'}}>{smsPrompt.phone}</b> — Moizvonki ulangan telefon SIM-kartasi orqali yuboriladi.
+                </p>
+                <textarea
+                  value={smsText}
+                  onChange={e=>setSmsText(e.target.value)}
+                  placeholder="SMS matni..."
+                  maxLength={480}
+                  autoFocus
+                  disabled={smsSending}
+                  style={{width:'100%', minHeight:'96px', resize:'vertical', padding:'10px 12px', borderRadius:'8px', border:'1px solid var(--border-light)', background:'var(--bg-base)', color:'var(--text-main)', fontSize:'13px', fontFamily:'inherit', marginBottom:'6px'}}
+                />
+                <div style={{fontSize:'11px', color:'var(--text-muted)', textAlign:'right', marginBottom:'14px'}}>{smsText.length}/480</div>
+                <div style={{display:'flex', gap:'10px', justifyContent:'flex-end'}}>
+                  <button className="btn-outline" disabled={smsSending} onClick={()=>{setSmsPrompt(null); setSmsText('');}}>Bekor qilish</button>
+                  <button className="btn-primary" disabled={smsSending || !smsText.trim()} onClick={handleSendSms}>
+                    {smsSending ? 'Yuborilmoqda…' : 'Yuborish'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {lostReasonPrompt && (
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}
