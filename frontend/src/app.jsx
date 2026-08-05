@@ -7719,11 +7719,12 @@ fetch('${webhookUrl}', {
       const [lostReasons, setLostReasons] = useState([]);
       const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // {leadId, newStatus}
       useEffect(() => {
+        if (!authUser) return;
         fetch('/api/lost-reasons', { headers: getAuthHeaders() })
           .then(r => r.ok ? r.json() : null)
           .then(d => { if (Array.isArray(d?.reasons)) setLostReasons(d.reasons); })
           .catch(() => {});
-      }, []);
+      }, [authUser]);
 
       if(!authUser) {
         const loginTitle   = isSuperAdminMode ? 'MIZON SUPER ADMIN' : (companyInfo?.name || 'MIZON CRM');
