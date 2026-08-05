@@ -8790,7 +8790,13 @@ fetch('${webhookUrl}', {
                             const dt = log.date ? new Date(log.date).toLocaleTimeString('uz-UZ', {hour:'2-digit', minute:'2-digit'}) : '';
                           // ---- VoIP call log ----
                           if (log.type === 'call') {
-                            const isCalling  = log.status === 'calling';
+                            // "calling" — vaqtinchalik holat: call.finish webhook'i kelgach yangilanadi.
+                            // Webhook kelmasa yozuv abadiy "jonli" bo'lib qolmasligi uchun backend'dagi
+                            // merge oynasi (10 daqiqa) o'tgach uni natijasi noma'lum deb ko'rsatamiz.
+                            const CALL_LIVE_MS = 10 * 60 * 1000;
+                            const logAgeMs   = log.date ? (Date.now() - Date.parse(log.date)) : Infinity;
+                            const isCalling  = log.status === 'calling' && logAgeMs < CALL_LIVE_MS;
+                            const isStaleCall = log.status === 'calling' && !isCalling;
                             const hasRecord  = !!log.record_url;
                             const dur        = log.duration > 0 ? ` · ${Math.floor(log.duration/60)}:${String(log.duration%60).padStart(2,'0')}` : '';
                             const bgColor    = hasRecord ? 'rgba(1,167,80,0.1)' : isCalling ? 'rgba(90,223,129,0.06)' : 'rgba(255,255,255,0.04)';
@@ -8823,6 +8829,7 @@ fetch('${webhookUrl}', {
                                       <div style={{fontSize:'11px', color:'var(--text-muted)', marginTop:'2px', display:'flex', alignItems:'center', gap:'6px'}}>
                                         <span>{dt}{dur}</span>
                                         {isCalling && <span style={{color:'var(--primary)', animation:'callPulse 1s infinite'}}>● Jonli qo'ng'iroq...</span>}
+                                        {isStaleCall && <span style={{color:'var(--text-muted)'}}>● Natija noma'lum</span>}
                                         {hasRecord && <span style={{color:'var(--success)'}}>● Yozuv mavjud</span>}
                                       </div>
                                     </div>
