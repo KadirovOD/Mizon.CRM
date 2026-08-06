@@ -3508,8 +3508,7 @@ fetch('${webhookUrl}', {
           .catch(() => {});
       }, []);
 
-      const cardStyle = { background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'12px', padding:'16px', marginBottom:'10px' };
-      const inputStyle = { width:'100%', padding:'9px 12px', borderRadius:'8px', border:'1px solid var(--outline-variant)', background:'var(--bg-base)', color:'var(--text-main)', fontSize:'13px', boxSizing:'border-box' };
+      const inputStyle ={ width:'100%', padding:'9px 12px', borderRadius:'8px', border:'1px solid var(--outline-variant)', background:'var(--bg-base)', color:'var(--text-main)', fontSize:'13px', boxSizing:'border-box' };
 
       const saveTask = async (e) => {
         e.preventDefault();
@@ -3576,8 +3575,103 @@ fetch('${webhookUrl}', {
         return ad - bd;
       });
 
+      // ── amoCRM uslubidagi ustunlar ─────────────────────────────────────────
+      // Vazifa belgilanmagan → Belgilangan → Vaqti yaqinlashmoqda → Muddati o'tgan
+      const NEAR_MS = 24 * 60 * 60 * 1000;
+      const nowMs   = Date.now();
+      const bucketOf = (t) => {
+        if (!t.due_date) return 'planned';
+        const d = new Date(t.due_date).getTime();
+        if (d < nowMs) return 'overdue';
+        return (d - nowMs <= NEAR_MS) ? 'soon' : 'planned';
+      };
+
+      const openTasks = combinedTasks.filter(t => t.status !== 'done');
+      const doneTasks = combinedTasks.filter(t => t.status === 'done');
+      const leadIdsWithTask = new Set(openTasks.filter(t => t.lead_id).map(t => String(t.lead_id)));
+
+      // Yopilmagan, lekin hech qanday vazifa biriktirilmagan lidlar (amoCRM "Без задачи")
+      const noTaskLeads = (leads || [])
+        .filter(l => l.status !== 'WON' && l.status !== 'LOST')
+        .filter(l => !l.deadline && !leadIdsWithTask.has(String(l.id)))
+        .filter(l => isBoss ? (!filterAssignee || l.owner === filterAssignee) : l.owner === authUser?.username)
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      const columns = [];
+      if (filterStatus !== 'done') {
+        columns.push({ key:'notask',  title:'Vazifa belgilanmagan', icon:'person_alert',        color:'#94a3b8', items:noTaskLeads, isLeadCol:true });
+        columns.push({ key:'planned', title:'Belgilangan',          icon:'event_upcoming',      color:'#3b82f6', items:openTasks.filter(t => bucketOf(t) === 'planned') });
+        columns.push({ key:'soon',    title:'Vaqti yaqinlashmoqda', icon:'hourglass_top',       color:'#f59e0b', items:openTasks.filter(t => bucketOf(t) === 'soon') });
+        columns.push({ key:'overdue', title:"Muddati o'tgan",       icon:'running_with_errors', color:'#ef4444', items:openTasks.filter(t => bucketOf(t) === 'overdue') });
+      }
+      if (filterStatus !== 'open') {
+        columns.push({ key:'done', title:'Bajarilgan', icon:'task_alt', color:'#10b981', items:doneTasks });
+      }
+
+      const colCardStyle = { background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'10px', padding:'11px 12px', marginBottom:'8px' };
+
+      const renderLeadCard = (l) => (
+        <div key={'nl_' + l.id} onClick={()=>setSelectedLeadId && setSelectedLeadId(l.id)}
+          style={{...colCardStyle, cursor: setSelectedLeadId ? 'pointer' : 'default'}}>
+          <div style={{fontWeight:600, fontSize:13}}>{l.name || 'Nomsiz lid'}</div>
+          <div style={{display:'flex', gap:'10px', marginTop:'6px', fontSize:11, color:'var(--text-muted)', flexWrap:'wrap'}}>
+            {l.phone && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>call</span> {l.phone}</span>}
+            {isBoss && l.owner && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person</span> {l.owner}</span>}
+          </div>
+          <div style={{marginTop:'8px', fontSize:11, fontWeight:600, color:'var(--primary)'}}>
+            <span className="material-symbols-outlined" style={{fontSize:13,verticalAlign:'middle'}}>add_task</span> Vazifa belgilash
+          </div>
+        </div>
+      );
+
+      const renderTaskCard = (t) => (
+        <div key={t.id} style={{...colCardStyle, display:'flex', alignItems:'flex-start', gap:'10px'}}>
+          {t.isLeadTask ? (
+            <span title="Lidga biriktirilgan vazifa — lid ichidan yakunlanadi"
+              onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)}
+              style={{marginTop:'2px', cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
+              <span className="material-symbols-outlined" style={{fontSize:17}}>link</span>
+            </span>
+          ) : (
+            <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'15px', height:'15px', cursor:'pointer', flexShrink:0}} />
+          )}
+          <div style={{flex:1, minWidth:0}}>
+            <div style={{fontWeight:600, fontSize:13, textDecoration: t.status==='done' ? 'line-through' : 'none', color: t.status==='done' ? 'var(--text-muted)' : 'var(--text-main)'}}>
+              {t.title}
+            </div>
+            {t.description && <div style={{fontSize:11.5, color:'var(--text-muted)', marginTop:'4px'}}>{t.description}</div>}
+            <div style={{display:'flex', gap:'10px', marginTop:'6px', fontSize:11, color:'var(--text-muted)', flexWrap:'wrap'}}>
+              {t.isLeadTask && <span style={{color:'var(--primary)', fontWeight:600}}>LID VAZIFASI</span>}
+              {isBoss && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person</span> {t.assignee}</span>}
+              {t.due_date && (
+                <span style={{color: isOverdue(t) ? '#ef4444' : 'var(--text-muted)'}}>
+                  <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>schedule</span> {new Date(t.due_date).toLocaleString('uz-UZ')}
+                </span>
+              )}
+              {t.lead_name && (
+                <span onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)} style={{cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
+                  <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person_search</span> {t.lead_name}
+                </span>
+              )}
+            </div>
+          </div>
+          {!t.isLeadTask && (
+            <div style={{display:'flex', flexDirection:'column', gap:'2px'}}>
+              <button title="Tahrirlash" onClick={()=>setModal({ ...t, dueDate: t.due_date ? new Date(t.due_date).toISOString().slice(0,16) : '' })}
+                style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0}}>
+                <span className="material-symbols-outlined" style={{fontSize:15}}>edit</span>
+              </button>
+              <button title="O'chirish" onClick={()=>removeTask(t)}
+                style={{background:'none', border:'none', cursor:'pointer', color:'var(--danger)', padding:0}}>
+                <span className="material-symbols-outlined" style={{fontSize:15}}>delete</span>
+              </button>
+            </div>
+          )}
+        </div>
+      );
+
       return (
-        <div style={{padding:'24px', maxWidth:'900px'}}>
+        <div style={{padding:'24px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'6px'}}>
             <div>
               <h2 style={{fontSize:'20px', fontWeight:700, marginBottom:'4px'}}>Vazifalar</h2>
@@ -3613,58 +3707,30 @@ fetch('${webhookUrl}', {
             </select>
           </div>
 
-          {/* Ro'yxat */}
+          {/* Ustunlar taxtasi */}
           {loading ? (
             <div style={{color:'var(--text-muted)', fontSize:'13px'}}>Yuklanmoqda...</div>
-          ) : combinedTasks.length === 0 ? (
-            <div style={{color:'var(--text-muted)', fontSize:'13px', padding:'20px', textAlign:'center'}}>Vazifalar topilmadi</div>
           ) : (
-            combinedTasks.map(t => (
-              <div key={t.id} style={{...cardStyle, display:'flex', alignItems:'flex-start', gap:'12px',
-                borderColor: isOverdue(t) ? 'rgba(239,68,68,0.4)' : 'var(--outline-variant)'}}>
-                {t.isLeadTask ? (
-                  <span title="Lidga biriktirilgan vazifa — lid ichidan yakunlanadi"
-                    onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)}
-                    style={{marginTop:'3px', cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
-                    <span className="material-symbols-outlined" style={{fontSize:18}}>link</span>
-                  </span>
-                ) : (
-                  <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'16px', height:'16px', cursor:'pointer'}} />
-                )}
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:600, fontSize:14, textDecoration: t.status==='done' ? 'line-through' : 'none', color: t.status==='done' ? 'var(--text-muted)' : 'var(--text-main)'}}>
-                    {t.title}
+            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(245px, 1fr))', gap:'14px', alignItems:'start'}}>
+              {columns.map(col => (
+                <div key={col.key}>
+                  <div style={{display:'flex', alignItems:'center', gap:'8px', padding:'9px 12px',
+                    background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderBottom:'none',
+                    borderTop:`3px solid ${col.color}`, borderRadius:'10px 10px 0 0'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:16, color:col.color}}>{col.icon}</span>
+                    <span style={{fontWeight:700, fontSize:'12.5px'}}>{col.title}</span>
+                    <span style={{marginLeft:'auto', fontSize:11, fontWeight:700, color:col.color,
+                      background:col.color+'22', padding:'1px 8px', borderRadius:'20px'}}>{col.items.length}</span>
                   </div>
-                  {t.description && <div style={{fontSize:12, color:'var(--text-muted)', marginTop:'4px'}}>{t.description}</div>}
-                  <div style={{display:'flex', gap:'10px', marginTop:'6px', fontSize:11, color:'var(--text-muted)', flexWrap:'wrap'}}>
-                    {t.isLeadTask && <span style={{color:'var(--primary)', fontWeight:600}}>LID VAZIFASI</span>}
-                    {isBoss && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person</span> {t.assignee}</span>}
-                    {t.due_date && (
-                      <span style={{color: isOverdue(t) ? '#ef4444' : 'var(--text-muted)'}}>
-                        <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>schedule</span> {new Date(t.due_date).toLocaleString('uz-UZ')}
-                      </span>
-                    )}
-                    {t.lead_name && (
-                      <span onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)} style={{cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
-                        <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person_search</span> {t.lead_name}
-                      </span>
-                    )}
+                  <div style={{maxHeight:'calc(100vh - 290px)', overflowY:'auto', padding:'10px',
+                    background:'var(--bg-base)', border:'1px solid var(--outline-variant)', borderTop:'none', borderRadius:'0 0 10px 10px'}}>
+                    {col.items.length === 0
+                      ? <div style={{color:'var(--text-muted)', fontSize:12, textAlign:'center', padding:'18px 0'}}>Bo'sh</div>
+                      : col.items.map(it => col.isLeadCol ? renderLeadCard(it) : renderTaskCard(it))}
                   </div>
                 </div>
-                {!t.isLeadTask && (
-                  <div style={{display:'flex', gap:'4px'}}>
-                    <button title="Tahrirlash" onClick={()=>setModal({ ...t, dueDate: t.due_date ? new Date(t.due_date).toISOString().slice(0,16) : '' })}
-                      style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)'}}>
-                      <span className="material-symbols-outlined" style={{fontSize:16}}>edit</span>
-                    </button>
-                    <button title="O'chirish" onClick={()=>removeTask(t)}
-                      style={{background:'none', border:'none', cursor:'pointer', color:'var(--danger)'}}>
-                      <span className="material-symbols-outlined" style={{fontSize:16}}>delete</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))
+              ))}
+            </div>
           )}
 
           {/* Yangi/Tahrirlash modal */}
