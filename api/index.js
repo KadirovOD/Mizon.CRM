@@ -677,7 +677,18 @@ app.put('/api/company/settings', companyController.updateSettings);
 app.get ('/api/webhook/meta',      webhookController.verifyMetaWebhook);
 app.post('/api/webhook/meta',      webhookController.handleMetaWebhook);
 app.post('/api/webhook/telegram',  webhookController.handleTelegramWebhook);
-app.post('/api/webhook/moizvonki', voipController.handleWebhook);
+// Moizvonki Content-Type'ni kafolatlamaydi. Global express.json() faqat
+// application/json ni parse qiladi — form-urlencoded yoki text/plain kelsa
+// req.body bo'sh qolib, hodisa jimgina tashlanardi (biz esa 200 qaytarardik,
+// shuning uchun Moizvonki tomonda ham xato ko'rinmasdi).
+// express.text har qanday qolgan Content-Type ni xom matn qilib oladi, keyin
+// normalizeWebhookBody uni JSON yoki form-urlencoded sifatida ochadi. Shu tartib
+// "JSON tana, lekin urlencoded Content-Type" holatini ham to'g'ri hal qiladi.
+app.post('/api/webhook/moizvonki',
+  express.text({ type: '*/*', limit: '2mb' }),
+  voipController.normalizeWebhookBody,
+  voipController.handleWebhook
+);
 
 // POST /api/webhook/sheets — Google Sheets Apps Script dan keluvchi leadlar
 // JWT talab qilinmaydi (Apps Script serveri to'g'ridan-to'g'ri chaqiradi)

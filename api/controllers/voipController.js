@@ -449,6 +449,24 @@ exports.sendSms = async (req, res) => {
 //   event_type: 1=call.start, 2=call.answer, 4=call.finish, 32=sms.message
 //   direction:  0=kiruvchi, 1=chiquvchi
 //   Lekin partner CRM webhook formati biroz farq qilishi mumkin — defensive parsing.
+// Body normalizatsiyasi — handleWebhook'dan oldin ishlaydi.
+// Kelgan tanani JSON obyektga keltiradi va asl matnni req.rawBody'da saqlaydi,
+// toki tanilmagan format kelganda diagnostikada aynan nima kelganini ko'rsak.
+exports.normalizeWebhookBody = (req, _res, next) => {
+  let b = req.body;
+  if (typeof b === 'string') {
+    req.rawBody = b;
+    const s = b.trim();
+    try {
+      b = JSON.parse(s);
+    } catch {
+      b = Object.fromEntries(new URLSearchParams(s));
+    }
+  }
+  req.body = (b && typeof b === 'object') ? b : {};
+  next();
+};
+
 exports.handleWebhook = async (req, res) => {
   try {
     const body = req.body || {};
@@ -486,7 +504,12 @@ exports.handleWebhook = async (req, res) => {
       // Flat shape (eski integratsiyalar yoki test webhook)
       events = [body];
     } else {
-      console.log('[moizvonki] webhook body has no recognizable event payload');
+      console.log('[moizvonki] webhook body has no recognizable event payload:', req.rawBody || JSON.stringify(body));
+      _logWebhookActivity(companyId || wcid, {
+        kind:         'unrecognized',
+        content_type: req.headers['content-type'] || '(yo\'q)',
+        raw:          _truncate(req.rawBody || JSON.stringify(body), 1000),
+      });
       return res.sendStatus(200);
     }
 
