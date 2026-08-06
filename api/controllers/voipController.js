@@ -48,6 +48,9 @@ function _publicWebhookUrl(req, companyId) {
 }
 
 // ── Moizvonki webhook hodisalari biz ro'yxatdan o'tkazadigan ro'yxat ─────────
+// Rasmiy spec: https://www.moizvonki.ru/guide/api/ — nomlar aynan shunday.
+// ⚠️ webhook.subscribe faqat Administrator hisobidan ishlaydi: oddiy xodim
+// credentiali bilan so'rov HTTP 200 qaytaradi, lekin hech qanday hodisa kelmaydi.
 const SUBSCRIBED_EVENTS = ['call.start', 'call.answer', 'call.finish', 'sms.message'];
 
 // =============================================================================
@@ -149,8 +152,8 @@ exports.testConnection = async (req, res) => {
       hint: !authOk
         ? 'Auth xato: user_name (email) yoki api_key notogri, yoki subdomain notogri.'
         : Object.keys(hooks.parsed || {}).length < SUBSCRIBED_EVENTS.length
-          ? 'Webhooklar toliq royxatdan otmagan — "Webhooklarni qayta royxatdan otkazish" tugmasini bosing.'
-          : 'Hammasi joyida. Mobil ilovadan qongiroq qilib tekshiring.',
+          ? 'Webhooklar toliq royxatdan otmagan. "Qayta royxatdan otkazish"ni bosing; royxat yana bosh qolsa — kiritilgan login Moizvonki Administratori emas (subscribe faqat Administrator hisobidan ishlaydi).'
+          : 'Webhooklar joyida. Yozuv kelmasa — Moizvonki mobil ilovasi telefonda ishlab turgani va "qongiroqlarni yozib olish" yoqilganini tekshiring.',
     });
   } catch (e) {
     res.status(500).json({ ok: false, stage: 'request', error: e.message });

@@ -2680,7 +2680,11 @@ fetch('${webhookUrl}', {
                             ))}
                           </div>
                         ) : (
-                          <div style={{fontSize:'10.5px',color:'var(--text-muted)',marginTop:'4px'}}>"Qayta ro'yxatdan o'tkazish" tugmasini bosing.</div>
+                          <div style={{fontSize:'10.5px',color:'var(--text-muted)',marginTop:'4px'}}>
+                            "Qayta ro'yxatdan o'tkazish" tugmasini bosing. Ro'yxat yana bo'sh qolsa — kiritilgan
+                            Moizvonki login <strong>Administrator</strong> emas: subscribe faqat Administrator
+                            hisobidan ishlaydi, oddiy xodim bilan so'rov "OK" qaytaradi-yu, hodisa kelmaydi.
+                          </div>
                         )}
                         {expectedUrl && (
                           <div style={{marginTop:'7px',paddingTop:'6px',borderTop:'1px dashed var(--outline-variant)',fontSize:'10.5px',color:'var(--text-muted)'}}>
