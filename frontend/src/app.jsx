@@ -3601,15 +3601,19 @@ fetch('${webhookUrl}', {
         .filter(l => isBoss ? (!filterAssignee || l.owner === filterAssignee) : l.owner === authUser?.username)
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
+      // Ustun urg'u ranglari mavzu tokenlaridan olinadi (xom hex emas) — shunda
+      // ikkala mavzuda ham brend yashiliga qarshi ishlamaydi. Har bir ustunda
+      // bitta to'yingan rang: yupqa yuqori chiziq, ikonka va sanoq.
+      const NEUTRAL_TINT = 'rgba(135,148,134,0.06)';
       const columns = [];
       if (filterStatus !== 'done') {
-        columns.push({ key:'notask',  title:'Vazifa belgilanmagan', icon:'person_alert',        color:'#94a3b8', items:noTaskLeads, isLeadCol:true });
-        columns.push({ key:'planned', title:'Belgilangan',          icon:'event_upcoming',      color:'#3b82f6', items:openTasks.filter(t => bucketOf(t) === 'planned') });
-        columns.push({ key:'soon',    title:'Vaqti yaqinlashmoqda', icon:'hourglass_top',       color:'#f59e0b', items:openTasks.filter(t => bucketOf(t) === 'soon') });
-        columns.push({ key:'overdue', title:"Muddati o'tgan",       icon:'running_with_errors', color:'#ef4444', items:openTasks.filter(t => bucketOf(t) === 'overdue') });
+        columns.push({ key:'notask',  title:'Vazifa belgilanmagan', icon:'person_alert',        accent:'var(--text-muted)', tint:NEUTRAL_TINT,             items:noTaskLeads, isLeadCol:true });
+        columns.push({ key:'planned', title:'Belgilangan',          icon:'event_upcoming',      accent:'var(--primary)',    tint:'rgba(90,223,129,0.055)', items:openTasks.filter(t => bucketOf(t) === 'planned') });
+        columns.push({ key:'soon',    title:'Vaqti yaqinlashmoqda', icon:'hourglass_top',       accent:'var(--warning)',    tint:'rgba(245,158,11,0.06)',  items:openTasks.filter(t => bucketOf(t) === 'soon') });
+        columns.push({ key:'overdue', title:"Muddati o'tgan",       icon:'running_with_errors', accent:'var(--danger)',     tint:'rgba(255,120,105,0.06)', items:openTasks.filter(t => bucketOf(t) === 'overdue') });
       }
       if (filterStatus !== 'open') {
-        columns.push({ key:'done', title:'Bajarilgan', icon:'task_alt', color:'#10b981', items:doneTasks });
+        columns.push({ key:'done', title:'Bajarilgan', icon:'task_alt', accent:'var(--text-muted)', tint:NEUTRAL_TINT, items:doneTasks });
       }
 
       const colCardStyle = { background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderRadius:'10px', padding:'11px 12px', marginBottom:'8px' };
@@ -3633,11 +3637,11 @@ fetch('${webhookUrl}', {
           {t.isLeadTask ? (
             <span title="Lidga biriktirilgan vazifa — lid ichidan yakunlanadi"
               onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)}
-              style={{marginTop:'2px', cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
+              style={{marginTop:'2px', cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--text-muted)'}}>
               <span className="material-symbols-outlined" style={{fontSize:17}}>link</span>
             </span>
           ) : (
-            <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'15px', height:'15px', cursor:'pointer', flexShrink:0}} />
+            <input type="checkbox" checked={t.status === 'done'} onChange={()=>toggleDone(t)} style={{marginTop:'3px', width:'15px', height:'15px', cursor:'pointer', flexShrink:0, accentColor:'var(--primary)'}} />
           )}
           <div style={{flex:1, minWidth:0}}>
             <div style={{fontWeight:600, fontSize:13, textDecoration: t.status==='done' ? 'line-through' : 'none', color: t.status==='done' ? 'var(--text-muted)' : 'var(--text-main)'}}>
@@ -3645,15 +3649,18 @@ fetch('${webhookUrl}', {
             </div>
             {t.description && <div style={{fontSize:11.5, color:'var(--text-muted)', marginTop:'4px'}}>{t.description}</div>}
             <div style={{display:'flex', gap:'10px', marginTop:'6px', fontSize:11, color:'var(--text-muted)', flexWrap:'wrap'}}>
-              {t.isLeadTask && <span style={{color:'var(--primary)', fontWeight:600}}>LID VAZIFASI</span>}
+              {t.isLeadTask && (
+                <span style={{fontSize:9.5, fontWeight:700, letterSpacing:'0.05em', color:'var(--text-muted)',
+                  background:'var(--surface-variant)', padding:'1px 6px', borderRadius:'4px'}}>LID VAZIFASI</span>
+              )}
               {isBoss && <span><span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person</span> {t.assignee}</span>}
               {t.due_date && (
-                <span style={{color: isOverdue(t) ? '#ef4444' : 'var(--text-muted)'}}>
+                <span style={{color: isOverdue(t) ? 'var(--danger)' : 'var(--text-muted)'}}>
                   <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>schedule</span> {new Date(t.due_date).toLocaleString('uz-UZ')}
                 </span>
               )}
               {t.lead_name && (
-                <span onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)} style={{cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--primary)'}}>
+                <span onClick={()=>setSelectedLeadId && setSelectedLeadId(t.lead_id)} style={{cursor: setSelectedLeadId ? 'pointer':'default', color:'var(--text-secondary)'}}>
                   <span className="material-symbols-outlined" style={{fontSize:12,verticalAlign:'middle'}}>person_search</span> {t.lead_name}
                 </span>
               )}
@@ -3666,7 +3673,7 @@ fetch('${webhookUrl}', {
                 <span className="material-symbols-outlined" style={{fontSize:15}}>edit</span>
               </button>
               <button title="O'chirish" onClick={()=>removeTask(t)}
-                style={{background:'none', border:'none', cursor:'pointer', color:'var(--danger)', padding:0}}>
+                style={{background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0}}>
                 <span className="material-symbols-outlined" style={{fontSize:15}}>delete</span>
               </button>
             </div>
@@ -3719,12 +3726,12 @@ fetch('${webhookUrl}', {
               {columns.map(col => (
                 <div key={col.key}>
                   <div style={{display:'flex', alignItems:'center', gap:'8px', padding:'9px 12px',
-                    background:'var(--bg-surface)', border:'1px solid var(--outline-variant)', borderBottom:'none',
-                    borderTop:`3px solid ${col.color}`, borderRadius:'10px 10px 0 0'}}>
-                    <span className="material-symbols-outlined" style={{fontSize:16, color:col.color}}>{col.icon}</span>
-                    <span style={{fontWeight:700, fontSize:'12.5px'}}>{col.title}</span>
-                    <span style={{marginLeft:'auto', fontSize:11, fontWeight:700, color:col.color,
-                      background:col.color+'22', padding:'1px 8px', borderRadius:'20px'}}>{col.items.length}</span>
+                    background:col.tint, border:'1px solid var(--outline-variant)', borderBottom:'none',
+                    borderTop:`2px solid ${col.accent}`, borderRadius:'10px 10px 0 0'}}>
+                    <span className="material-symbols-outlined" style={{fontSize:16, color:col.accent}}>{col.icon}</span>
+                    <span style={{fontWeight:600, fontSize:'12.5px', color:'var(--text-secondary)'}}>{col.title}</span>
+                    <span style={{marginLeft:'auto', fontSize:11, fontWeight:700, color:col.accent,
+                      background:'var(--bg-surface)', padding:'1px 8px', borderRadius:'20px'}}>{col.items.length}</span>
                   </div>
                   <div style={{maxHeight:'calc(100vh - 290px)', overflowY:'auto', padding:'10px',
                     background:'var(--bg-base)', border:'1px solid var(--outline-variant)', borderTop:'none', borderRadius:'0 0 10px 10px'}}>
