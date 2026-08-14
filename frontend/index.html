@@ -466,10 +466,12 @@ select.input-base option{background:var(--bg-surface);color:var(--text-main);}
 
 /* ===== CHART BARS ===== */
 .chart-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-.chart-bar-label{font-size:11px;color:var(--text-muted);width:100px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* width: bosqich nomlari DB dan keladi ("Shartnoma kutilmoqda") va 100px ga sig'masdi.
+   138px ko'pchilik nomni to'liq ko'rsatadi; uzunlari ellipsis + title tooltip bilan. */
+.chart-bar-label{font-size:11px;color:var(--text-muted);width:138px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .chart-bar-track{flex:1;height:5px;background:var(--surface-variant);border-radius:3px;overflow:hidden;}
 .chart-bar-fill{height:100%;border-radius:3px;transition:width 0.5s ease;}
-.chart-bar-val{font-size:11px;font-weight:600;color:var(--text-secondary);width:20px;text-align:right;flex-shrink:0;}
+.chart-bar-val{font-size:11px;font-weight:600;color:var(--text-secondary);width:28px;text-align:right;flex-shrink:0;}
 
 /* ===== THEME TRANSITIONS ===== */
 .sidebar,.main-wrapper,.topbar,.card,.k-card,.input-base,.btn-primary,.btn-outline,.login-box,.large-modal-box,.lead-panel-overlay{transition:background-color 0.3s,border-color 0.3s,color 0.3s;}

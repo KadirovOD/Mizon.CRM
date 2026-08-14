@@ -117,7 +117,7 @@
     const colColors = { NEW:'#6366f1', CONTACTED:'#3b82f6', QUALIFIED:'#8b5cf6', PROPOSAL:'#f59e0b', NEGOTIATION:'#f97316', WON:'#01a750', LOST:'#ef4444', MEETING:'#06b6d4', CONTRACT:'#8b5cf6' };
 
     // ===== DASHBOARD =====
-    const DashboardOverview = ({ leads, role, setSelectedLeadId, importLeadsFromCsv, exportLeadsToCsv }) => {
+    const DashboardOverview = ({ leads, role, setSelectedLeadId, importLeadsFromCsv, exportLeadsToCsv, columnsMap, activePipe, pipelines }) => {
       const dashCsvInputRef = React.useRef(null);
       const lostLeads = leads.filter(l => l.status === 'LOST');
       const wonLeads = leads.filter(l => l.status === 'WON');
@@ -137,10 +137,23 @@
           .catch(() => {});
       }, []);
 
-      const p1Leads = leads.filter(l => l.pipelineId === 'p1');
-      const stages = ['NEW','CONTACTED','QUALIFIED','PROPOSAL','NEGOTIATION','WON','LOST'];
-      const stageLabels = { NEW:'Yangi', CONTACTED:'Aloqa', QUALIFIED:'Ehtiyoj', PROPOSAL:'Taklif', NEGOTIATION:'Muzokara', WON:'Yutildi', LOST:'Lost' };
-      const maxCount = Math.max(1, ...stages.map(s => p1Leads.filter(l => l.status === s).length));
+      // ── Varonka diagrammasi bosqichlari columnsMap dan olinadi (API bosqichlari) ──
+      // Avval bu ro'yxat hardcode qilingan edi: ['NEW','CONTACTED','QUALIFIED',...] va
+      // o'zbekcha yorliqlar ham qo'lda yozilgan edi. Haqiqiy bosqichlar esa 'STAGE_<id>'
+      // kalitlari bilan keladi (reloadLeadsFromApi → stageKey), shuning uchun o'rtadagi
+      // barcha bosqichlar hech qachon mos kelmay, diagramma faqat Yangi/Yutildi/Lost
+      // ustunlarida ma'lumot ko'rsatardi. Endi nomlar ham DB dan keladi.
+      const funnelPipe   = (columnsMap && columnsMap[activePipe]) ? activePipe : Object.keys(columnsMap || {})[0];
+      const funnelStages = (columnsMap && columnsMap[funnelPipe]) || [];
+      const funnelName   = pipelines?.find(p => String(p.id) === String(funnelPipe))?.name || '';
+      const p1Leads      = leads.filter(l => String(l.pipelineId) === String(funnelPipe));
+      const maxCount     = Math.max(1, ...funnelStages.map(c => p1Leads.filter(l => l.status === c.id).length));
+      // Rang: yutildi — yashil, yo'qotildi — qizil, qolganlari bosqich tartibiga qarab
+      const FUNNEL_PALETTE = ['#6366f1','#3b82f6','#06b6d4','#8b5cf6','#f59e0b','#f97316'];
+      const stageColor = (c, i) =>
+        (c.is_won  || c.id === 'WON')  ? '#01a750' :
+        (c.is_lost || c.id === 'LOST') ? '#ef4444' :
+        (colColors[c.id] || FUNNEL_PALETTE[i % FUNNEL_PALETTE.length]);
 
       const metrics = [
         { title: "Jami Leadlar", value: leads.length, icon: 'people', color: '#6366f1', bg: 'rgba(99,102,241,0.1)', items: leads, impExp: true },
@@ -175,14 +188,23 @@
 
           <div style={{display:'grid', gridTemplateColumns: role === 'CEO' ? '1fr 1fr' : '1fr', gap:'14px'}}>
             <div className="card">
-              <div className="card-title" style={{marginBottom:'14px'}}>Asosiy varonka holati</div>
-              {stages.map(s => {
-                const cnt = p1Leads.filter(l => l.status === s).length;
+              <div className="card-title" style={{marginBottom:'14px'}}>
+                Varonka holati
+                {funnelName && (
+                  <span style={{fontWeight:500, color:'var(--text-muted)', textTransform:'none', letterSpacing:0}}> · {funnelName}</span>
+                )}
+              </div>
+              {funnelStages.length === 0 ? (
+                <div style={{textAlign:'center', padding:'20px', color:'var(--text-muted)', fontSize:'13px'}}>
+                  Bosqichlar topilmadi. Sozlamalar → Varonkalar bo'limida bosqich yarating.
+                </div>
+              ) : funnelStages.map((c, i) => {
+                const cnt = p1Leads.filter(l => l.status === c.id).length;
                 return (
-                  <div key={s} className="chart-bar-row">
-                    <span className="chart-bar-label">{stageLabels[s]}</span>
+                  <div key={c.id} className="chart-bar-row">
+                    <span className="chart-bar-label" title={c.title}>{c.title}</span>
                     <div className="chart-bar-track">
-                      <div className="chart-bar-fill" style={{width: (cnt/maxCount*100)+'%', background:colColors[s]||'var(--primary-container)'}}></div>
+                      <div className="chart-bar-fill" style={{width: (cnt/maxCount*100)+'%', background:stageColor(c, i)}}></div>
                     </div>
                     <span className="chart-bar-val">{cnt}</span>
                   </div>
@@ -242,7 +264,7 @@
                             {[
                               ['Jami',    mLeads.length, 'var(--text-main)', 'var(--surface-variant)'],
                               ['Yutildi', mWon,          '#01a750',          'rgba(1,167,80,0.1)'],
-                              ['Lost',    mLost,         '#ef4444',          'rgba(239,68,68,0.08)']
+                              ["Yo'qotildi", mLost,      '#ef4444',          'rgba(239,68,68,0.08)']
                             ].map(([label, val, clr, bg]) => (
                               <div key={label} style={{padding:'8px', background:bg, borderRadius:'8px'}}>
                                 <div style={{fontSize:'20px', fontWeight:700, color:clr}}>{val}</div>
@@ -9123,7 +9145,7 @@ fetch('${webhookUrl}', {
               )}
 
               {/* TAB CONTENT */}
-              {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} importLeadsFromCsv={importLeadsFromCsv} exportLeadsToCsv={exportLeadsToCsv} />}
+              {activeTab === 'dashboard' && <DashboardOverview leads={leads} role={role} setSelectedLeadId={setSelectedLeadId} importLeadsFromCsv={importLeadsFromCsv} exportLeadsToCsv={exportLeadsToCsv} columnsMap={columnsMap} activePipe={activePipe} pipelines={pipelines} />}
 
               {activeTab === 'callcenter' && <CallCenterModule leads={leads} setLeads={setLeads} globalCallLimit={globalCallLimit} setSelectedLeadId={setSelectedLeadId} syncLeadToAPI={syncLeadToAPI} addNotif={addNotif} voipConfigured={voipConfigured} />}
 
