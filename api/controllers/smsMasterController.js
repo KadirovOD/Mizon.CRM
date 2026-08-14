@@ -226,10 +226,20 @@ exports.handleWebhook = async (req, res) => {
 
       if (!clean) { console.log('[smsmaster] webhook message has no phone, skipping'); continue; }
 
-      // Tegishli lead topish
+      // Tegishli lead topish — oxirgi 9 raqam bo'yicha, chunki bitta raqam bazada
+      // turli formatda saqlangan bo'lishi mumkin ("998901234567" / "901234567").
+      // To'liq moslikda SMS o'z lidini topmay, dublikat lid yaratib qo'yardi.
       const leadQ = await req.db.query(
-        "SELECT id, chatlogs FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 AND company_id=$2 LIMIT 1",
-        [clean, companyId]
+        clean.length >= 9
+          ? `SELECT id, chatlogs FROM crm_lead
+              WHERE company_id=$2 AND phone IS NOT NULL
+                AND LENGTH(REGEXP_REPLACE(phone,'\\D','','g')) >= 9
+                AND RIGHT(REGEXP_REPLACE(phone,'\\D','','g'), 9) = $1
+              ORDER BY id ASC LIMIT 1`
+          : `SELECT id, chatlogs FROM crm_lead
+              WHERE company_id=$2 AND REGEXP_REPLACE(phone,'\\D','','g') = $1
+              ORDER BY id ASC LIMIT 1`,
+        [clean.length >= 9 ? clean.slice(-9) : clean, companyId]
       );
 
       const smsLog = {

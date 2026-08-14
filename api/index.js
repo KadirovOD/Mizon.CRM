@@ -45,6 +45,28 @@ function phoneDigitsOnly(phone) {
   return String(phone || '').replace(/\D/g, '');
 }
 
+// Telefon bo'yicha mavjud lidni topish. Taqqoslash oxirgi 9 raqam bo'yicha ketadi,
+// chunki bitta mijoz "998901234567", "901234567", "+998 90 123-45-67" ko'rinishlarida
+// kelishi mumkin — to'liq moslik bunda dublikatni o'tkazib yuborardi.
+// (voipController ham aynan shu qoidani ishlatadi.)
+async function findLeadByPhone(db, phone, companyId) {
+  const digits = phoneDigitsOnly(phone);
+  if (digits.length < 7) return null;
+  const { rows } = await db.query(
+    digits.length >= 9
+      ? `SELECT id, name FROM crm_lead
+          WHERE company_id=$2 AND phone IS NOT NULL
+            AND LENGTH(REGEXP_REPLACE(phone,'\\D','','g')) >= 9
+            AND RIGHT(REGEXP_REPLACE(phone,'\\D','','g'), 9) = $1
+          ORDER BY id ASC LIMIT 1`
+      : `SELECT id, name FROM crm_lead
+          WHERE company_id=$2 AND REGEXP_REPLACE(phone,'\\D','','g') = $1
+          ORDER BY id ASC LIMIT 1`,
+    [digits.length >= 9 ? digits.slice(-9) : digits, companyId]
+  );
+  return rows[0] || null;
+}
+
 // ── V59: Webhook Faollik Jurnal (in-memory ring buffer) ─────────────────────
 // /api/public/leads har bir so'rovi (success, duplicate, error) shu yerga yoziladi.
 // Front-end CRM panel ichidan GET /api/webhook-log/recent va /stats orqali ko'rsatadi.
@@ -741,15 +763,9 @@ app.post('/api/webhook/sheets', async (req, res) => {
 
     // Telefon bo'yicha takrorlanishni tekshirish
     if (phone) {
-      const clean = phone.replace(/\D/g, '');
-      if (clean.length >= 7) {
-        const dup = await req.db.query(
-          "SELECT id FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 AND company_id=$2 LIMIT 1",
-          [clean, companyId]
-        );
-        if (dup.rows.length) {
-          return res.json({ success: true, duplicate: true, id: dup.rows[0].id });
-        }
+      const dup = await findLeadByPhone(req.db, phone, companyId);
+      if (dup) {
+        return res.json({ success: true, duplicate: true, id: dup.id });
       }
     }
 
@@ -1200,22 +1216,16 @@ app.post('/api/public/leads', async (req, res) => {
     //   Spam botlar bir xil formaga 100 marta yuborganda 100 ta dublikat bo'lib qolmaydi
     //   (Sheets endpointida allaqachon bor edi — endi /api/public/leads ham qoshildi)
     if (phone) {
-      const digits = phoneDigitsOnly(phone);
-      if (digits.length >= 7) {
-        const dup = await req.db.query(
-          "SELECT id, name FROM crm_lead WHERE REGEXP_REPLACE(phone, '\\D', '', 'g')=$1 AND company_id=$2 LIMIT 1",
-          [digits, cid]
-        );
-        if (dup.rows.length) {
-          console.log(`🌐 Dublikat skip: phone=${phone} → existing_id=${dup.rows[0].id} ("${dup.rows[0].name}") company=${company_slug}`);
-          _LOG('duplicate', 200, { lead_id: dup.rows[0].id });
-          return res.json({
-            success:   true,
-            duplicate: true,
-            id:        dup.rows[0].id,
-            message:   `Bu telefon raqam allaqachon bazada bor (#${dup.rows[0].id})`,
-          });
-        }
+      const dup = await findLeadByPhone(req.db, phone, cid);
+      if (dup) {
+        console.log(`🌐 Dublikat skip: phone=${phone} → existing_id=${dup.id} ("${dup.name}") company=${company_slug}`);
+        _LOG('duplicate', 200, { lead_id: dup.id });
+        return res.json({
+          success:   true,
+          duplicate: true,
+          id:        dup.id,
+          message:   `Bu telefon raqam allaqachon bazada bor (#${dup.id})`,
+        });
       }
     }
 
