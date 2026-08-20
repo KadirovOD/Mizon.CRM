@@ -14,6 +14,12 @@
       "port": 8767
     },
     {
+      "name": "avangard-qabul",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8768", "/Users/kadirov_od/Documents/Avangard school/qabul"],
+      "port": 8768
+    },
+    {
       "name": "yd-school",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "-p", "8766", "/Users/kadirov_od/Documents/YD school"],
@@ -24,6 +30,38 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["index.js"],
       "port": 3000
+    },
+    {
+      "name": "saminov-school",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8770", "/Users/kadirov_od/Documents/Saminov school"],
+      "port": 8770
+    },
+    {
+      "name": "kreativ-baholash",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["kreativ-baholash-platformasi/src/server.js"],
+      "port": 4100
+    },
+    {
+      "name": "edu-link",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/kadirov_od/Documents/Edu link",
+        "run",
+        "dev",
+        "--",
+        "-p",
+        "3200"
+      ],
+      "port": 3200
+    },
+    {
+      "name": "revora-brand",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "8791", "revora-brand"],
+      "port": 8791
     }
   ]
 }
