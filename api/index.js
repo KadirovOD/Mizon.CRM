@@ -785,7 +785,10 @@ app.post('/api/webhook/sheets', async (req, res) => {
     const SHEETS_STANDARD = new Set([
       'name','phone','email','region','city','note','comment',
       'company_slug','slug','company','source','row_index','rowindex',
+      'ad_name','form_name', // crm_lead'ning o'z ustunlariga yoziladi
     ]);
+    const adName   = String(body.ad_name   || '').trim().slice(0, 255) || null;
+    const formName = String(body.form_name || '').trim().slice(0, 255) || null;
     const customDataSheets = {};
     for (const [k, v] of Object.entries(body || {})) {
       const lk = String(k || '').toLowerCase();
@@ -797,8 +800,9 @@ app.post('/api/webhook/sheets', async (req, res) => {
     const inserted = await req.db.query(
       `INSERT INTO crm_lead
          (name, phone, email, region, taskdescription,
-          mizon_source, lead_score, stage_id, company_id, chatlogs, custom_data)
-       VALUES ($1,$2,$3,$4,$5,'google_sheets',30,$6,$7,$8,$9) RETURNING id`,
+          mizon_source, lead_score, stage_id, company_id, chatlogs, custom_data,
+          ad_name, form_name)
+       VALUES ($1,$2,$3,$4,$5,'google_sheets',30,$6,$7,$8,$9,$10,$11) RETURNING id`,
       [
         name || `+${phone}`,
         phone || null,
@@ -812,6 +816,7 @@ app.post('/api/webhook/sheets', async (req, res) => {
           text: `📊 Google Sheets orqali keldi${rowIndex ? ` (qator ${rowIndex})` : ''}`,
         }]),
         JSON.stringify(customDataSheets),
+        adName, formName,
       ]
     );
 
